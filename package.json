@@ -8,9 +8,7 @@
     "build": "mkdir -p public && cp index.html public/ && echo 'Build complete'",
     "start": "node server.js"
   },
-  "dependencies": {
-    "puppeteer": "^21.5.2"
-  },
+  "dependencies": {},
   "devDependencies": {
     "vercel": "^32.0.0"
   },
