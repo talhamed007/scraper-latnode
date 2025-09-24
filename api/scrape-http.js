@@ -1,3 +1,5 @@
+const puppeteer = require('puppeteer');
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -19,102 +21,179 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  let browser;
+  let page;
+
   try {
-    // Use a different approach - HTTP requests instead of browser automation
-    const fetch = require('node-fetch');
+    // Launch browser with Vercel-optimized settings
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-images',
+        '--disable-javascript',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain'
+      ]
+    });
+
+    page = await browser.newPage();
     
-    // Step 1: Get the login page to extract CSRF tokens
-    const loginPageResponse = await fetch('https://app.latenode.com/auth', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
-      }
-    });
+    // Set viewport and user agent
+    await page.setViewport({ width: 1440, height: 900 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    const loginPageHtml = await loginPageResponse.text();
+    // Helper function for sleep
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    console.log('Navigating to Latenode login page...');
     
-    // Extract any CSRF tokens or form data needed
-    const csrfMatch = loginPageHtml.match(/name="csrf[^"]*"\s+value="([^"]+)"/i);
-    const csrfToken = csrfMatch ? csrfMatch[1] : '';
-
-    // Step 2: Attempt login (this is a simplified approach)
-    // Note: This may not work if Latenode has complex authentication
-    const loginResponse = await fetch('https://app.latenode.com/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://app.latenode.com/auth',
-        'Origin': 'https://app.latenode.com'
-      },
-      body: new URLSearchParams({
-        email: email,
-        password: password,
-        ...(csrfToken && { csrf: csrfToken })
-      })
+    // Navigate to login page
+    await page.goto('https://app.latenode.com/auth', { 
+      waitUntil: 'domcontentloaded', 
+      timeout: 60000 
     });
 
-    // Check if login was successful
-    if (loginResponse.status !== 200) {
-      throw new Error(`Login failed with status: ${loginResponse.status}`);
-    }
+    // Take screenshot of login page
+    const loginScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
 
-    // Step 3: Get the dashboard page
-    const dashboardResponse = await fetch('https://app.latenode.com/scenarios', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://app.latenode.com/auth',
-        'Cookie': loginResponse.headers.get('set-cookie') || ''
+    console.log('Filling email field...');
+    
+    // Wait for email input and fill it
+    await page.waitForSelector('input[type=email],#email,input[name=email]', { timeout: 30000 });
+    await page.type('input[type=email],#email,input[name=email]', email, { delay: 25 });
+
+    // Helper function to click by text
+    const clickByText = async (regex) => {
+      const buttons = await page.$$('button,[role=button],input[type=submit]');
+      for (const button of buttons) {
+        const text = (await (await button.getProperty('innerText')).jsonValue() || '').trim();
+        if (new RegExp(regex, 'i').test(text)) {
+          await button.click();
+          return true;
+        }
       }
+      return false;
+    };
+
+    console.log('Clicking next button...');
+    
+    // Click next/continue button
+    await clickByText('Suivant|Next');
+    await sleep(1200);
+
+    console.log('Filling password field...');
+    
+    // Wait for password input and fill it
+    await page.waitForSelector('input[type=password],#login,input[name=login]', { timeout: 30000 });
+    await page.type('input[type=password],#login,input[name=login]', password, { delay: 25 });
+
+    console.log('Clicking login button...');
+    
+    // Click login button
+    (await clickByText('Connexion|Se connecter|Sign in')) || await clickByText('Login');
+    
+    // Wait for navigation
+    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+
+    console.log('Navigating to dashboard...');
+    
+    // Navigate to scenarios page to see the dashboard
+    await page.goto('https://app.latenode.com/scenarios', { 
+      waitUntil: 'domcontentloaded', 
+      timeout: 60000 
+    });
+    await sleep(3000);
+
+    console.log('Taking dashboard screenshot...');
+    
+    // Take screenshot of the dashboard
+    const dashboardScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
+
+    console.log('Extracting credit information...');
+    
+    // Extract credit information from the sidebar
+    const creditInfo = await page.evaluate(() => {
+      // Look for credit information in the sidebar
+      const sidebar = document.querySelector('[class*="sidebar"], [class*="nav"], [class*="menu"]');
+      if (!sidebar) return null;
+
+      const text = sidebar.innerText || '';
+      
+      // Extract credits information
+      const creditsMatch = text.match(/Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
+      const tokensMatch = text.match(/Plug[&]?Play\s*Tokens?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
+      
+      return {
+        rawText: text,
+        credits_left: creditsMatch ? creditsMatch[1] : null,
+        credits_total: creditsMatch ? creditsMatch[2] : null,
+        plugAndPlay_left: tokensMatch ? tokensMatch[1] : null,
+        plugAndPlay_total: tokensMatch ? tokensMatch[2] : null
+      };
     });
 
-    const dashboardHtml = await dashboardResponse.text();
-
-    // Step 4: Extract credit information from HTML
-    const creditInfo = extractCreditInfo(dashboardHtml);
+    console.log('Credit info extracted:', creditInfo);
 
     // Return success response
     res.status(200).json({
       ok: true,
       data: {
-        rawText: creditInfo.rawText,
-        credits_used: creditInfo.credits_used,
-        credits_total: creditInfo.credits_total,
-        credits_left: creditInfo.credits_left,
-        plugAndPlay_used: creditInfo.plugAndPlay_used,
-        plugAndPlay_total: creditInfo.plugAndPlay_total,
-        plugAndPlay_left: creditInfo.plugAndPlay_left,
-        screenshotBase64: null // No screenshot with HTTP approach
+        rawText: creditInfo?.rawText || 'Could not extract credit information',
+        credits_used: creditInfo?.credits_total && creditInfo?.credits_left ? 
+          (parseFloat(creditInfo.credits_total) - parseFloat(creditInfo.credits_left)).toString() : null,
+        credits_total: creditInfo?.credits_total,
+        credits_left: creditInfo?.credits_left,
+        plugAndPlay_used: creditInfo?.plugAndPlay_total && creditInfo?.plugAndPlay_left ? 
+          (parseFloat(creditInfo.plugAndPlay_total) - parseFloat(creditInfo.plugAndPlay_left)).toString() : null,
+        plugAndPlay_total: creditInfo?.plugAndPlay_total,
+        plugAndPlay_left: creditInfo?.plugAndPlay_left,
+        screenshotBase64: dashboardScreenshot ? dashboardScreenshot.toString('base64') : null
       }
     });
 
   } catch (error) {
-    console.error('HTTP scraping error:', error);
+    console.error('Scraping error:', error);
     
+    // Take error screenshot if possible
+    let errorScreenshot = null;
+    try {
+      if (page) {
+        errorScreenshot = await page.screenshot({ fullPage: true });
+      }
+    } catch (e) {
+      console.log('Could not take error screenshot:', e.message);
+    }
+
     res.status(500).json({
       ok: false,
       error: error.message,
-      screenshotBase64: null
+      screenshotBase64: errorScreenshot ? errorScreenshot.toString('base64') : null
     });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
-}
-
-function extractCreditInfo(html) {
-  // Look for credit information in the HTML
-  const creditsMatch = html.match(/Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
-  const tokensMatch = html.match(/Plug[&]?Play\s*Tokens?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
-  
-  return {
-    rawText: html.substring(0, 1000) + '...', // First 1000 chars for debugging
-    credits_left: creditsMatch ? creditsMatch[1] : null,
-    credits_total: creditsMatch ? creditsMatch[2] : null,
-    credits_used: creditsMatch ? (parseFloat(creditsMatch[2]) - parseFloat(creditsMatch[1])).toString() : null,
-    plugAndPlay_left: tokensMatch ? tokensMatch[1] : null,
-    plugAndPlay_total: tokensMatch ? tokensMatch[2] : null,
-    plugAndPlay_used: tokensMatch ? (parseFloat(tokensMatch[2]) - parseFloat(tokensMatch[1])).toString() : null
-  };
 }
