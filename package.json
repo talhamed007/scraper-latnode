@@ -4,11 +4,14 @@
   "description": "Latenode credit scraper with Puppeteer",
   "main": "index.js",
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "node server.js",
     "build": "mkdir -p public && cp index.html public/ && echo 'Build complete'",
     "start": "node server.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "puppeteer": "^21.5.2",
+    "express": "^4.18.2"
+  },
   "devDependencies": {
     "vercel": "^32.0.0"
   },
