@@ -1,5 +1,4 @@
-const puppeteer = require('puppeteer-core');
-const chromium = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer');
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -29,9 +28,7 @@ export default async function handler(req, res) {
     // Launch browser with optimized settings for Vercel
     browser = await puppeteer.launch({
       headless: true,
-      executablePath: await chromium.executablePath,
       args: [
-        ...chromium.args,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
