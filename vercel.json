@@ -4,5 +4,11 @@
       "maxDuration": 60
     }
   },
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ]
 }
