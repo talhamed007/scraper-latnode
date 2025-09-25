@@ -320,7 +320,65 @@ app.post('/api/scrape-make', async (req, res) => {
     const loginScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Login page screenshot taken');
 
-    // Step 1: Handle Cloudflare verification if present
+    // Step 1: Handle cookie consent popup if present
+    console.log('🍪 Checking for cookie consent popup...');
+    try {
+      // Wait a bit for cookie popup to appear
+      await sleep(2000);
+      
+      // Look for cookie consent buttons
+      const cookieSelectors = [
+        'button:has-text("Accept All Cookies")',
+        'button:has-text("Accept all cookies")',
+        'button:has-text("Accept All")',
+        'button:has-text("Accept all")',
+        'button[data-testid="accept-all-cookies"]',
+        'button[data-testid="accept-cookies"]',
+        '.cookie-accept-all',
+        '.accept-all-cookies'
+      ];
+      
+      let cookieAccepted = false;
+      for (const selector of cookieSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.click(selector);
+          cookieAccepted = true;
+          console.log('✅ Accepted cookies with selector:', selector);
+          await sleep(1000);
+          break;
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      // Fallback: try to find cookie button by text content
+      if (!cookieAccepted) {
+        const buttons = await page.$$('button');
+        for (const button of buttons) {
+          const text = await page.evaluate(el => el.textContent || '', button);
+          if (text && (text.toLowerCase().includes('accept all cookies') || 
+                      text.toLowerCase().includes('accept all') ||
+                      text.toLowerCase().includes('accept cookies'))) {
+            console.log('✅ Accepted cookies by text:', text);
+            await button.click();
+            await sleep(1000);
+            cookieAccepted = true;
+            break;
+          }
+        }
+      }
+      
+      if (cookieAccepted) {
+        console.log('🍪 Cookie consent handled successfully');
+      } else {
+        console.log('ℹ️ No cookie popup detected or already handled');
+      }
+    } catch (e) {
+      console.log('ℹ️ Cookie popup handling failed, continuing...');
+    }
+
+    // Step 2: Handle Cloudflare verification if present
     console.log('🔒 Checking for Cloudflare verification...');
     try {
       // Wait for Cloudflare challenge or login form
@@ -412,7 +470,7 @@ app.post('/api/scrape-make', async (req, res) => {
 
     console.log('🎯 Handling post-login popups...');
     
-    // Step 3: Handle modal popup if present
+    // Step 4: Handle modal popup if present
     try {
       // Wait a bit for any popups to appear
       await sleep(3000);
