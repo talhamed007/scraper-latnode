@@ -1074,6 +1074,24 @@ app.post('/api/scrape-recraft', async (req, res) => {
 
     console.log('🔍 Looking for Sign In button...');
     
+    // First, let's see what elements are available on the page
+    console.log('📋 Checking available clickable elements...');
+    const allClickableElements = await page.$$('a, button, [role="button"]');
+    console.log(`Found ${allClickableElements.length} clickable elements`);
+    
+    // Log all elements with "sign" or "login" in their text
+    for (let i = 0; i < allClickableElements.length; i++) {
+      const element = allClickableElements[i];
+      const text = await page.evaluate(el => el.textContent || '', element);
+      const href = await page.evaluate(el => el.href || '', element);
+      const testId = await page.evaluate(el => el.getAttribute('data-testid') || '', element);
+      
+      if (text.toLowerCase().includes('sign') || text.toLowerCase().includes('login') || 
+          href.includes('login') || href.includes('sign') || testId.includes('login')) {
+        console.log(`🔍 Element ${i}: text="${text}", href="${href}", testId="${testId}"`);
+      }
+    }
+    
     // Click on Sign In button
     try {
       const signInSelectors = [
@@ -1092,7 +1110,25 @@ app.post('/api/scrape-recraft', async (req, res) => {
       let signInClicked = false;
       for (const selector of signInSelectors) {
         try {
+          console.log(`🔍 Trying selector: ${selector}`);
           await page.waitForSelector(selector, { timeout: 5000 });
+          console.log(`✅ Found element with selector: ${selector}`);
+          
+          // Get element info before clicking
+          const elementInfo = await page.evaluate((sel) => {
+            const el = document.querySelector(sel);
+            if (el) {
+              return {
+                text: el.textContent || '',
+                href: el.href || '',
+                testId: el.getAttribute('data-testid') || '',
+                tagName: el.tagName
+              };
+            }
+            return null;
+          }, selector);
+          console.log(`📋 Element info:`, elementInfo);
+          
           await page.click(selector);
           signInClicked = true;
           console.log('✅ Clicked Sign In with selector:', selector);
@@ -1105,12 +1141,17 @@ app.post('/api/scrape-recraft', async (req, res) => {
       }
       
       if (!signInClicked) {
+        console.log('🔄 Trying fallback method - searching all elements...');
         // Fallback: try to find button by text content
         const buttons = await page.$$('button, a');
-        for (const button of buttons) {
+        for (let i = 0; i < buttons.length; i++) {
+          const button = buttons[i];
           const text = await page.evaluate(el => el.textContent || '', button);
+          const href = await page.evaluate(el => el.href || '', button);
+          const testId = await page.evaluate(el => el.getAttribute('data-testid') || '', button);
+          
           if (text && text.toLowerCase().includes('sign in')) {
-            console.log('✅ Clicked Sign In by text:', text);
+            console.log(`✅ Found Sign In button by text: "${text}", href: "${href}", testId: "${testId}"`);
             await button.click();
             await sleep(5000);
             signInClicked = true;
@@ -1130,8 +1171,48 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Log URL after clicking Sign In
     const urlAfterSignIn = page.url();
     console.log('📍 URL after Sign In:', urlAfterSignIn);
+    
+    // Take a screenshot to see what page we're on
+    const afterSignInScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
+    console.log('📸 Screenshot taken after Sign In click');
+    
+    // Check if we're on the login page
+    if (urlAfterSignIn.includes('/auth/login') || urlAfterSignIn.includes('/login')) {
+      console.log('✅ Successfully navigated to login page');
+    } else {
+      console.log('⚠️ Not on login page - current URL:', urlAfterSignIn);
+      console.log('🔍 Checking page content...');
+      
+      // Get page title and some content to understand where we are
+      const pageTitle = await page.title();
+      const pageContent = await page.evaluate(() => {
+        return {
+          title: document.title,
+          url: window.location.href,
+          hasEmailInput: !!document.querySelector('input[type="email"], input[name="email"], input[name="username"]'),
+          hasPasswordInput: !!document.querySelector('input[type="password"]'),
+          bodyText: document.body.innerText.substring(0, 500)
+        };
+      });
+      console.log('📋 Page info:', pageContent);
+    }
 
     console.log('✍️ Filling email field...');
+    
+    // If we're not on a login page, try to navigate to it manually
+    if (!urlAfterSignIn.includes('/auth/login') && !urlAfterSignIn.includes('/login')) {
+      console.log('🔄 Sign In click may not have worked, trying to navigate to login page manually...');
+      try {
+        await page.goto('https://www.recraft.ai/auth/login', { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 30000 
+        });
+        console.log('✅ Manually navigated to login page');
+        await sleep(3000);
+      } catch (e) {
+        console.log('⚠️ Manual navigation failed:', e.message);
+      }
+    }
     
     // Wait for email input and fill it - now on the authentication page
     try {
