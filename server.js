@@ -1013,8 +1013,8 @@ app.post('/api/scrape-recraft', async (req, res) => {
     console.log('📸 Landing page screenshot taken');
     
     // Log current URL for debugging
-    const currentUrl = page.url();
-    console.log('📍 Current URL:', currentUrl);
+    const landingUrl = page.url();
+    console.log('📍 Landing URL:', landingUrl);
 
     // Step 1: Handle cookie consent popup if present
     console.log('🍪 Checking for cookie consent popup...');
