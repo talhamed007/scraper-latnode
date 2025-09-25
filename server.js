@@ -357,8 +357,55 @@ app.post('/api/scrape-make', async (req, res) => {
 
     console.log('🚪 Clicking login button...');
     
-    // Click login button
-    await page.click('button[type="submit"], button:contains("Sign in"), .sign-in-button');
+    // Click login button - use proper CSS selectors
+    try {
+      // Try different selectors for the login button
+      const loginSelectors = [
+        'button[type="submit"]',
+        'button[data-testid="sign-in-button"]',
+        'button.sign-in-button',
+        'input[type="submit"]',
+        'button:has-text("Sign in")',
+        'button:has-text("Sign In")',
+        'button:has-text("Login")',
+        'button:has-text("Log in")'
+      ];
+      
+      let buttonClicked = false;
+      for (const selector of loginSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 2000 });
+          await page.click(selector);
+          buttonClicked = true;
+          console.log(`✅ Clicked login button with selector: ${selector}`);
+          break;
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      if (!buttonClicked) {
+        // Fallback: try to find button by text content
+        const buttons = await page.$$('button, input[type="submit"]');
+        for (const button of buttons) {
+          const text = await page.evaluate(el => el.textContent || el.value, button);
+          if (text && (text.toLowerCase().includes('sign in') || text.toLowerCase().includes('login'))) {
+            await button.click();
+            buttonClicked = true;
+            console.log(`✅ Clicked login button with text: ${text}`);
+            break;
+          }
+        }
+      }
+      
+      if (!buttonClicked) {
+        throw new Error('Could not find login button');
+      }
+    } catch (error) {
+      console.log('⚠️ Could not click login button, trying alternative approach...');
+      // Try pressing Enter on the password field
+      await page.keyboard.press('Enter');
+    }
     
     // Wait for navigation
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
@@ -376,12 +423,13 @@ app.post('/api/scrape-make', async (req, res) => {
         'button[title="Close"]',
         '.modal-close',
         '.popup-close',
-        'button:contains("×")',
-        'button:contains("✕")',
         '[data-testid="close"]',
-        '.close-button'
+        '.close-button',
+        'button[aria-label="×"]',
+        'button[title="×"]'
       ];
       
+      let popupClosed = false;
       for (const selector of popupSelectors) {
         try {
           const popup = await page.$(selector);
@@ -389,10 +437,26 @@ app.post('/api/scrape-make', async (req, res) => {
             console.log('🚫 Found popup, clicking close button...');
             await popup.click();
             await sleep(1000);
+            popupClosed = true;
             break;
           }
         } catch (e) {
           // Continue to next selector
+        }
+      }
+      
+      // Fallback: try to find close button by text content
+      if (!popupClosed) {
+        const closeButtons = await page.$$('button, [role="button"]');
+        for (const button of closeButtons) {
+          const text = await page.evaluate(el => el.textContent || el.getAttribute('aria-label') || '', button);
+          if (text && (text.includes('×') || text.includes('✕') || text.toLowerCase().includes('close'))) {
+            console.log('🚫 Found popup close button by text:', text);
+            await button.click();
+            await sleep(1000);
+            popupClosed = true;
+            break;
+          }
         }
       }
       
