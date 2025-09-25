@@ -1195,13 +1195,82 @@ app.post('/api/scrape-recraft', async (req, res) => {
         };
       });
       console.log('📋 Page info:', pageContent);
+      
+      // Check if we're on the "Sorry, nothing to see here" error page
+      if (pageContent.bodyText.includes('Sorry, nothing to see here') || 
+          pageContent.bodyText.includes('The page you are looking for does not exist')) {
+        console.log('🔄 Detected error page - looking for "Go back to recraft" button...');
+        
+        try {
+          // Look for the "Go back to recraft" button
+          const goBackSelectors = [
+            'button:has-text("Go back to recraft")',
+            'button:has-text("Go back to Recraft")',
+            'a:has-text("Go back to recraft")',
+            'a:has-text("Go back to Recraft")',
+            '[href*="recraft"]',
+            'button[class*="back"]',
+            'a[class*="back"]'
+          ];
+          
+          let goBackClicked = false;
+          for (const selector of goBackSelectors) {
+            try {
+              console.log(`🔍 Trying go back selector: ${selector}`);
+              await page.waitForSelector(selector, { timeout: 3000 });
+              await page.click(selector);
+              goBackClicked = true;
+              console.log('✅ Clicked "Go back to recraft" with selector:', selector);
+              await sleep(3000);
+              break;
+            } catch (e) {
+              console.log('⚠️ Go back selector failed:', selector, e.message);
+            }
+          }
+          
+          if (!goBackClicked) {
+            // Fallback: search all buttons for "go back" text
+            const buttons = await page.$$('button, a');
+            for (const button of buttons) {
+              const text = await page.evaluate(el => el.textContent || '', button);
+              if (text && text.toLowerCase().includes('go back')) {
+                console.log('✅ Clicked "Go back" by text:', text);
+                await button.click();
+                await sleep(3000);
+                goBackClicked = true;
+                break;
+              }
+            }
+          }
+          
+          if (goBackClicked) {
+            const newUrl = page.url();
+            console.log('📍 URL after clicking "Go back":', newUrl);
+            
+            // Check if we're now on the login page
+            if (newUrl.includes('/auth/login') || newUrl.includes('/login')) {
+              console.log('✅ Successfully navigated to login page via "Go back" button');
+            } else {
+              console.log('⚠️ Still not on login page after "Go back" click');
+            }
+          } else {
+            console.log('⚠️ Could not find "Go back to recraft" button');
+          }
+        } catch (e) {
+          console.log('⚠️ Error handling "Go back" button:', e.message);
+        }
+      }
     }
 
     console.log('✍️ Filling email field...');
     
-    // If we're not on a login page, try to navigate to it manually
-    if (!urlAfterSignIn.includes('/auth/login') && !urlAfterSignIn.includes('/login')) {
-      console.log('🔄 Sign In click may not have worked, trying to navigate to login page manually...');
+    // Check current URL again after potential "Go back" button click
+    const finalUrl = page.url();
+    console.log('📍 Final URL before email input:', finalUrl);
+    
+    // If we're still not on a login page, try to navigate to it manually
+    if (!finalUrl.includes('/auth/login') && !finalUrl.includes('/login')) {
+      console.log('🔄 Still not on login page, trying to navigate to login page manually...');
       try {
         await page.goto('https://www.recraft.ai/auth/login', { 
           waitUntil: 'domcontentloaded', 
