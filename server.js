@@ -135,15 +135,40 @@ app.post('/api/scrape', async (req, res) => {
     
     // Extract credit information from the sidebar
     const creditInfo = await page.evaluate(() => {
-      // Look for credit information in the sidebar
-      const sidebar = document.querySelector('[class*="sidebar"], [class*="nav"], [class*="menu"]');
-      if (!sidebar) return null;
+      // Look for credit information in the sidebar - try multiple selectors
+      let sidebar = document.querySelector('[class*="sidebar"], [class*="nav"], [class*="menu"]');
+      
+      // If no sidebar found, try looking for the specific credit elements
+      if (!sidebar) {
+        // Look for elements containing credit information
+        const creditElements = document.querySelectorAll('*');
+        for (let el of creditElements) {
+          if (el.innerText && el.innerText.includes('Credits left')) {
+            sidebar = el;
+            break;
+          }
+        }
+      }
+      
+      // If still no sidebar, get all text from the page
+      if (!sidebar) {
+        sidebar = document.body;
+      }
 
       const text = sidebar.innerText || '';
+      console.log('Extracted text:', text.substring(0, 500)); // Log first 500 chars for debugging
       
-      // Extract credits information
-      const creditsMatch = text.match(/Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
-      const tokensMatch = text.match(/Plug[&]?Play\s*Tokens?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
+      // Extract credits information with more flexible patterns
+      const creditsMatch = text.match(/Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) || 
+                         text.match(/Credits?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) ||
+                         text.match(/([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits/i);
+      
+      const tokensMatch = text.match(/Plug[&]?Play\s*Tokens?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) ||
+                         text.match(/Plug[&]?Play\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) ||
+                         text.match(/([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Plug[&]?Play/i);
+      
+      console.log('Credits match:', creditsMatch);
+      console.log('Tokens match:', tokensMatch);
       
       return {
         rawText: text,
