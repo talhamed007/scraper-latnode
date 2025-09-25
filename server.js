@@ -1077,10 +1077,12 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Click on Sign In button
     try {
       const signInSelectors = [
-        'button:has-text("Sign in")',
-        'button:has-text("Sign In")',
+        'a[data-testid="main-page-login"]',  // Primary selector from your HTML
+        'a[href*="/auth/login"]',            // Alternative href selector
         'a:has-text("Sign in")',
         'a:has-text("Sign In")',
+        'button:has-text("Sign in")',
+        'button:has-text("Sign In")',
         '[href*="sign-in"]',
         '[href*="login"]',
         '.sign-in-button',
@@ -1090,13 +1092,14 @@ app.post('/api/scrape-recraft', async (req, res) => {
       let signInClicked = false;
       for (const selector of signInSelectors) {
         try {
-          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.waitForSelector(selector, { timeout: 5000 });
           await page.click(selector);
           signInClicked = true;
           console.log('✅ Clicked Sign In with selector:', selector);
-          await sleep(3000); // Wait longer for navigation
+          await sleep(5000); // Wait longer for navigation
           break;
         } catch (e) {
+          console.log('⚠️ Selector failed:', selector, e.message);
           // Try next selector
         }
       }
@@ -1109,7 +1112,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
           if (text && text.toLowerCase().includes('sign in')) {
             console.log('✅ Clicked Sign In by text:', text);
             await button.click();
-            await sleep(3000);
+            await sleep(5000);
             signInClicked = true;
             break;
           }
