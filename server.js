@@ -149,13 +149,13 @@ app.post('/api/scrape', async (req, res) => {
     });
     await sleep(3000);
 
-    console.log('📸 Taking dashboard screenshot...');
+    console.log('📸 STEP 11: Taking dashboard screenshot...');
     
     // Take screenshot of the dashboard
     const dashboardScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Dashboard screenshot taken');
 
-    console.log('🔍 Extracting credit information...');
+    console.log('🔍 STEP 12: Extracting credit information...');
     
     // Extract credit information from the sidebar
     const creditInfo = await page.evaluate(() => {
@@ -558,13 +558,13 @@ app.post('/api/scrape-make', async (req, res) => {
     
     await sleep(3000);
 
-    console.log('📸 Taking dashboard screenshot...');
+    console.log('📸 STEP 11: Taking dashboard screenshot...');
     
     // Take screenshot of the dashboard
     const dashboardScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Dashboard screenshot taken');
 
-    console.log('🔍 Extracting credit information...');
+    console.log('🔍 STEP 12: Extracting credit information...');
     
     // Extract credit information from the dashboard
     const creditInfo = await page.evaluate(() => {
@@ -854,13 +854,13 @@ app.post('/api/scrape-kie', async (req, res) => {
     
     await sleep(3000);
 
-    console.log('📸 Taking dashboard screenshot...');
+    console.log('📸 STEP 11: Taking dashboard screenshot...');
     
     // Take screenshot of the dashboard
     const dashboardScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Dashboard screenshot taken');
 
-    console.log('🔍 Extracting credit information...');
+    console.log('🔍 STEP 12: Extracting credit information...');
     
     // Extract credit information from the dashboard
     const creditInfo = await page.evaluate(() => {
@@ -1017,9 +1017,28 @@ app.post('/api/scrape-recraft', async (req, res) => {
     console.log('📍 Landing URL:', landingUrl);
 
     // Step 1: Handle cookie consent popup if present
-    console.log('🍪 Checking for cookie consent popup...');
+    console.log('🍪 STEP 1: Checking for cookie consent popup...');
     try {
       await sleep(2000);
+      
+      // First, let's see what elements are available for cookies
+      console.log('📋 Checking for cookie-related elements...');
+      const cookieElements = await page.$$('button, a, [role="button"]');
+      console.log(`Found ${cookieElements.length} clickable elements on page`);
+      
+      // Log all elements that might be cookie-related
+      for (let i = 0; i < cookieElements.length; i++) {
+        const element = cookieElements[i];
+        const text = await page.evaluate(el => el.textContent || '', element);
+        const className = await page.evaluate(el => el.className || '', element);
+        const testId = await page.evaluate(el => el.getAttribute('data-testid') || '', element);
+        
+        if (text.toLowerCase().includes('accept') || text.toLowerCase().includes('cookie') || 
+            text.toLowerCase().includes('privacy') || className.includes('cookie') || 
+            testId.includes('cookie') || testId.includes('accept')) {
+          console.log(`🍪 Cookie element ${i}: text="${text}", className="${className}", testId="${testId}"`);
+        }
+      }
       
       // Look for cookie consent buttons
       const cookieSelectors = [
@@ -1030,12 +1049,15 @@ app.post('/api/scrape-recraft', async (req, res) => {
         'button[data-testid="accept-all-cookies"]',
         'button[data-testid="accept-cookies"]',
         '.cookie-accept-all',
-        '.accept-all-cookies'
+        '.accept-all-cookies',
+        'button[class*="accept"]',
+        'button[class*="cookie"]'
       ];
       
       let cookieAccepted = false;
       for (const selector of cookieSelectors) {
         try {
+          console.log(`🍪 Trying cookie selector: ${selector}`);
           await page.waitForSelector(selector, { timeout: 3000 });
           await page.click(selector);
           cookieAccepted = true;
@@ -1043,18 +1065,23 @@ app.post('/api/scrape-recraft', async (req, res) => {
           await sleep(1000);
           break;
         } catch (e) {
-          // Try next selector
+          console.log('⚠️ Cookie selector failed:', selector, e.message);
         }
       }
       
       // Fallback: try to find cookie button by text content
       if (!cookieAccepted) {
+        console.log('🔄 Trying fallback method for cookies...');
         const buttons = await page.$$('button');
-        for (const button of buttons) {
+        for (let i = 0; i < buttons.length; i++) {
+          const button = buttons[i];
           const text = await page.evaluate(el => el.textContent || '', button);
+          const className = await page.evaluate(el => el.className || '', button);
+          
           if (text && (text.toLowerCase().includes('accept all') || 
-                      text.toLowerCase().includes('accept cookies'))) {
-            console.log('✅ Accepted cookies by text:', text);
+                      text.toLowerCase().includes('accept cookies') ||
+                      text.toLowerCase().includes('accept'))) {
+            console.log(`✅ Found cookie button by text: "${text}", className: "${className}"`);
             await button.click();
             await sleep(1000);
             cookieAccepted = true;
@@ -1064,15 +1091,15 @@ app.post('/api/scrape-recraft', async (req, res) => {
       }
       
       if (cookieAccepted) {
-        console.log('🍪 Cookie consent handled successfully');
+        console.log('✅ STEP 1 COMPLETE: Cookie consent handled successfully');
       } else {
-        console.log('ℹ️ No cookie popup detected or already handled');
+        console.log('ℹ️ STEP 1 COMPLETE: No cookie popup detected or already handled');
       }
     } catch (e) {
-      console.log('ℹ️ Cookie popup handling failed, continuing...');
+      console.log('⚠️ STEP 1 ERROR: Cookie popup handling failed:', e.message);
     }
 
-    console.log('🔍 Looking for Sign In button...');
+    console.log('🔍 STEP 2: Looking for Sign In button...');
     
     // First, let's see what elements are available on the page
     console.log('📋 Checking available clickable elements...');
@@ -1093,6 +1120,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
     }
     
     // Click on Sign In button
+    console.log('🔄 STEP 2: Attempting to click Sign In button...');
     try {
       const signInSelectors = [
         'a[data-testid="main-page-login"]',  // Primary selector from your HTML
@@ -1199,7 +1227,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       // Check if we're on the "Sorry, nothing to see here" error page
       if (pageContent.bodyText.includes('Sorry, nothing to see here') || 
           pageContent.bodyText.includes('The page you are looking for does not exist')) {
-        console.log('🔄 Detected error page - looking for "Go back to recraft" button...');
+        console.log('🔄 STEP 3: Detected error page - looking for "Go back to recraft" button...');
         
         // First, let's see what elements are available on the error page
         console.log('📋 Checking available elements on error page...');
@@ -1291,7 +1319,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       }
     }
 
-    console.log('✍️ Filling email field...');
+    console.log('✍️ STEP 4: Filling email field...');
     
     // Check current URL again after potential "Go back" button click
     const finalUrl = page.url();
@@ -1348,7 +1376,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       throw error;
     }
 
-    console.log('☑️ Checking verification checkbox...');
+    console.log('☑️ STEP 5: Checking verification checkbox...');
     
     // Look for and click verification checkbox (Cloudflare)
     try {
@@ -1385,7 +1413,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       console.log('ℹ️ Verification checkbox handling failed, continuing...');
     }
 
-    console.log('🚪 Clicking Continue button...');
+    console.log('🚪 STEP 6: Clicking Continue button...');
     
     // Click Continue button
     try {
@@ -1433,7 +1461,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       throw error;
     }
 
-    console.log('📧 Waiting for verification code page...');
+    console.log('📧 STEP 7: Waiting for verification code page...');
     
     // Wait for verification code page
     await page.waitForSelector('input[type="text"], input[name="code"], input[placeholder*="code"]', { timeout: 30000 });
@@ -1442,14 +1470,14 @@ app.post('/api/scrape-recraft', async (req, res) => {
     const verificationScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Verification page screenshot taken');
 
-    console.log('⏳ Waiting for manual verification code entry...');
+    console.log('⏳ STEP 8: Waiting for manual verification code entry...');
     
     // Wait for user to manually enter verification code
     // This is a limitation - we can't automatically read emails
     // The user will need to enter the code manually
     await sleep(10000); // Wait 10 seconds for user to enter code
     
-    console.log('🔍 Checking if verification was successful...');
+    console.log('🔍 STEP 9: Checking if verification was successful...');
     
     // Check if we're on the dashboard or still on verification page
     const currentUrl = page.url();
@@ -1475,7 +1503,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       return;
     }
 
-    console.log('📊 Navigating to dashboard...');
+    console.log('📊 STEP 10: Navigating to dashboard...');
     
     // Navigate to dashboard if not already there
     if (!currentUrl.includes('/dashboard') && !currentUrl.includes('/app')) {
@@ -1487,13 +1515,13 @@ app.post('/api/scrape-recraft', async (req, res) => {
     
     await sleep(3000);
 
-    console.log('📸 Taking dashboard screenshot...');
+    console.log('📸 STEP 11: Taking dashboard screenshot...');
     
     // Take screenshot of the dashboard
     const dashboardScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Dashboard screenshot taken');
 
-    console.log('🔍 Extracting credit information...');
+    console.log('🔍 STEP 12: Extracting credit information...');
     
     // Extract credit information from the dashboard
     const creditInfo = await page.evaluate(() => {
