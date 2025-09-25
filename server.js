@@ -135,43 +135,72 @@ app.post('/api/scrape', async (req, res) => {
     
     // Extract credit information from the sidebar
     const creditInfo = await page.evaluate(() => {
-      // Look for credit information in the sidebar - try multiple selectors
-      let sidebar = document.querySelector('[class*="sidebar"], [class*="nav"], [class*="menu"]');
+      // Get all text from the page for comprehensive search
+      const allText = document.body.innerText || '';
+      console.log('Full page text (first 1000 chars):', allText.substring(0, 1000));
       
-      // If no sidebar found, try looking for the specific credit elements
-      if (!sidebar) {
-        // Look for elements containing credit information
-        const creditElements = document.querySelectorAll('*');
-        for (let el of creditElements) {
-          if (el.innerText && el.innerText.includes('Credits left')) {
-            sidebar = el;
-            break;
-          }
+      // Look for credit patterns in the entire page text
+      // Try multiple patterns to catch different formats
+      const creditPatterns = [
+        /Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+        /Credits?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits/i,
+        /Credits?\s*left\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*left/i
+      ];
+      
+      const tokenPatterns = [
+        /Plug[&]?Play\s*Tokens?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+        /Plug[&]?Play\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Plug[&]?Play/i,
+        /Plug[&]?Play\s*Tokens?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i
+      ];
+      
+      let creditsMatch = null;
+      let tokensMatch = null;
+      
+      // Try each credit pattern
+      for (let pattern of creditPatterns) {
+        creditsMatch = allText.match(pattern);
+        if (creditsMatch) {
+          console.log('Found credits with pattern:', pattern);
+          break;
         }
       }
       
-      // If still no sidebar, get all text from the page
-      if (!sidebar) {
-        sidebar = document.body;
+      // Try each token pattern
+      for (let pattern of tokenPatterns) {
+        tokensMatch = allText.match(pattern);
+        if (tokensMatch) {
+          console.log('Found tokens with pattern:', pattern);
+          break;
+        }
       }
-
-      const text = sidebar.innerText || '';
-      console.log('Extracted text:', text.substring(0, 500)); // Log first 500 chars for debugging
       
-      // Extract credits information with more flexible patterns
-      const creditsMatch = text.match(/Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) || 
-                         text.match(/Credits?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) ||
-                         text.match(/([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits/i);
+      // If no patterns match, try to find numbers that look like credits
+      if (!creditsMatch) {
+        // Look for patterns like "296/300" near the word "credit"
+        const creditContext = allText.match(/credit[^0-9]*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
+        if (creditContext) {
+          creditsMatch = creditContext;
+          console.log('Found credits in context:', creditContext);
+        }
+      }
       
-      const tokensMatch = text.match(/Plug[&]?Play\s*Tokens?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) ||
-                         text.match(/Plug[&]?Play\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i) ||
-                         text.match(/([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Plug[&]?Play/i);
+      if (!tokensMatch) {
+        // Look for patterns like "0.82/0" near the word "plug" or "play"
+        const tokenContext = allText.match(/(plug|play)[^0-9]*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
+        if (tokenContext) {
+          tokensMatch = tokenContext;
+          console.log('Found tokens in context:', tokenContext);
+        }
+      }
       
-      console.log('Credits match:', creditsMatch);
-      console.log('Tokens match:', tokensMatch);
+      console.log('Final credits match:', creditsMatch);
+      console.log('Final tokens match:', tokensMatch);
       
       return {
-        rawText: text,
+        rawText: allText.substring(0, 2000), // First 2000 chars for debugging
         credits_left: creditsMatch ? creditsMatch[1] : null,
         credits_total: creditsMatch ? creditsMatch[2] : null,
         plugAndPlay_left: tokensMatch ? tokensMatch[1] : null,
