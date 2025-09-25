@@ -35,9 +35,10 @@ app.post('/api/scrape', async (req, res) => {
     console.log('📧 Email:', email);
     console.log('🔑 Password length:', password.length);
 
-    // Launch browser with optimized settings
+    // Launch browser with optimized settings for Railway
     browser = await puppeteer.launch({
       headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
