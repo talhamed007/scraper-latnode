@@ -1201,13 +1201,35 @@ app.post('/api/scrape-recraft', async (req, res) => {
           pageContent.bodyText.includes('The page you are looking for does not exist')) {
         console.log('🔄 Detected error page - looking for "Go back to recraft" button...');
         
+        // First, let's see what elements are available on the error page
+        console.log('📋 Checking available elements on error page...');
+        const errorPageElements = await page.$$('a, button');
+        console.log(`Found ${errorPageElements.length} clickable elements on error page`);
+        
+        // Log all elements with "go back" or "recraft" in their text or href
+        for (let i = 0; i < errorPageElements.length; i++) {
+          const element = errorPageElements[i];
+          const text = await page.evaluate(el => el.textContent || '', element);
+          const href = await page.evaluate(el => el.href || '', element);
+          const className = await page.evaluate(el => el.className || '', element);
+          
+          if (text.toLowerCase().includes('go back') || text.toLowerCase().includes('recraft') || 
+              href.includes('recraft') || href.includes('/projects') || className.includes('c-bZNrxE')) {
+            console.log(`🔍 Error page element ${i}: text="${text}", href="${href}", className="${className}"`);
+          }
+        }
+        
         try {
-          // Look for the "Go back to recraft" button
+          // Look for the "Go back to recraft" button with specific selectors from your HTML
           const goBackSelectors = [
-            'button:has-text("Go back to recraft")',
-            'button:has-text("Go back to Recraft")',
+            'a[href="/projects"]',  // Primary selector from your HTML
+            'a.c-bZNrxE',          // Specific class from your HTML
+            'a[class*="c-bZNrxE"]', // Partial class match
+            'a[class*="c-cfmRqm"]', // Another class from your HTML
             'a:has-text("Go back to recraft")',
             'a:has-text("Go back to Recraft")',
+            'button:has-text("Go back to recraft")',
+            'button:has-text("Go back to Recraft")',
             '[href*="recraft"]',
             'button[class*="back"]',
             'a[class*="back"]'
@@ -1229,11 +1251,18 @@ app.post('/api/scrape-recraft', async (req, res) => {
           }
           
           if (!goBackClicked) {
+            console.log('🔄 Trying fallback method - searching all elements for exact text...');
             // Fallback: search all buttons for "go back" text
             const buttons = await page.$$('button, a');
-            for (const button of buttons) {
+            for (let i = 0; i < buttons.length; i++) {
+              const button = buttons[i];
               const text = await page.evaluate(el => el.textContent || '', button);
-              if (text && text.toLowerCase().includes('go back')) {
+              const href = await page.evaluate(el => el.href || '', button);
+              const className = await page.evaluate(el => el.className || '', button);
+              
+              console.log(`🔍 Checking element ${i}: text="${text}", href="${href}", className="${className}"`);
+              
+              if (text && (text.toLowerCase().includes('go back') || text.toLowerCase().includes('go back to recraft'))) {
                 console.log('✅ Clicked "Go back" by text:', text);
                 await button.click();
                 await sleep(3000);
