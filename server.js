@@ -1002,6 +1002,10 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Take screenshot of landing page
     const landingScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Landing page screenshot taken');
+    
+    // Log current URL for debugging
+    const currentUrl = page.url();
+    console.log('📍 Current URL:', currentUrl);
 
     // Step 1: Handle cookie consent popup if present
     console.log('🍪 Checking for cookie consent popup...');
@@ -1081,7 +1085,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
           await page.click(selector);
           signInClicked = true;
           console.log('✅ Clicked Sign In with selector:', selector);
-          await sleep(2000);
+          await sleep(3000); // Wait longer for navigation
           break;
         } catch (e) {
           // Try next selector
@@ -1096,7 +1100,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
           if (text && text.toLowerCase().includes('sign in')) {
             console.log('✅ Clicked Sign In by text:', text);
             await button.click();
-            await sleep(2000);
+            await sleep(3000);
             signInClicked = true;
             break;
           }
@@ -1110,12 +1114,48 @@ app.post('/api/scrape-recraft', async (req, res) => {
       console.log('⚠️ Could not click Sign In button:', error.message);
       throw error;
     }
+    
+    // Log URL after clicking Sign In
+    const urlAfterSignIn = page.url();
+    console.log('📍 URL after Sign In:', urlAfterSignIn);
 
     console.log('✍️ Filling email field...');
     
-    // Wait for email input and fill it
-    await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 30000 });
-    await page.type('input[type="email"], input[name="email"]', email, { delay: 25 });
+    // Wait for email input and fill it - now on the authentication page
+    try {
+      await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 30000 });
+      await page.type('input[type="email"], input[name="email"]', email, { delay: 25 });
+      console.log('✅ Email filled successfully');
+    } catch (error) {
+      console.log('⚠️ Could not find email input, trying alternative selectors...');
+      
+      // Try alternative selectors for email input
+      const emailSelectors = [
+        'input[type="text"]',
+        'input[placeholder*="email"]',
+        'input[placeholder*="Email"]',
+        'input[name="username"]',
+        'input[id="email"]',
+        'input[class*="email"]'
+      ];
+      
+      let emailFilled = false;
+      for (const selector of emailSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+          await page.type(selector, email, { delay: 25 });
+          emailFilled = true;
+          console.log('✅ Email filled with selector:', selector);
+          break;
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      if (!emailFilled) {
+        throw new Error('Could not find email input field');
+      }
+    }
 
     console.log('☑️ Checking verification checkbox...');
     
