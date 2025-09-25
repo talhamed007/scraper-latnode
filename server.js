@@ -3,7 +3,7 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Middleware
 app.use(express.json());
@@ -27,6 +27,15 @@ app.get('/kie', (req, res) => {
 // Serve the Recraft.ai scraper page
 app.get('/recraft', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft.html'));
+});
+
+// Health check endpoint for Railway
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // Real scraping endpoint
@@ -1392,7 +1401,28 @@ app.post('/api/scrape-recraft', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// Add error handling for server startup
+app.listen(PORT, (err) => {
+  if (err) {
+    console.error('❌ Failed to start server:', err);
+    process.exit(1);
+  }
   console.log(`🚀 Latenode Scraper running on port ${PORT}`);
   console.log(`🌐 Visit: http://localhost:${PORT}`);
+  console.log(`📊 Available scrapers:`);
+  console.log(`   - Latenode: /`);
+  console.log(`   - Make.com: /make`);
+  console.log(`   - KIE.ai: /kie`);
+  console.log(`   - Recraft.ai: /recraft`);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err);
+  process.exit(1);
 });
