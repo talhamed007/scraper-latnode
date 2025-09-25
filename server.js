@@ -1123,18 +1123,14 @@ app.post('/api/scrape-recraft', async (req, res) => {
     
     // Wait for email input and fill it - now on the authentication page
     try {
-      await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 30000 });
-      await page.type('input[type="email"], input[name="email"]', email, { delay: 25 });
-      console.log('✅ Email filled successfully');
-    } catch (error) {
-      console.log('⚠️ Could not find email input, trying alternative selectors...');
-      
-      // Try alternative selectors for email input
+      // Use the correct selectors based on the actual HTML element
       const emailSelectors = [
+        'input[name="username"]',  // Primary selector based on your HTML
+        'input[placeholder="Email"]',
+        'input[autocomplete="email"]',
         'input[type="text"]',
-        'input[placeholder*="email"]',
-        'input[placeholder*="Email"]',
-        'input[name="username"]',
+        'input[type="email"]',
+        'input[name="email"]',
         'input[id="email"]',
         'input[class*="email"]'
       ];
@@ -1148,13 +1144,17 @@ app.post('/api/scrape-recraft', async (req, res) => {
           console.log('✅ Email filled with selector:', selector);
           break;
         } catch (e) {
+          console.log('⚠️ Selector failed:', selector, e.message);
           // Try next selector
         }
       }
       
       if (!emailFilled) {
-        throw new Error('Could not find email input field');
+        throw new Error('Could not find email input field with any selector');
       }
+    } catch (error) {
+      console.log('⚠️ Email input error:', error.message);
+      throw error;
     }
 
     console.log('☑️ Checking verification checkbox...');
@@ -1165,7 +1165,9 @@ app.post('/api/scrape-recraft', async (req, res) => {
         'input[type="checkbox"]',
         '.cf-challenge-running input[type="checkbox"]',
         '[data-ray] input[type="checkbox"]',
-        'input[name="cf-turnstile-response"]'
+        'input[name="cf-turnstile-response"]',
+        'input[aria-label*="human"]',
+        'input[aria-label*="verify"]'
       ];
       
       let checkboxChecked = false;
@@ -1175,11 +1177,12 @@ app.post('/api/scrape-recraft', async (req, res) => {
           if (checkbox) {
             await checkbox.click();
             checkboxChecked = true;
-            console.log('✅ Clicked verification checkbox');
+            console.log('✅ Clicked verification checkbox with selector:', selector);
             await sleep(2000);
             break;
           }
         } catch (e) {
+          console.log('⚠️ Checkbox selector failed:', selector, e.message);
           // Continue to next selector
         }
       }
