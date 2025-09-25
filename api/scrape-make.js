@@ -1,30 +1,19 @@
-const express = require('express');
 const puppeteer = require('puppeteer');
-const path = require('path');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(express.json());
-app.use(express.static('public'));
-
-// Serve the main page
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Serve the Make.com scraper page
-app.get('/make', (req, res) => {
-  res.sendFile(path.join(__dirname, 'make.html'));
-});
-
-// Real scraping endpoint
-app.post('/api/scrape', async (req, res) => {
+export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const { email, password } = req.body;
 
@@ -36,7 +25,7 @@ app.post('/api/scrape', async (req, res) => {
   let page;
 
   try {
-    console.log('🚀 Starting real Latenode scraping...');
+    console.log('🚀 Starting Make.com scraping...');
     console.log('📧 Email:', email);
     console.log('🔑 Password length:', password.length);
 
@@ -70,10 +59,10 @@ app.post('/api/scrape', async (req, res) => {
     // Helper function for sleep
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    console.log('🌐 Navigating to Latenode login page...');
+    console.log('🌐 Navigating to Make.com login page...');
     
     // Navigate to login page
-    await page.goto('https://app.latenode.com/auth', { 
+    await page.goto('https://www.make.com/en/login', { 
       waitUntil: 'domcontentloaded', 
       timeout: 60000 
     });
@@ -82,52 +71,101 @@ app.post('/api/scrape', async (req, res) => {
     const loginScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Login page screenshot taken');
 
+    // Step 1: Handle Cloudflare verification if present
+    console.log('🔒 Checking for Cloudflare verification...');
+    try {
+      // Wait for Cloudflare challenge or login form
+      await page.waitForSelector('input[type="email"], input[name="email"], .cf-challenge-running, [data-ray]', { timeout: 10000 });
+      
+      // Check if Cloudflare challenge is present
+      const cloudflarePresent = await page.$('.cf-challenge-running, [data-ray]');
+      if (cloudflarePresent) {
+        console.log('🛡️ Cloudflare verification detected, waiting for completion...');
+        
+        // Wait for Cloudflare to complete (usually takes 5-10 seconds)
+        await page.waitForFunction(() => {
+          return !document.querySelector('.cf-challenge-running, [data-ray]');
+        }, { timeout: 30000 });
+        
+        console.log('✅ Cloudflare verification completed');
+        await sleep(2000); // Wait a bit more for page to load
+      }
+    } catch (e) {
+      console.log('ℹ️ No Cloudflare verification detected or already completed');
+    }
+
     console.log('✍️ Filling email field...');
     
     // Wait for email input and fill it
-    await page.waitForSelector('input[type=email],#email,input[name=email]', { timeout: 30000 });
-    await page.type('input[type=email],#email,input[name=email]', email, { delay: 25 });
-
-    // Helper function to click by text
-    const clickByText = async (regex) => {
-      const buttons = await page.$$('button,[role=button],input[type=submit]');
-      for (const button of buttons) {
-        const text = (await (await button.getProperty('innerText')).jsonValue() || '').trim();
-        if (new RegExp(regex, 'i').test(text)) {
-          await button.click();
-          return true;
-        }
-      }
-      return false;
-    };
-
-    console.log('➡️ Clicking next button...');
-    
-    // Click next/continue button
-    await clickByText('Suivant|Next');
-    await sleep(1200);
+    await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 30000 });
+    await page.type('input[type="email"], input[name="email"]', email, { delay: 25 });
 
     console.log('🔒 Filling password field...');
     
     // Wait for password input and fill it
-    await page.waitForSelector('input[type=password],#login,input[name=login]', { timeout: 30000 });
-    await page.type('input[type=password],#login,input[name=login]', password, { delay: 25 });
+    await page.waitForSelector('input[type="password"], input[name="password"]', { timeout: 30000 });
+    await page.type('input[type="password"], input[name="password"]', password, { delay: 25 });
 
     console.log('🚪 Clicking login button...');
     
     // Click login button
-    (await clickByText('Connexion|Se connecter|Sign in')) || await clickByText('Login');
+    await page.click('button[type="submit"], button:contains("Sign in"), .sign-in-button');
     
     // Wait for navigation
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
 
+    console.log('🎯 Handling post-login popups...');
+    
+    // Step 3: Handle modal popup if present
+    try {
+      // Wait a bit for any popups to appear
+      await sleep(3000);
+      
+      // Look for common popup close buttons
+      const popupSelectors = [
+        'button[aria-label="Close"]',
+        'button[title="Close"]',
+        '.modal-close',
+        '.popup-close',
+        'button:contains("×")',
+        'button:contains("✕")',
+        '[data-testid="close"]',
+        '.close-button'
+      ];
+      
+      for (const selector of popupSelectors) {
+        try {
+          const popup = await page.$(selector);
+          if (popup) {
+            console.log('🚫 Found popup, clicking close button...');
+            await popup.click();
+            await sleep(1000);
+            break;
+          }
+        } catch (e) {
+          // Continue to next selector
+        }
+      }
+      
+      // Also try to press Escape key to close any modals
+      await page.keyboard.press('Escape');
+      await sleep(1000);
+      
+    } catch (e) {
+      console.log('ℹ️ No popup detected or already closed');
+    }
+
     console.log('📊 Navigating to dashboard...');
     
-    // Navigate to scenarios page to see the dashboard
-    await page.goto('https://app.latenode.com/scenarios', { 
-      waitUntil: 'domcontentloaded', 
-      timeout: 60000 
-    });
+    // Navigate to dashboard if not already there
+    const currentUrl = page.url();
+    if (!currentUrl.includes('/dashboard')) {
+      await page.goto('https://eu2.make.com/organization/dashboard', { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 60000 
+      });
+    }
+    
     await sleep(3000);
 
     console.log('📸 Taking dashboard screenshot...');
@@ -138,31 +176,23 @@ app.post('/api/scrape', async (req, res) => {
 
     console.log('🔍 Extracting credit information...');
     
-    // Extract credit information from the sidebar
+    // Extract credit information from the dashboard
     const creditInfo = await page.evaluate(() => {
       // Get all text from the page for comprehensive search
       const allText = document.body.innerText || '';
       console.log('Full page text (first 1000 chars):', allText.substring(0, 1000));
       
       // Look for credit patterns in the entire page text
-      // Try multiple patterns to catch different formats
       const creditPatterns = [
         /Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
         /Credits?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits/i,
         /Credits?\s*left\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
-        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*left/i
-      ];
-      
-      const tokenPatterns = [
-        /Plug[&]?Play\s*Tokens?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
-        /Plug[&]?Play\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
-        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Plug[&]?Play/i,
-        /Plug[&]?Play\s*Tokens?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*left/i,
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*credits/i
       ];
       
       let creditsMatch = null;
-      let tokensMatch = null;
       
       // Try each credit pattern
       for (let pattern of creditPatterns) {
@@ -173,18 +203,9 @@ app.post('/api/scrape', async (req, res) => {
         }
       }
       
-      // Try each token pattern
-      for (let pattern of tokenPatterns) {
-        tokensMatch = allText.match(pattern);
-        if (tokensMatch) {
-          console.log('Found tokens with pattern:', pattern);
-          break;
-        }
-      }
-      
       // If no patterns match, try to find numbers that look like credits
       if (!creditsMatch) {
-        // Look for patterns like "296/300" near the word "credit"
+        // Look for patterns like "8,699/10,000" near the word "credit"
         const creditContext = allText.match(/credit[^0-9]*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
         if (creditContext) {
           creditsMatch = creditContext;
@@ -192,24 +213,13 @@ app.post('/api/scrape', async (req, res) => {
         }
       }
       
-      if (!tokensMatch) {
-        // Look for patterns like "0.82/0" near the word "plug" or "play"
-        const tokenContext = allText.match(/(plug|play)[^0-9]*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
-        if (tokenContext) {
-          tokensMatch = tokenContext;
-          console.log('Found tokens in context:', tokenContext);
-        }
-      }
-      
       console.log('Final credits match:', creditsMatch);
-      console.log('Final tokens match:', tokensMatch);
       
       return {
         rawText: allText.substring(0, 2000), // First 2000 chars for debugging
         credits_left: creditsMatch ? creditsMatch[1] : null,
         credits_total: creditsMatch ? creditsMatch[2] : null,
-        plugAndPlay_left: tokensMatch ? tokensMatch[1] : null,
-        plugAndPlay_total: tokensMatch ? tokensMatch[2] : null
+        credits_used: creditsMatch ? (parseFloat(creditsMatch[2].replace(/,/g, '')) - parseFloat(creditsMatch[1].replace(/,/g, ''))).toString() : null
       };
     });
 
@@ -220,14 +230,12 @@ app.post('/api/scrape', async (req, res) => {
       ok: true,
       data: {
         rawText: creditInfo?.rawText || 'Could not extract credit information',
-        credits_used: creditInfo?.credits_total && creditInfo?.credits_left ? 
-          (parseFloat(creditInfo.credits_total) - parseFloat(creditInfo.credits_left)).toString() : null,
+        credits_used: creditInfo?.credits_used,
         credits_total: creditInfo?.credits_total,
         credits_left: creditInfo?.credits_left,
-        plugAndPlay_used: creditInfo?.plugAndPlay_total && creditInfo?.plugAndPlay_left ? 
-          (parseFloat(creditInfo.plugAndPlay_total) - parseFloat(creditInfo.plugAndPlay_left)).toString() : null,
-        plugAndPlay_total: creditInfo?.plugAndPlay_total,
-        plugAndPlay_left: creditInfo?.plugAndPlay_left,
+        plugAndPlay_used: null, // Make.com doesn't have Plug&Play tokens
+        plugAndPlay_total: null,
+        plugAndPlay_left: null,
         screenshotBase64: dashboardScreenshot ? dashboardScreenshot.toString('base64') : null
       }
     });
@@ -255,9 +263,4 @@ app.post('/api/scrape', async (req, res) => {
       await browser.close();
     }
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Latenode Scraper running on port ${PORT}`);
-  console.log(`🌐 Visit: http://localhost:${PORT}`);
-});
+}
