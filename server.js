@@ -24,6 +24,11 @@ app.get('/kie', (req, res) => {
   res.sendFile(path.join(__dirname, 'kie.html'));
 });
 
+// Serve the Recraft.ai scraper page
+app.get('/recraft', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recraft.html'));
+});
+
 // Real scraping endpoint
 app.post('/api/scrape', async (req, res) => {
   // Set CORS headers
@@ -905,6 +910,414 @@ app.post('/api/scrape-kie', async (req, res) => {
         credits_total: creditInfo?.credits_total,
         credits_left: creditInfo?.credits_left,
         plugAndPlay_used: null, // KIE.ai doesn't have Plug&Play tokens
+        plugAndPlay_total: null,
+        plugAndPlay_left: null,
+        screenshotBase64: dashboardScreenshot ? dashboardScreenshot.toString('base64') : null
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Scraping error:', error);
+    
+    // Take error screenshot if possible
+    let errorScreenshot = null;
+    try {
+      if (page) {
+        errorScreenshot = await page.screenshot({ fullPage: true });
+      }
+    } catch (e) {
+      console.log('Could not take error screenshot:', e.message);
+    }
+
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+      screenshotBase64: errorScreenshot ? errorScreenshot.toString('base64') : null
+    });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+});
+
+// Recraft.ai scraping endpoint
+app.post('/api/scrape-recraft', async (req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  let browser;
+  let page;
+
+  try {
+    console.log('🚀 Starting Recraft.ai scraping...');
+    console.log('📧 Email:', email);
+
+    // Launch browser with optimized settings for Railway
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
+      ]
+    });
+
+    page = await browser.newPage();
+    
+    // Set viewport and user agent
+    await page.setViewport({ width: 1440, height: 900 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+    // Helper function for sleep
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    console.log('🌐 Navigating to Recraft.ai...');
+    
+    // Navigate to Recraft.ai landing page
+    await page.goto('https://www.recraft.ai/', { 
+      waitUntil: 'domcontentloaded', 
+      timeout: 60000 
+    });
+
+    // Take screenshot of landing page
+    const landingScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
+    console.log('📸 Landing page screenshot taken');
+
+    // Step 1: Handle cookie consent popup if present
+    console.log('🍪 Checking for cookie consent popup...');
+    try {
+      await sleep(2000);
+      
+      // Look for cookie consent buttons
+      const cookieSelectors = [
+        'button:has-text("Accept All")',
+        'button:has-text("Accept all")',
+        'button:has-text("Accept All Cookies")',
+        'button:has-text("Accept all cookies")',
+        'button[data-testid="accept-all-cookies"]',
+        'button[data-testid="accept-cookies"]',
+        '.cookie-accept-all',
+        '.accept-all-cookies'
+      ];
+      
+      let cookieAccepted = false;
+      for (const selector of cookieSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.click(selector);
+          cookieAccepted = true;
+          console.log('✅ Accepted cookies with selector:', selector);
+          await sleep(1000);
+          break;
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      // Fallback: try to find cookie button by text content
+      if (!cookieAccepted) {
+        const buttons = await page.$$('button');
+        for (const button of buttons) {
+          const text = await page.evaluate(el => el.textContent || '', button);
+          if (text && (text.toLowerCase().includes('accept all') || 
+                      text.toLowerCase().includes('accept cookies'))) {
+            console.log('✅ Accepted cookies by text:', text);
+            await button.click();
+            await sleep(1000);
+            cookieAccepted = true;
+            break;
+          }
+        }
+      }
+      
+      if (cookieAccepted) {
+        console.log('🍪 Cookie consent handled successfully');
+      } else {
+        console.log('ℹ️ No cookie popup detected or already handled');
+      }
+    } catch (e) {
+      console.log('ℹ️ Cookie popup handling failed, continuing...');
+    }
+
+    console.log('🔍 Looking for Sign In button...');
+    
+    // Click on Sign In button
+    try {
+      const signInSelectors = [
+        'button:has-text("Sign in")',
+        'button:has-text("Sign In")',
+        'a:has-text("Sign in")',
+        'a:has-text("Sign In")',
+        '[href*="sign-in"]',
+        '[href*="login"]',
+        '.sign-in-button',
+        '.login-button'
+      ];
+      
+      let signInClicked = false;
+      for (const selector of signInSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.click(selector);
+          signInClicked = true;
+          console.log('✅ Clicked Sign In with selector:', selector);
+          await sleep(2000);
+          break;
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      if (!signInClicked) {
+        // Fallback: try to find button by text content
+        const buttons = await page.$$('button, a');
+        for (const button of buttons) {
+          const text = await page.evaluate(el => el.textContent || '', button);
+          if (text && text.toLowerCase().includes('sign in')) {
+            console.log('✅ Clicked Sign In by text:', text);
+            await button.click();
+            await sleep(2000);
+            signInClicked = true;
+            break;
+          }
+        }
+      }
+      
+      if (!signInClicked) {
+        throw new Error('Could not find Sign In button');
+      }
+    } catch (error) {
+      console.log('⚠️ Could not click Sign In button:', error.message);
+      throw error;
+    }
+
+    console.log('✍️ Filling email field...');
+    
+    // Wait for email input and fill it
+    await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 30000 });
+    await page.type('input[type="email"], input[name="email"]', email, { delay: 25 });
+
+    console.log('☑️ Checking verification checkbox...');
+    
+    // Look for and click verification checkbox (Cloudflare)
+    try {
+      const checkboxSelectors = [
+        'input[type="checkbox"]',
+        '.cf-challenge-running input[type="checkbox"]',
+        '[data-ray] input[type="checkbox"]',
+        'input[name="cf-turnstile-response"]'
+      ];
+      
+      let checkboxChecked = false;
+      for (const selector of checkboxSelectors) {
+        try {
+          const checkbox = await page.$(selector);
+          if (checkbox) {
+            await checkbox.click();
+            checkboxChecked = true;
+            console.log('✅ Clicked verification checkbox');
+            await sleep(2000);
+            break;
+          }
+        } catch (e) {
+          // Continue to next selector
+        }
+      }
+      
+      if (!checkboxChecked) {
+        console.log('ℹ️ No verification checkbox found, continuing...');
+      }
+    } catch (e) {
+      console.log('ℹ️ Verification checkbox handling failed, continuing...');
+    }
+
+    console.log('🚪 Clicking Continue button...');
+    
+    // Click Continue button
+    try {
+      const continueSelectors = [
+        'button:has-text("Continue")',
+        'button:has-text("continue")',
+        'button[type="submit"]',
+        '.continue-button'
+      ];
+      
+      let continueClicked = false;
+      for (const selector of continueSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.click(selector);
+          continueClicked = true;
+          console.log('✅ Clicked Continue with selector:', selector);
+          await sleep(3000);
+          break;
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      if (!continueClicked) {
+        // Fallback: try to find button by text content
+        const buttons = await page.$$('button');
+        for (const button of buttons) {
+          const text = await page.evaluate(el => el.textContent || '', button);
+          if (text && text.toLowerCase().includes('continue')) {
+            console.log('✅ Clicked Continue by text:', text);
+            await button.click();
+            await sleep(3000);
+            continueClicked = true;
+            break;
+          }
+        }
+      }
+      
+      if (!continueClicked) {
+        throw new Error('Could not find Continue button');
+      }
+    } catch (error) {
+      console.log('⚠️ Could not click Continue button:', error.message);
+      throw error;
+    }
+
+    console.log('📧 Waiting for verification code page...');
+    
+    // Wait for verification code page
+    await page.waitForSelector('input[type="text"], input[name="code"], input[placeholder*="code"]', { timeout: 30000 });
+    
+    // Take screenshot of verification page
+    const verificationScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
+    console.log('📸 Verification page screenshot taken');
+
+    console.log('⏳ Waiting for manual verification code entry...');
+    
+    // Wait for user to manually enter verification code
+    // This is a limitation - we can't automatically read emails
+    // The user will need to enter the code manually
+    await sleep(10000); // Wait 10 seconds for user to enter code
+    
+    console.log('🔍 Checking if verification was successful...');
+    
+    // Check if we're on the dashboard or still on verification page
+    const currentUrl = page.url();
+    if (currentUrl.includes('verification') || currentUrl.includes('code')) {
+      console.log('⚠️ Still on verification page - user needs to enter code manually');
+      
+      // Return verification required response
+      res.status(200).json({
+        ok: true,
+        data: {
+          rawText: 'Verification code required - please check your email and enter the code manually',
+          credits_used: null,
+          credits_total: null,
+          credits_left: null,
+          plugAndPlay_used: null,
+          plugAndPlay_total: null,
+          plugAndPlay_left: null,
+          screenshotBase64: verificationScreenshot ? verificationScreenshot.toString('base64') : null,
+          verificationRequired: true,
+          message: 'Please check your email for the verification code and enter it manually in the browser'
+        }
+      });
+      return;
+    }
+
+    console.log('📊 Navigating to dashboard...');
+    
+    // Navigate to dashboard if not already there
+    if (!currentUrl.includes('/dashboard') && !currentUrl.includes('/app')) {
+      await page.goto('https://www.recraft.ai/app', { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 60000 
+      });
+    }
+    
+    await sleep(3000);
+
+    console.log('📸 Taking dashboard screenshot...');
+    
+    // Take screenshot of the dashboard
+    const dashboardScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
+    console.log('📸 Dashboard screenshot taken');
+
+    console.log('🔍 Extracting credit information...');
+    
+    // Extract credit information from the dashboard
+    const creditInfo = await page.evaluate(() => {
+      // Get all text from the page for comprehensive search
+      const allText = document.body.innerText || '';
+      console.log('Full page text (first 1000 chars):', allText.substring(0, 1000));
+      
+      // Look for credit patterns in the entire page text
+      const creditPatterns = [
+        /Credits?\s*:?\s*([0-9.,]+)/i,
+        /Remaining\s*credits?\s*:?\s*([0-9.,]+)/i,
+        /Credits?\s*left\s*:?\s*([0-9.,]+)/i,
+        /([0-9.,]+)\s*credits?/i,
+        /([0-9.,]+)\s*remaining/i
+      ];
+      
+      let creditsMatch = null;
+      
+      // Try each credit pattern
+      for (let pattern of creditPatterns) {
+        creditsMatch = allText.match(pattern);
+        if (creditsMatch) {
+          console.log('Found credits with pattern:', pattern);
+          break;
+        }
+      }
+      
+      // If no patterns match, try to find numbers that look like credits
+      if (!creditsMatch) {
+        // Look for patterns like "100" near the word "credit"
+        const creditContext = allText.match(/(?:credit|remaining)[^0-9]*([0-9.,]+)/i);
+        if (creditContext) {
+          creditsMatch = creditContext;
+          console.log('Found credits in context:', creditContext);
+        }
+      }
+      
+      console.log('Final credits match:', creditsMatch);
+      
+      return {
+        rawText: allText.substring(0, 2000), // First 2000 chars for debugging
+        credits_left: creditsMatch ? creditsMatch[1] : null,
+        credits_total: null, // Recraft.ai might only show remaining credits
+        credits_used: null
+      };
+    });
+
+    console.log('✅ Credit info extracted:', creditInfo);
+
+    // Return success response
+    res.status(200).json({
+      ok: true,
+      data: {
+        rawText: creditInfo?.rawText || 'Could not extract credit information',
+        credits_used: creditInfo?.credits_used,
+        credits_total: creditInfo?.credits_total,
+        credits_left: creditInfo?.credits_left,
+        plugAndPlay_used: null, // Recraft.ai doesn't have Plug&Play tokens
         plugAndPlay_total: null,
         plugAndPlay_left: null,
         screenshotBase64: dashboardScreenshot ? dashboardScreenshot.toString('base64') : null
