@@ -2716,8 +2716,24 @@ async function scrapeMakeCredits(email, password) {
       });
     }
     
+    // Wait for the page to be visually ready
+    console.log('⏳ Waiting for page to be visually ready...');
+    await sleep(5000); // Wait 5 seconds for initial load
+    
+    // Wait for specific elements that indicate the page is loaded
+    try {
+      // Wait for common dashboard elements
+      await page.waitForSelector('[class*="credit"], [class*="balance"], [class*="usage"], [class*="quota"], .dashboard, .organization, [data-testid*="credit"], [data-testid*="balance"]', { 
+        timeout: 15000 
+      });
+      console.log('✅ Dashboard elements found');
+    } catch (e) {
+      console.log('⚠️ Dashboard elements not found, continuing anyway...');
+    }
+    
+    // Additional wait to ensure everything is rendered
     await sleep(3000);
-
+    
     console.log('📸 Taking dashboard screenshot...');
     
     // Take screenshot of the dashboard
@@ -2726,11 +2742,27 @@ async function scrapeMakeCredits(email, password) {
 
     console.log('🔍 Extracting credit information...');
     
+    // Wait a bit more to ensure all content is loaded
+    await sleep(2000);
+    
     // Extract credit information from the dashboard
     const creditInfo = await page.evaluate(() => {
+      // Wait for any loading indicators to disappear
+      const loadingElements = document.querySelectorAll('[class*="loading"], [class*="spinner"], [class*="loader"]');
+      if (loadingElements.length > 0) {
+        console.log('Loading elements still present, waiting...');
+        return { loading: true };
+      }
+      
       // Get all text from the page for comprehensive search
       const allText = document.body.innerText || '';
       console.log('Full page text (first 1000 chars):', allText.substring(0, 1000));
+      
+      // Check if we're on the right page (not an error page)
+      if (allText.includes('Bad Request') || allText.includes('Invalid number') || allText.includes('organizationId')) {
+        console.log('Error page detected, not extracting credits');
+        return { error: 'Page not fully loaded or error detected' };
+      }
       
       // Look for credit patterns in the entire page text
       const creditPatterns = [
@@ -2739,7 +2771,9 @@ async function scrapeMakeCredits(email, password) {
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits/i,
         /Credits?\s*left\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*left/i,
-        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*credits/i
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*credits/i,
+        /([0-9.,]+)\s*of\s*([0-9.,]+)\s*credits/i,
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*used/i
       ];
       
       let creditsMatch = null;
@@ -2763,6 +2797,24 @@ async function scrapeMakeCredits(email, password) {
         }
       }
       
+      // Also try to find any number/number pattern that might be credits
+      if (!creditsMatch) {
+        const numberPattern = /([0-9.,]+)\s*\/\s*([0-9.,]+)/g;
+        const matches = [...allText.matchAll(numberPattern)];
+        if (matches.length > 0) {
+          // Take the first reasonable match (not too small numbers)
+          for (const match of matches) {
+            const left = parseFloat(match[1].replace(/,/g, ''));
+            const total = parseFloat(match[2].replace(/,/g, ''));
+            if (left > 0 && total > 0 && left <= total && total > 100) { // Reasonable credit range
+              creditsMatch = match;
+              console.log('Found credits with number pattern:', match);
+              break;
+            }
+          }
+        }
+      }
+      
       console.log('Final credits match:', creditsMatch);
       
       return {
@@ -2772,6 +2824,45 @@ async function scrapeMakeCredits(email, password) {
         credits_used: creditsMatch ? (parseFloat(creditsMatch[2].replace(/,/g, '')) - parseFloat(creditsMatch[1].replace(/,/g, ''))).toString() : null
       };
     });
+    
+    // If still loading, wait more and try again
+    if (creditInfo.loading) {
+      console.log('⏳ Page still loading, waiting more...');
+      await sleep(5000);
+      
+      const creditInfoRetry = await page.evaluate(() => {
+        const allText = document.body.innerText || '';
+        console.log('Retry - Full page text (first 1000 chars):', allText.substring(0, 1000));
+        
+        if (allText.includes('Bad Request') || allText.includes('Invalid number') || allText.includes('organizationId')) {
+          return { error: 'Page still not fully loaded' };
+        }
+        
+        // Same credit extraction logic as above
+        const creditPatterns = [
+          /Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+          /Credits?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+          /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits/i,
+          /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*left/i,
+          /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*credits/i
+        ];
+        
+        let creditsMatch = null;
+        for (let pattern of creditPatterns) {
+          creditsMatch = allText.match(pattern);
+          if (creditsMatch) break;
+        }
+        
+        return {
+          rawText: allText.substring(0, 2000),
+          credits_left: creditsMatch ? creditsMatch[1] : null,
+          credits_total: creditsMatch ? creditsMatch[2] : null,
+          credits_used: creditsMatch ? (parseFloat(creditsMatch[2].replace(/,/g, '')) - parseFloat(creditsMatch[1].replace(/,/g, ''))).toString() : null
+        };
+      });
+      
+      Object.assign(creditInfo, creditInfoRetry);
+    }
 
     console.log('✅ Credit info extracted:', creditInfo);
 
