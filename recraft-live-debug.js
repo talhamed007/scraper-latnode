@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 
-// Recraft.ai Login Scraper - Separate from main server.js
-async function scrapeRecraftLogin(discordToken, recraftEmail) {
+// Real-Time Recraft.ai Login Scraper with Live Browser View
+async function scrapeRecraftLoginLive(discordToken, recraftEmail) {
   let browser;
   let page;
   const debugSteps = [];
@@ -41,16 +41,16 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
   };
 
   try {
-    console.log('🚀 Starting Recraft.ai Login Scraper...');
+    console.log('🚀 Starting Recraft.ai Login Scraper with LIVE BROWSER VIEW...');
     console.log('🔑 Discord Token:', discordToken ? 'Provided' : 'Not provided');
     console.log('📧 Recraft Email:', recraftEmail);
 
-    addDebugStep('Scraper Started', 'info', 'Initializing Recraft.ai login scraper');
+    addDebugStep('Scraper Started', 'info', 'Initializing Recraft.ai login scraper with live browser view');
 
-    // Launch browser
-    addDebugStep('Browser Launch', 'info', 'Launching Puppeteer browser');
+    // Launch browser in NON-HEADLESS mode for live viewing
+    addDebugStep('Browser Launch', 'info', 'Launching Puppeteer browser in LIVE MODE (non-headless)');
     browser = await puppeteer.launch({
-      headless: true,
+      headless: false, // 🔴 LIVE MODE - You'll see the browser window!
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
       args: [
         '--no-sandbox',
@@ -65,7 +65,9 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
         '--disable-features=VizDisplayCompositor',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
+        '--disable-renderer-backgrounding',
+        '--window-size=1440,900', // Set window size
+        '--start-maximized' // Start maximized for better viewing
       ]
     });
 
@@ -73,16 +75,14 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
     await page.setViewport({ width: 1440, height: 900 });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    addDebugStep('Browser Launch', 'success', 'Browser launched successfully');
+    addDebugStep('Browser Launch', 'success', 'Browser launched in LIVE MODE - you can see the browser window!');
 
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // STEP 1: Skip Discord login for now - go directly to Recraft.ai
-    console.log('🚀 STEP 1: Skipping Discord login, going directly to Recraft.ai...');
-    addDebugStep('Discord Skip', 'info', 'Skipping Discord login, proceeding directly to Recraft.ai');
+    // STEP 1: Validate Discord token
+    console.log('🔍 STEP 1: Validating Discord token...');
+    addDebugStep('Token Validation', 'info', 'Validating Discord token');
 
-    // Validate token first
-    console.log('🔍 Validating Discord token...');
     const tokenValidation = await page.evaluate(async (token) => {
       try {
         const response = await fetch('https://discord.com/api/v9/users/@me', {
@@ -106,11 +106,6 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
     console.log('Token validation result:', tokenValidation);
     addDebugStep('Token Validation', tokenValidation.success ? 'success' : 'error', 
       tokenValidation.success ? `Token valid for user: ${tokenValidation.user?.username}` : 'Token validation failed', tokenValidation);
-
-    if (!tokenValidation.success) {
-      console.log('⚠️ Discord token validation failed, but continuing...');
-      addDebugStep('Token Validation', 'warning', 'Discord token validation failed, but continuing with Recraft.ai');
-    }
 
     // STEP 2: Navigate to Recraft.ai
     console.log('🌐 STEP 2: Navigating to Recraft.ai...');
@@ -538,47 +533,17 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
           // Wait for OAuth page to fully load
           await sleep(2000);
           
-          // Look for Authorize button with more comprehensive selectors
+          // Look for Authorize button with comprehensive logging
           console.log('🔍 Looking for Discord Authorize button...');
           addDebugStep('Discord Authorization', 'info', 'Looking for Discord Authorize button');
           
           try {
-            const authorizeSelectors = [
-              'button:has-text("Authorize")',
-              'button:has-text("authorize")',
-              'button:has-text("Allow")',
-              'button:has-text("allow")',
-              'button:has-text("Continue")',
-              'button:has-text("continue")',
-              'button[type="submit"]',
-              'button[class*="authorize"]',
-              'button[class*="allow"]',
-              'button[class*="continue"]',
-              'button[class*="approve"]',
-              'button[class*="accept"]',
-              'button[class*="confirm"]',
-              'button[class*="submit"]',
-              'button[class*="primary"]',
-              'button[class*="blue"]',
-              'button[class*="green"]',
-              'button[class*="discord"]',
-              'button[data-testid*="authorize"]',
-              'button[data-testid*="allow"]',
-              'button[data-testid*="continue"]',
-              'button[aria-label*="authorize"]',
-              'button[aria-label*="allow"]',
-              'button[aria-label*="continue"]',
-              'button[title*="authorize"]',
-              'button[title*="allow"]',
-              'button[title*="continue"]'
-            ];
-            
-            let authorized = false;
-            let authorizeButtonFound = false;
-            
             // First, let's see all buttons on the page
             const allButtons = await page.$$('button, input[type="submit"], input[type="button"]');
             console.log(`Found ${allButtons.length} buttons on Discord OAuth page`);
+            
+            let authorized = false;
+            let authorizeButtonFound = false;
             
             for (let i = 0; i < allButtons.length; i++) {
               const button = allButtons[i];
@@ -607,27 +572,6 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
                   console.log('⚠️ Failed to click button by text:', e.message);
                 }
               }
-            }
-            
-            // If no button found by text, try selectors
-            if (!authorized) {
-              for (const selector of authorizeSelectors) {
-                try {
-                  await page.waitForSelector(selector, { timeout: 2000 });
-                  await page.click(selector);
-                  authorized = true;
-                  console.log('✅ Authorize button clicked with selector:', selector);
-                  addDebugStep('Discord Authorization', 'success', 'Authorize button clicked with selector', `Selector: ${selector}`);
-                  break;
-                } catch (e) {
-                  console.log('⚠️ Authorize selector failed:', selector, e.message);
-                }
-              }
-            }
-            
-            if (!authorizeButtonFound) {
-              console.log('⚠️ No authorize button found on Discord OAuth page');
-              addDebugStep('Discord Authorization', 'warning', 'No authorize button found on Discord OAuth page');
             }
             
             if (authorized) {
@@ -710,7 +654,7 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
     // Return success response with debug data
     return {
       ok: true,
-      message: 'Recraft.ai login process completed',
+      message: 'Recraft.ai login process completed with LIVE BROWSER VIEW',
       finalUrl: page.url(),
       debugSteps: debugSteps,
       screenshots: screenshots
@@ -737,10 +681,17 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
       errorScreenshot: errorScreenshot ? errorScreenshot.toString('base64') : null
     };
   } finally {
+    // Don't close browser immediately - let user see the result
+    console.log('🔴 LIVE MODE: Browser window will remain open for you to inspect');
+    console.log('🔴 Press Ctrl+C to close the browser when done');
+    
+    // Keep browser open for 30 seconds so user can see the result
+    await sleep(30000);
+    
     if (browser) {
       await browser.close();
     }
   }
 }
 
-module.exports = { scrapeRecraftLogin };
+module.exports = { scrapeRecraftLoginLive };

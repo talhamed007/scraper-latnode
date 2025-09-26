@@ -3483,6 +3483,50 @@ app.get('/recraft-test', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft-test.html'));
 });
 
+// Recraft.ai Live Debug Route (with live browser view)
+const { scrapeRecraftLoginLive } = require('./recraft-live-debug');
+
+app.post('/api/recraft-live', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { discordToken, recraftEmail } = req.body;
+
+  if (!discordToken || !recraftEmail) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Discord token and Recraft.ai email are required'
+    });
+  }
+
+  try {
+    console.log('🎮 Testing Recraft.ai login with LIVE BROWSER VIEW...');
+    console.log('🔑 Discord Token:', discordToken ? 'Provided' : 'Not provided');
+    console.log('📧 Recraft Email:', recraftEmail);
+    
+    // Call the live debug scraper
+    const result = await scrapeRecraftLoginLive(discordToken, recraftEmail);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Recraft.ai live debug error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Serve Recraft.ai live debug page
+app.get('/recraft-live', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recraft-live-debug.html'));
+});
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
