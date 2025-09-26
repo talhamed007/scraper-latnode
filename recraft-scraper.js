@@ -65,82 +65,40 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await page.setViewport({ width: 1280, height: 720 });
     addDebugStep('Browser Launch', 'success', 'Browser launched successfully');
 
-    // Navigate to Recraft.ai
-    addDebugStep('Recraft Navigation', 'info', 'Navigating to Recraft.ai login page');
-    console.log('🎯 Navigating to Recraft.ai...');
+    // Navigate directly to Recraft.ai login page
+    addDebugStep('Recraft Login Navigation', 'info', 'Navigating directly to Recraft.ai login page');
+    console.log('🎯 Navigating directly to Recraft.ai login page...');
     
-    await page.goto('https://www.recraft.ai/', { 
+    await page.goto('https://www.recraft.ai/auth/login', { 
       waitUntil: 'domcontentloaded', 
       timeout: 30000 
     });
     
-    await sleep(3000);
-    await takeScreenshot('Recraft.ai Homepage');
-    addDebugStep('Recraft Navigation', 'success', 'Navigated to Recraft.ai homepage');
-
-    // Look for and click "Sign in" button
-    addDebugStep('Sign In Button', 'info', 'Looking for Sign in button');
-    console.log('🔍 Looking for Sign in button...');
-    
-    try {
-      // Wait for sign in button with multiple selectors
-      await page.waitForSelector('button:has-text("Sign in"), a:has-text("Sign in"), [data-testid*="sign"], [class*="sign-in"], [class*="login"]', { timeout: 10000 });
-      
-      // Try to click sign in button
-      const signInClicked = await page.evaluate(() => {
-        const selectors = [
-          'button:has-text("Sign in")',
-          'a:has-text("Sign in")',
-          '[data-testid*="sign"]',
-          '[class*="sign-in"]',
-          '[class*="login"]'
-        ];
-        
-        for (const selector of selectors) {
-          try {
-            const element = document.querySelector(selector);
-            if (element) {
-              element.click();
-              return true;
-            }
-          } catch (e) {
-            // Continue to next selector
-          }
-        }
-        return false;
-      });
-
-      if (signInClicked) {
-        addDebugStep('Sign In Button', 'success', 'Clicked Sign in button');
-        console.log('✅ Sign in button clicked');
-      } else {
-        addDebugStep('Sign In Button', 'warning', 'Could not find or click Sign in button');
-        console.log('⚠️ Could not find Sign in button, trying alternative approach');
-      }
-    } catch (error) {
-      addDebugStep('Sign In Button', 'error', 'Error finding Sign in button', null, error.message);
-      console.log('❌ Error finding Sign in button:', error.message);
-    }
-
-    await sleep(3000);
-    await takeScreenshot('After Sign In Click');
+    await sleep(5000);
+    await takeScreenshot('Recraft.ai Login Page');
+    addDebugStep('Recraft Login Navigation', 'success', 'Navigated to Recraft.ai login page');
 
     // Look for Google login button
     addDebugStep('Google Login Button', 'info', 'Looking for Google login button');
     console.log('🔍 Looking for Google login button...');
     
     try {
-      // Wait for Google login button
-      await page.waitForSelector('button:has-text("Google"), a:has-text("Google"), [data-testid*="google"], [class*="google"], svg[viewBox*="24"]', { timeout: 15000 });
+      // Wait for Google login button - more specific selectors
+      await page.waitForSelector('button[class*="google"], button:has-text("Google"), a:has-text("Google"), [data-testid*="google"], [class*="google"], svg[viewBox*="24"], button[aria-label*="Google"]', { timeout: 15000 });
       
       // Try to click Google button
       const googleClicked = await page.evaluate(() => {
         const selectors = [
+          'button[class*="google"]',
           'button:has-text("Google")',
           'a:has-text("Google")',
           '[data-testid*="google"]',
           '[class*="google"]',
-          'svg[viewBox*="24"]'
+          'svg[viewBox*="24"]',
+          'button[aria-label*="Google"]',
+          // Look for buttons with Google logo SVG
+          'button:has(svg[viewBox*="24"])',
+          'button:has(svg[class*="google"])'
         ];
         
         for (const selector of selectors) {
