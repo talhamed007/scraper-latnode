@@ -30,7 +30,8 @@ This scraper provides HTTP-based API endpoints for Latenode, Make.com, and KIE.a
   "plugAndPlay_used": "25",
   "plugAndPlay_total": "100",
   "plugAndPlay_left": "75",
-  "rawText": "Credits left: 850 / 1000, Plug & Play Tokens: 75 / 100"
+  "rawText": "Credits left: 850 / 1000, Plug & Play Tokens: 75 / 100",
+  "screenshotBase64": "iVBORw0KGgoAAAANSUhEUgAA..."
 }
 ```
 
@@ -218,7 +219,9 @@ All endpoints return error responses in this format:
 
 ## Notes
 
-- Currently returning mock data for testing purposes
-- To implement real HTTP scraping, replace the mock data with actual API calls to the respective services
-- All endpoints support CORS for cross-origin requests
-- No authentication required for the API endpoints themselves
+- **Real Data**: All endpoints now trigger the existing Puppeteer scrapers in the background and return real credit data
+- **Background Processing**: The HTTP endpoints call the working Puppeteer scrapers internally
+- **Screenshots**: All endpoints include screenshot data for verification
+- **CORS Support**: All endpoints support cross-origin requests
+- **No Authentication**: No authentication required for the API endpoints themselves
+- **Reliability**: Uses the proven Puppeteer scrapers that are already working

@@ -2222,7 +2222,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
   }
 });
 
-// HTTP-based Latenode scraper endpoint
+// HTTP-based Latenode scraper endpoint - triggers Puppeteer scraper in background
 app.post('/api/http/latenode', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -2244,20 +2244,37 @@ app.post('/api/http/latenode', async (req, res) => {
   try {
     console.log('🌐 HTTP Latenode scraping for:', email);
     
-    // Simulate API call to Latenode (you would replace this with actual HTTP requests)
-    // For now, returning mock data - you can implement actual HTTP scraping here
-    const mockData = {
-      ok: true,
-      credits_used: '150',
-      credits_total: '1000',
-      credits_left: '850',
-      plugAndPlay_used: '25',
-      plugAndPlay_total: '100',
-      plugAndPlay_left: '75',
-      rawText: 'Credits left: 850 / 1000, Plug & Play Tokens: 75 / 100'
-    };
+    // Trigger the existing Puppeteer scraper in background
+    const puppeteerResponse = await fetch(`http://localhost:${PORT}/api/scrape`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password })
+    });
 
-    res.json(mockData);
+    const puppeteerData = await puppeteerResponse.json();
+    
+    if (puppeteerData.ok) {
+      // Return the real data from Puppeteer scraper
+      res.json({
+        ok: true,
+        credits_used: puppeteerData.credits_used,
+        credits_total: puppeteerData.credits_total,
+        credits_left: puppeteerData.credits_left,
+        plugAndPlay_used: puppeteerData.plugAndPlay_used,
+        plugAndPlay_total: puppeteerData.plugAndPlay_total,
+        plugAndPlay_left: puppeteerData.plugAndPlay_left,
+        rawText: puppeteerData.rawText,
+        screenshotBase64: puppeteerData.screenshotBase64
+      });
+    } else {
+      // Return error from Puppeteer scraper
+      res.status(500).json({
+        ok: false,
+        error: puppeteerData.error || 'Scraping failed'
+      });
+    }
   } catch (error) {
     console.error('❌ HTTP Latenode error:', error);
     res.status(500).json({
@@ -2267,7 +2284,7 @@ app.post('/api/http/latenode', async (req, res) => {
   }
 });
 
-// HTTP-based Make.com scraper endpoint
+// HTTP-based Make.com scraper endpoint - triggers Puppeteer scraper in background
 app.post('/api/http/make', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -2289,16 +2306,34 @@ app.post('/api/http/make', async (req, res) => {
   try {
     console.log('🌐 HTTP Make.com scraping for:', email);
     
-    // Simulate API call to Make.com (you would replace this with actual HTTP requests)
-    const mockData = {
-      ok: true,
-      credits_used: '200',
-      credits_total: '500',
-      credits_left: '300',
-      rawText: 'Credits left: 300 / 500'
-    };
+    // Trigger the existing Puppeteer scraper in background
+    const puppeteerResponse = await fetch(`http://localhost:${PORT}/api/scrape-make`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password })
+    });
 
-    res.json(mockData);
+    const puppeteerData = await puppeteerResponse.json();
+    
+    if (puppeteerData.ok) {
+      // Return the real data from Puppeteer scraper
+      res.json({
+        ok: true,
+        credits_used: puppeteerData.credits_used,
+        credits_total: puppeteerData.credits_total,
+        credits_left: puppeteerData.credits_left,
+        rawText: puppeteerData.rawText,
+        screenshotBase64: puppeteerData.screenshotBase64
+      });
+    } else {
+      // Return error from Puppeteer scraper
+      res.status(500).json({
+        ok: false,
+        error: puppeteerData.error || 'Scraping failed'
+      });
+    }
   } catch (error) {
     console.error('❌ HTTP Make.com error:', error);
     res.status(500).json({
@@ -2308,7 +2343,7 @@ app.post('/api/http/make', async (req, res) => {
   }
 });
 
-// HTTP-based KIE.ai scraper endpoint
+// HTTP-based KIE.ai scraper endpoint - triggers Puppeteer scraper in background
 app.post('/api/http/kie', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -2330,14 +2365,32 @@ app.post('/api/http/kie', async (req, res) => {
   try {
     console.log('🌐 HTTP KIE.ai scraping for:', email);
     
-    // Simulate API call to KIE.ai (you would replace this with actual HTTP requests)
-    const mockData = {
-      ok: true,
-      remaining_credits: '450',
-      rawText: 'Remaining credits: 450'
-    };
+    // Trigger the existing Puppeteer scraper in background
+    const puppeteerResponse = await fetch(`http://localhost:${PORT}/api/scrape-kie`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password })
+    });
 
-    res.json(mockData);
+    const puppeteerData = await puppeteerResponse.json();
+    
+    if (puppeteerData.ok) {
+      // Return the real data from Puppeteer scraper
+      res.json({
+        ok: true,
+        remaining_credits: puppeteerData.remaining_credits,
+        rawText: puppeteerData.rawText,
+        screenshotBase64: puppeteerData.screenshotBase64
+      });
+    } else {
+      // Return error from Puppeteer scraper
+      res.status(500).json({
+        ok: false,
+        error: puppeteerData.error || 'Scraping failed'
+      });
+    }
   } catch (error) {
     console.error('❌ HTTP KIE.ai error:', error);
     res.status(500).json({
