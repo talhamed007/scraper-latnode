@@ -77,119 +77,39 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
 
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // STEP 1: Login to Discord with token
-    console.log('🔐 STEP 1: Logging into Discord with token...');
-    addDebugStep('Discord Login', 'info', 'Starting Discord token authentication');
+    // STEP 1: Skip Discord login for now - go directly to Recraft.ai
+    console.log('🚀 STEP 1: Skipping Discord login, going directly to Recraft.ai...');
+    addDebugStep('Discord Skip', 'info', 'Skipping Discord login, proceeding directly to Recraft.ai');
 
-    try {
-      // Navigate to Discord login page
-      console.log('🌐 Navigating to Discord login page...');
-      await page.goto('https://discord.com/login', { 
-        waitUntil: 'domcontentloaded', 
-        timeout: 30000 
-      });
-      
-      await sleep(3000);
-      await takeScreenshot('Discord Login Page');
-      addDebugStep('Discord Navigation', 'success', 'Navigated to Discord login page');
-
-      // Inject Discord token into browser storage
-      console.log('🔑 Injecting Discord token...');
-      const tokenInjection = await page.evaluate((token) => {
-        try {
-          // Set token in localStorage
-          localStorage.setItem('token', token);
-          localStorage.setItem('auth_token', token);
-          localStorage.setItem('discord_token', token);
-          
-          // Set token in sessionStorage
-          sessionStorage.setItem('token', token);
-          sessionStorage.setItem('auth_token', token);
-          sessionStorage.setItem('discord_token', token);
-          
-          // Set token in cookies
-          document.cookie = `token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-          document.cookie = `auth_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-          document.cookie = `discord_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-          
-          return { success: true, message: 'Token injected successfully' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }, discordToken);
-
-      console.log('Token injection result:', tokenInjection);
-      addDebugStep('Token Injection', tokenInjection.success ? 'success' : 'error', 
-        tokenInjection.success ? 'Token injected successfully' : 'Token injection failed', tokenInjection);
-
-      // Wait for token to be processed
-      await sleep(2000);
-      await takeScreenshot('After Token Injection');
-
-      // Validate token via Discord API
-      console.log('🔍 Validating Discord token...');
-      const tokenValidation = await page.evaluate(async (token) => {
-        try {
-          const response = await fetch('https://discord.com/api/v9/users/@me', {
-            headers: {
-              'Authorization': token,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (response.ok) {
-            const userData = await response.json();
-            return { success: true, user: userData };
-          } else {
-            return { success: false, status: response.status };
+    // Validate token first
+    console.log('🔍 Validating Discord token...');
+    const tokenValidation = await page.evaluate(async (token) => {
+      try {
+        const response = await fetch('https://discord.com/api/v9/users/@me', {
+          headers: {
+            'Authorization': token,
+            'Content-Type': 'application/json'
           }
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }, discordToken);
-
-      console.log('Token validation result:', tokenValidation);
-      addDebugStep('Token Validation', tokenValidation.success ? 'success' : 'error', 
-        tokenValidation.success ? `Token valid for user: ${tokenValidation.user?.username}` : 'Token validation failed', tokenValidation);
-
-      // Refresh page to apply token
-      console.log('🔄 Refreshing page to apply token...');
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-      await sleep(3000);
-      await takeScreenshot('After Page Refresh');
-
-      // Check if Discord login was successful
-      const discordLoginStatus = await page.evaluate(() => {
-        const userElements = document.querySelectorAll('[class*="user"], [class*="avatar"], [class*="profile"]');
-        const channelElements = document.querySelectorAll('[class*="channel"], [class*="server"]');
-        const sidebarElements = document.querySelectorAll('[class*="sidebar"], [class*="guild"]');
+        });
         
-        return {
-          userElementsFound: userElements.length > 0,
-          channelElementsFound: channelElements.length > 0,
-          sidebarElementsFound: sidebarElements.length > 0,
-          currentUrl: window.location.href,
-          pageTitle: document.title,
-          hasToken: !!localStorage.getItem('token') || !!sessionStorage.getItem('token')
-        };
-      });
-
-      console.log('Discord login status:', discordLoginStatus);
-      
-      if (discordLoginStatus.userElementsFound || discordLoginStatus.channelElementsFound || discordLoginStatus.sidebarElementsFound) {
-        console.log('✅ Discord login successful!');
-        addDebugStep('Discord Login', 'success', 'Discord login successful', discordLoginStatus);
-      } else {
-        console.log('⚠️ Discord login may have failed');
-        addDebugStep('Discord Login', 'warning', 'Discord login may have failed', discordLoginStatus);
+        if (response.ok) {
+          const userData = await response.json();
+          return { success: true, user: userData };
+        } else {
+          return { success: false, status: response.status };
+        }
+      } catch (error) {
+        return { success: false, error: error.message };
       }
+    }, discordToken);
 
-      await takeScreenshot('Discord Login Final Status');
+    console.log('Token validation result:', tokenValidation);
+    addDebugStep('Token Validation', tokenValidation.success ? 'success' : 'error', 
+      tokenValidation.success ? `Token valid for user: ${tokenValidation.user?.username}` : 'Token validation failed', tokenValidation);
 
-    } catch (e) {
-      console.log('❌ Discord login failed:', e.message);
-      addDebugStep('Discord Login', 'error', 'Discord login failed', null, e.message);
-      await takeScreenshot('Discord Login Error');
+    if (!tokenValidation.success) {
+      console.log('⚠️ Discord token validation failed, but continuing...');
+      addDebugStep('Token Validation', 'warning', 'Discord token validation failed, but continuing with Recraft.ai');
     }
 
     // STEP 2: Navigate to Recraft.ai
