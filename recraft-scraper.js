@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 
-// Recraft.ai Login Scraper - Email Only
-async function scrapeRecraftLogin(recraftEmail) {
+// Recraft.ai Login Scraper - Google Login
+async function scrapeRecraftLogin(googleEmail, googlePassword) {
   let browser;
   let page;
   const debugSteps = [];
@@ -41,8 +41,8 @@ async function scrapeRecraftLogin(recraftEmail) {
   };
 
   try {
-    console.log('🚀 Starting Recraft.ai Login Scraper...');
-    console.log('📧 Recraft Email:', recraftEmail);
+    console.log('🚀 Starting Recraft.ai Google Login Scraper...');
+    console.log('📧 Google Email:', googleEmail);
 
     addDebugStep('Scraper Started', 'info', 'Initializing Recraft.ai login scraper');
 
@@ -125,148 +125,22 @@ async function scrapeRecraftLogin(recraftEmail) {
     await sleep(3000);
     await takeScreenshot('After Sign In Click');
 
-    // Navigate to the login URL directly
-    addDebugStep('Direct Login URL', 'info', 'Navigating to Recraft.ai login URL');
-    console.log('🔗 Navigating to Recraft.ai login URL...');
-    
-    await page.goto('https://id.recraft.ai/realms/recraft/protocol/openid-connect/auth?client_id=frontend-client&scope=openid%20email%20profile&response_type=code&redirect_uri=https%3A%2F%2Fwww.recraft.ai%2Fapi%2Fauth%2Fcallback%2Fkeycloak&grant_type=authorization_code&state=RmXXBVX5QQ-yw7gVJnQhM2a56j55TwJJzpl2MLlMQ6s&code_challenge=0xUu8RvStUZJZrXxoYEMwDJ40lZGhhZ96hqTbSc8rHI&code_challenge_method=S256', { 
-      waitUntil: 'domcontentloaded', 
-      timeout: 30000 
-    });
-    
-    await sleep(3000);
-    await takeScreenshot('Recraft.ai Login Page');
-    addDebugStep('Direct Login URL', 'success', 'Navigated to Recraft.ai login page');
-
-    // Check for "Sorry, nothing to see here" error page
-    const errorPageCheck = await page.evaluate(() => {
-      const errorText = document.body.innerText.toLowerCase();
-      const hasError = errorText.includes('sorry, nothing to see here') || 
-                      errorText.includes('nothing to see here') ||
-                      errorText.includes('go back to recraft');
-      
-      if (hasError) {
-        // Look for "Go back to recraft" button
-        const goBackButton = document.querySelector('a[href="/projects"], a:has-text("Go back to recraft"), button:has-text("Go back to recraft")');
-        return {
-          hasError: true,
-          goBackButton: !!goBackButton,
-          buttonText: goBackButton ? goBackButton.innerText : null
-        };
-      }
-      
-      return { hasError: false };
-    });
-
-    if (errorPageCheck.hasError) {
-      addDebugStep('Error Page Detection', 'warning', 'Detected error page, attempting to go back');
-      console.log('⚠️ Detected error page, looking for Go back button...');
-      
-      if (errorPageCheck.goBackButton) {
-        try {
-          await page.click('a[href="/projects"], a:has-text("Go back to recraft"), button:has-text("Go back to recraft")');
-          await sleep(3000);
-          await takeScreenshot('After Go Back Click');
-          addDebugStep('Error Page Recovery', 'success', 'Clicked Go back button');
-          console.log('✅ Clicked Go back button');
-        } catch (error) {
-          addDebugStep('Error Page Recovery', 'error', 'Failed to click Go back button', null, error.message);
-          console.log('❌ Failed to click Go back button:', error.message);
-        }
-      }
-    }
-
-    // Wait for email input field
-    addDebugStep('Email Input', 'info', 'Waiting for email input field');
-    console.log('📧 Waiting for email input field...');
+    // Look for Google login button
+    addDebugStep('Google Login Button', 'info', 'Looking for Google login button');
+    console.log('🔍 Looking for Google login button...');
     
     try {
-      await page.waitForSelector('input[type="email"], input[name="email"], input[id="email"], input[placeholder*="email"], input[placeholder*="Email"]', { timeout: 15000 });
-      addDebugStep('Email Input', 'success', 'Found email input field');
-      console.log('✅ Found email input field');
-    } catch (error) {
-      addDebugStep('Email Input', 'error', 'Could not find email input field', null, error.message);
-      console.log('❌ Could not find email input field:', error.message);
-    }
-
-    await sleep(2000);
-    await takeScreenshot('Email Input Field Found');
-
-    // Fill email
-    addDebugStep('Email Entry', 'info', 'Filling email field');
-    console.log('✍️ Filling email field...');
-    
-    try {
-      await page.type('input[type="email"], input[name="email"], input[id="email"], input[placeholder*="email"], input[placeholder*="Email"]', recraftEmail, { delay: 100 });
-      addDebugStep('Email Entry', 'success', 'Email filled successfully');
-      console.log('✅ Email filled successfully');
-    } catch (error) {
-      addDebugStep('Email Entry', 'error', 'Failed to fill email', null, error.message);
-      console.log('❌ Failed to fill email:', error.message);
-    }
-
-    await sleep(2000);
-    await takeScreenshot('Email Filled');
-
-    // Look for and check the Cloudflare verification checkbox
-    addDebugStep('Cloudflare Checkbox', 'info', 'Looking for Cloudflare verification checkbox');
-    console.log('☑️ Looking for Cloudflare verification checkbox...');
-    
-    try {
-      // Look for checkbox that's not "Remember me"
-      const checkboxFound = await page.evaluate(() => {
-        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-        for (const checkbox of checkboxes) {
-          const label = checkbox.closest('label');
-          const labelText = label ? label.innerText.toLowerCase() : '';
-          const nearbyText = checkbox.parentElement.innerText.toLowerCase();
-          
-          // Skip "Remember me" checkbox
-          if (labelText.includes('remember') || nearbyText.includes('remember')) {
-            continue;
-          }
-          
-          // Look for verification-related text
-          if (labelText.includes('verify') || labelText.includes('human') || 
-              nearbyText.includes('verify') || nearbyText.includes('human') ||
-              labelText.includes('cloudflare') || nearbyText.includes('cloudflare')) {
-            return { found: true, text: labelText || nearbyText };
-          }
-        }
-        return { found: false };
-      });
-
-      if (checkboxFound.found) {
-        console.log('✅ Found Cloudflare checkbox:', checkboxFound.text);
-        await page.click('input[type="checkbox"]:not([id*="remember"]):not([name*="remember"])');
-        addDebugStep('Cloudflare Checkbox', 'success', 'Checked Cloudflare verification checkbox');
-        console.log('✅ Cloudflare checkbox checked');
-      } else {
-        addDebugStep('Cloudflare Checkbox', 'warning', 'Could not find Cloudflare checkbox');
-        console.log('⚠️ Could not find Cloudflare checkbox');
-      }
-    } catch (error) {
-      addDebugStep('Cloudflare Checkbox', 'error', 'Error with Cloudflare checkbox', null, error.message);
-      console.log('❌ Error with Cloudflare checkbox:', error.message);
-    }
-
-    await sleep(2000);
-    await takeScreenshot('Cloudflare Checkbox Checked');
-
-    // Look for and click Continue button
-    addDebugStep('Continue Button', 'info', 'Looking for Continue button');
-    console.log('➡️ Looking for Continue button...');
-    
-    try {
-      await page.waitForSelector('button:has-text("Continue"), input[type="submit"], button[type="submit"], button:has-text("Next"), button:has-text("Submit")', { timeout: 10000 });
+      // Wait for Google login button
+      await page.waitForSelector('button:has-text("Google"), a:has-text("Google"), [data-testid*="google"], [class*="google"], svg[viewBox*="24"]', { timeout: 15000 });
       
-      const continueClicked = await page.evaluate(() => {
+      // Try to click Google button
+      const googleClicked = await page.evaluate(() => {
         const selectors = [
-          'button:has-text("Continue")',
-          'input[type="submit"]',
-          'button[type="submit"]',
-          'button:has-text("Next")',
-          'button:has-text("Submit")'
+          'button:has-text("Google")',
+          'a:has-text("Google")',
+          '[data-testid*="google"]',
+          '[class*="google"]',
+          'svg[viewBox*="24"]'
         ];
         
         for (const selector of selectors) {
@@ -283,46 +157,212 @@ async function scrapeRecraftLogin(recraftEmail) {
         return false;
       });
 
-      if (continueClicked) {
-        addDebugStep('Continue Button', 'success', 'Clicked Continue button');
-        console.log('✅ Continue button clicked');
+      if (googleClicked) {
+        addDebugStep('Google Login Button', 'success', 'Clicked Google login button');
+        console.log('✅ Google login button clicked');
       } else {
-        addDebugStep('Continue Button', 'error', 'Could not find or click Continue button');
-        console.log('❌ Could not find Continue button');
+        addDebugStep('Google Login Button', 'error', 'Could not find or click Google login button');
+        console.log('❌ Could not find Google login button');
       }
     } catch (error) {
-      addDebugStep('Continue Button', 'error', 'Error finding Continue button', null, error.message);
-      console.log('❌ Error finding Continue button:', error.message);
+      addDebugStep('Google Login Button', 'error', 'Error finding Google login button', null, error.message);
+      console.log('❌ Error finding Google login button:', error.message);
     }
 
     await sleep(5000);
-    await takeScreenshot('After Continue Click');
+    await takeScreenshot('After Google Button Click');
+    addDebugStep('Google Login Button', 'success', 'Navigated to Google login page');
 
-    // Check if we're on verification code page
-    const verificationCheck = await page.evaluate(() => {
-      const pageText = document.body.innerText.toLowerCase();
-      const hasVerification = pageText.includes('verification') || 
-                             pageText.includes('code') || 
-                             pageText.includes('enter the code') ||
-                             pageText.includes('check your email');
+    // Wait for Google login page to load
+    addDebugStep('Google Login Page', 'info', 'Waiting for Google login page');
+    console.log('⏳ Waiting for Google login page to load...');
+    
+    await sleep(5000);
+    await takeScreenshot('Google Login Page');
+
+    // Wait for Google email input field
+    addDebugStep('Google Email Input', 'info', 'Waiting for Google email input field');
+    console.log('📧 Waiting for Google email input field...');
+    
+    try {
+      await page.waitForSelector('input[type="email"], input[name="identifier"], input[id="identifierId"], input[placeholder*="email"], input[placeholder*="Email"]', { timeout: 15000 });
+      addDebugStep('Google Email Input', 'success', 'Found Google email input field');
+      console.log('✅ Found Google email input field');
+    } catch (error) {
+      addDebugStep('Google Email Input', 'error', 'Could not find Google email input field', null, error.message);
+      console.log('❌ Could not find Google email input field:', error.message);
+    }
+
+    await sleep(2000);
+    await takeScreenshot('Google Email Input Found');
+
+    // Fill Google email
+    addDebugStep('Google Email Entry', 'info', 'Filling Google email field');
+    console.log('✍️ Filling Google email field...');
+    
+    try {
+      await page.type('input[type="email"], input[name="identifier"], input[id="identifierId"], input[placeholder*="email"], input[placeholder*="Email"]', googleEmail, { delay: 100 });
+      addDebugStep('Google Email Entry', 'success', 'Google email filled successfully');
+      console.log('✅ Google email filled successfully');
+    } catch (error) {
+      addDebugStep('Google Email Entry', 'error', 'Failed to fill Google email', null, error.message);
+      console.log('❌ Failed to fill Google email:', error.message);
+    }
+
+    await sleep(2000);
+    await takeScreenshot('Google Email Filled');
+
+    // Click Next/Continue button for email
+    addDebugStep('Google Email Next', 'info', 'Looking for Next button after email');
+    console.log('➡️ Looking for Next button after email...');
+    
+    try {
+      await page.waitForSelector('button:has-text("Next"), input[type="submit"], button[type="submit"], button:has-text("Continue"), button:has-text("Sign in")', { timeout: 10000 });
+      
+      const nextClicked = await page.evaluate(() => {
+        const selectors = [
+          'button:has-text("Next")',
+          'input[type="submit"]',
+          'button[type="submit"]',
+          'button:has-text("Continue")',
+          'button:has-text("Sign in")'
+        ];
+        
+        for (const selector of selectors) {
+          try {
+            const element = document.querySelector(selector);
+            if (element) {
+              element.click();
+              return true;
+            }
+          } catch (e) {
+            // Continue to next selector
+          }
+        }
+        return false;
+      });
+
+      if (nextClicked) {
+        addDebugStep('Google Email Next', 'success', 'Clicked Next button after email');
+        console.log('✅ Next button clicked after email');
+      } else {
+        addDebugStep('Google Email Next', 'error', 'Could not find or click Next button');
+        console.log('❌ Could not find Next button');
+      }
+    } catch (error) {
+      addDebugStep('Google Email Next', 'error', 'Error finding Next button', null, error.message);
+      console.log('❌ Error finding Next button:', error.message);
+    }
+
+    await sleep(5000);
+    await takeScreenshot('After Email Next Click');
+
+    // Wait for Google password input field
+    addDebugStep('Google Password Input', 'info', 'Waiting for Google password input field');
+    console.log('🔒 Waiting for Google password input field...');
+    
+    try {
+      await page.waitForSelector('input[type="password"], input[name="password"], input[id="password"], input[placeholder*="password"], input[placeholder*="Password"]', { timeout: 15000 });
+      addDebugStep('Google Password Input', 'success', 'Found Google password input field');
+      console.log('✅ Found Google password input field');
+    } catch (error) {
+      addDebugStep('Google Password Input', 'error', 'Could not find Google password input field', null, error.message);
+      console.log('❌ Could not find Google password input field:', error.message);
+    }
+
+    await sleep(2000);
+    await takeScreenshot('Google Password Input Found');
+
+    // Fill Google password
+    addDebugStep('Google Password Entry', 'info', 'Filling Google password field');
+    console.log('🔐 Filling Google password field...');
+    
+    try {
+      await page.type('input[type="password"], input[name="password"], input[id="password"], input[placeholder*="password"], input[placeholder*="Password"]', googlePassword, { delay: 100 });
+      addDebugStep('Google Password Entry', 'success', 'Google password filled successfully');
+      console.log('✅ Google password filled successfully');
+    } catch (error) {
+      addDebugStep('Google Password Entry', 'error', 'Failed to fill Google password', null, error.message);
+      console.log('❌ Failed to fill Google password:', error.message);
+    }
+
+    await sleep(2000);
+    await takeScreenshot('Google Password Filled');
+
+    // Click Next/Continue button for password
+    addDebugStep('Google Password Next', 'info', 'Looking for Next button after password');
+    console.log('➡️ Looking for Next button after password...');
+    
+    try {
+      await page.waitForSelector('button:has-text("Next"), input[type="submit"], button[type="submit"], button:has-text("Continue"), button:has-text("Sign in")', { timeout: 10000 });
+      
+      const nextClicked = await page.evaluate(() => {
+        const selectors = [
+          'button:has-text("Next")',
+          'input[type="submit"]',
+          'button[type="submit"]',
+          'button:has-text("Continue")',
+          'button:has-text("Sign in")'
+        ];
+        
+        for (const selector of selectors) {
+          try {
+            const element = document.querySelector(selector);
+            if (element) {
+              element.click();
+              return true;
+            }
+          } catch (e) {
+            // Continue to next selector
+          }
+        }
+        return false;
+      });
+
+      if (nextClicked) {
+        addDebugStep('Google Password Next', 'success', 'Clicked Next button after password');
+        console.log('✅ Next button clicked after password');
+      } else {
+        addDebugStep('Google Password Next', 'error', 'Could not find or click Next button');
+        console.log('❌ Could not find Next button');
+      }
+    } catch (error) {
+      addDebugStep('Google Password Next', 'error', 'Error finding Next button', null, error.message);
+      console.log('❌ Error finding Next button:', error.message);
+    }
+
+    await sleep(10000);
+    await takeScreenshot('After Password Next Click');
+
+    // Check if we're redirected back to Recraft.ai
+    const redirectCheck = await page.evaluate(() => {
+      const currentUrl = window.location.href;
+      const isRecraft = currentUrl.includes('recraft.ai');
+      const isGoogle = currentUrl.includes('google.com') || currentUrl.includes('accounts.google.com');
       
       return {
-        hasVerification,
-        currentUrl: window.location.href,
+        currentUrl,
+        isRecraft,
+        isGoogle,
         pageTitle: document.title
       };
     });
 
-    if (verificationCheck.hasVerification) {
-      addDebugStep('Verification Code Page', 'success', 'Reached verification code page');
-      console.log('✅ Reached verification code page');
-      console.log('📧 Check your email for the verification code');
+    console.log('Redirect check:', redirectCheck);
+    addDebugStep('Redirect Check', 'info', 'Checking if redirected back to Recraft.ai', redirectCheck);
+
+    if (redirectCheck.isRecraft) {
+      addDebugStep('Recraft.ai Redirect', 'success', 'Successfully redirected back to Recraft.ai');
+      console.log('✅ Successfully redirected back to Recraft.ai');
+    } else if (redirectCheck.isGoogle) {
+      addDebugStep('Google Redirect', 'warning', 'Still on Google page, may need additional steps');
+      console.log('⚠️ Still on Google page, may need additional steps');
     } else {
-      addDebugStep('Verification Code Page', 'warning', 'Did not reach verification code page');
-      console.log('⚠️ Did not reach verification code page');
+      addDebugStep('Unknown Redirect', 'warning', 'Unknown redirect location');
+      console.log('⚠️ Unknown redirect location');
     }
 
-    await sleep(3000);
+    await sleep(5000);
     await takeScreenshot('Final State');
 
     // Final status
@@ -330,14 +370,14 @@ async function scrapeRecraftLogin(recraftEmail) {
       return {
         currentUrl: window.location.href,
         pageTitle: document.title,
-        hasEmailInput: !!document.querySelector('input[type="email"]'),
-        hasCodeInput: !!document.querySelector('input[type="text"], input[placeholder*="code"]'),
-        hasVerificationText: document.body.innerText.toLowerCase().includes('verification')
+        hasRecraftElements: !!document.querySelector('[class*="recraft"], [id*="recraft"]'),
+        hasGoogleElements: !!document.querySelector('[class*="google"], [id*="google"]'),
+        bodyText: document.body.innerText.substring(0, 200)
       };
     });
 
     console.log('Final status:', finalStatus);
-    addDebugStep('Final Status', 'info', 'Login process completed', finalStatus);
+    addDebugStep('Final Status', 'info', 'Google login process completed', finalStatus);
 
     return {
       success: true,

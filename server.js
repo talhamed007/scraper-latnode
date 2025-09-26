@@ -3451,21 +3451,21 @@ app.post('/api/recraft-login', async (req, res) => {
     return res.status(200).end();
   }
 
-  const { recraftEmail } = req.body;
+  const { googleEmail, googlePassword } = req.body;
 
-  if (!recraftEmail) {
+  if (!googleEmail || !googlePassword) {
     return res.status(400).json({
       ok: false,
-      error: 'Recraft.ai email is required'
+      error: 'Google email and password are required'
     });
   }
 
   try {
-    console.log('🎮 Testing Recraft.ai login...');
-    console.log('📧 Recraft Email:', recraftEmail);
+    console.log('🎮 Testing Recraft.ai Google login...');
+    console.log('📧 Google Email:', googleEmail);
     
     // Call the separate Recraft.ai scraper
-    const result = await scrapeRecraftLogin(recraftEmail);
+    const result = await scrapeRecraftLogin(googleEmail, googlePassword);
     
     res.json(result);
   } catch (error) {

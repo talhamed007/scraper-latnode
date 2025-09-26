@@ -132,13 +132,19 @@
 <body>
     <div class="container">
         <h1>🎮 Recraft.ai Login Test</h1>
-        <p>This will test the Recraft.ai email login process.</p>
+        <p>This will test the Recraft.ai Google login process.</p>
         
         <form id="recraftForm">
             <div class="form-group">
-                <label for="recraftEmail">Recraft.ai Email:</label>
-                <input type="email" id="recraftEmail" name="recraftEmail" 
-                       placeholder="your-email@example.com" required>
+                <label for="googleEmail">Google Email:</label>
+                <input type="email" id="googleEmail" name="googleEmail" 
+                       placeholder="your-email@gmail.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="googlePassword">Google Password:</label>
+                <input type="password" id="googlePassword" name="googlePassword" 
+                       placeholder="your-google-password" required>
             </div>
             
             <button type="submit" id="submitBtn">🚀 Start Recraft.ai Login Test</button>
@@ -169,10 +175,11 @@
             const debugSteps = document.getElementById('debugSteps');
             const screenshots = document.getElementById('screenshots');
             
-            const recraftEmail = document.getElementById('recraftEmail').value;
+            const googleEmail = document.getElementById('googleEmail').value;
+            const googlePassword = document.getElementById('googlePassword').value;
             
-            if (!recraftEmail) {
-                alert('Please fill in your Recraft.ai email');
+            if (!googleEmail || !googlePassword) {
+                alert('Please fill in both Google email and password');
                 return;
             }
             
@@ -189,7 +196,8 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        recraftEmail: recraftEmail
+                        googleEmail: googleEmail,
+                        googlePassword: googlePassword
                     })
                 });
                 
