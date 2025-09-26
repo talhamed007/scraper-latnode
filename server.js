@@ -1086,8 +1086,8 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Helper function for sleep
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // Step 1: Verify Discord token and prepare for OAuth
-    console.log('🔐 STEP 1: Verifying Discord token...');
+    // Step 1: Login to Discord and establish session
+    console.log('🔐 STEP 1: Logging into Discord to establish session...');
     try {
       // First, verify the token works by calling Discord API
       console.log('🔍 Verifying Discord token...');
@@ -1103,16 +1103,131 @@ app.post('/api/scrape-recraft', async (req, res) => {
         console.log('✅ Discord token is valid! User:', userData.username);
         addDebugStep('Discord Token Verification', 'success', `Token verified for user: ${userData.username}`, `User ID: ${userData.id}`);
         
-        // Store user info for later use
-        const discordUser = {
-          id: userData.id,
-          username: userData.username,
-          email: userData.email
-        };
+        // Now login to Discord web app to establish session
+        console.log('🌐 Logging into Discord web app...');
+        await page.goto('https://discord.com/login', { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 30000 
+        });
         
-        // We'll use this token later when Discord OAuth is triggered
-        console.log('📝 Discord user info stored for OAuth flow');
-        addDebugStep('Discord User Info', 'success', 'Discord user info stored for OAuth flow', JSON.stringify(discordUser));
+        // Wait for page to load
+        await sleep(3000);
+        
+        // Inject token into Discord's authentication system
+        await page.evaluate((token) => {
+          // Set token in multiple ways to ensure it's recognized
+          localStorage.setItem('token', token);
+          sessionStorage.setItem('token', token);
+          
+          // Set cookies for Discord domains with proper attributes
+          document.cookie = `token=${token}; path=/; domain=.discord.com; secure; samesite=none`;
+          document.cookie = `token=${token}; path=/; domain=discord.com; secure; samesite=none`;
+          document.cookie = `token=${token}; path=/; domain=discord.com`;
+          document.cookie = `token=${token}; path=/; domain=.discord.com`;
+          
+          // Also set it as a regular cookie
+          document.cookie = `discord_token=${token}; path=/; domain=.discord.com`;
+          document.cookie = `discord_token=${token}; path=/; domain=discord.com`;
+          
+          // Try to inject into Discord's auth context
+          if (window.webpackChunkdiscord_app) {
+            try {
+              // Discord's internal token injection
+              const modules = window.webpackChunkdiscord_app;
+              for (let i = 0; i < modules.length; i++) {
+                const module = modules[i];
+                if (module && module[1] && module[1].exports) {
+                  const exports = module[1].exports;
+                  if (exports && exports.default && exports.default.setToken) {
+                    exports.default.setToken(token);
+                    console.log('✅ Injected token into Discord auth context');
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              console.log('Could not inject token into Discord context:', e);
+            }
+          }
+          
+          // Also try setting it in window object
+          window.DISCORD_TOKEN = token;
+          window.localStorage.setItem('token', token);
+          
+          // Try to trigger Discord's auth system
+          if (window.webpackChunkdiscord_app) {
+            try {
+              // Force Discord to recognize the token
+              const event = new CustomEvent('discord-token-set', { detail: { token } });
+              window.dispatchEvent(event);
+            } catch (e) {
+              console.log('Could not dispatch Discord token event:', e);
+            }
+          }
+          
+        }, token);
+        
+        // Set cookies at browser level to ensure they persist across navigation
+        await page.setCookie({
+          name: 'token',
+          value: token,
+          domain: '.discord.com',
+          path: '/',
+          secure: true,
+          sameSite: 'None'
+        });
+        
+        await page.setCookie({
+          name: 'token',
+          value: token,
+          domain: 'discord.com',
+          path: '/',
+          secure: true,
+          sameSite: 'None'
+        });
+        
+        await page.setCookie({
+          name: 'discord_token',
+          value: token,
+          domain: '.discord.com',
+          path: '/',
+          secure: true,
+          sameSite: 'None'
+        });
+        
+        // Navigate to Discord app to establish session
+        await page.goto('https://discord.com/app', { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 30000 
+        });
+        
+        // Wait for Discord to load and check if we're logged in
+        await sleep(5000);
+        
+        // Check if we're logged in by looking for Discord UI elements
+        const isLoggedIn = await page.evaluate(() => {
+          // Look for elements that indicate we're logged in to Discord
+          const guildList = document.querySelector('[class*="guilds"]') || document.querySelector('[data-list-id*="guild"]');
+          const userMenu = document.querySelector('[class*="user"]') || document.querySelector('[data-list-item-id*="user"]');
+          const channelList = document.querySelector('[class*="channels"]') || document.querySelector('[data-list-id*="channel"]');
+          
+          return !!(guildList || userMenu || channelList);
+        });
+        
+        if (isLoggedIn) {
+          console.log('✅ Successfully logged into Discord web app!');
+          addDebugStep('Discord Web Login', 'success', 'Successfully logged into Discord web app');
+          
+          // Take screenshot of Discord logged in state
+          const discordLoggedInScreenshot = await addScreenshot('Discord Logged In State');
+          
+        } else {
+          console.log('⚠️ Discord web login failed, but token is valid - continuing...');
+          addDebugStep('Discord Web Login', 'warning', 'Discord web login failed, but token is valid');
+          
+          // Take screenshot of failed login state
+          const discordFailedScreenshot = await addScreenshot('Discord Failed Login State');
+        }
         
       } else {
         console.log('❌ Discord token is invalid or expired');
@@ -1121,12 +1236,31 @@ app.post('/api/scrape-recraft', async (req, res) => {
       }
       
     } catch (e) {
-      console.log('⚠️ Discord token verification failed:', e.message);
-      addDebugStep('Discord Token Verification', 'error', 'Discord token verification failed', null, e.message);
+      console.log('⚠️ Discord login failed:', e.message);
+      addDebugStep('Discord Login', 'error', 'Discord login failed', null, e.message);
       // Continue anyway - we'll try the OAuth flow
     }
 
     console.log('🌐 STEP 2: Navigating to Recraft.ai...');
+    
+    // Ensure Discord cookies are still set before navigating to Recraft.ai
+    await page.setCookie({
+      name: 'token',
+      value: token,
+      domain: '.discord.com',
+      path: '/',
+      secure: true,
+      sameSite: 'None'
+    });
+    
+    await page.setCookie({
+      name: 'discord_token',
+      value: token,
+      domain: '.discord.com',
+      path: '/',
+      secure: true,
+      sameSite: 'None'
+    });
     
     // Navigate to Recraft.ai landing page
     await page.goto('https://www.recraft.ai/', { 
@@ -1832,6 +1966,27 @@ app.post('/api/scrape-recraft', async (req, res) => {
           } catch (e) {
             console.log('⚠️ Discord authorization failed:', e.message);
             addDebugStep('Discord Authorization', 'error', 'Discord authorization failed', null, e.message);
+          }
+        } else if (currentUrl.includes('recraft.ai')) {
+          console.log('✅ Already on Recraft.ai - Discord session may be established');
+          addDebugStep('Discord Session Check', 'success', 'Already on Recraft.ai - Discord session may be established', `URL: ${currentUrl}`);
+          
+          // Check if we're already logged in to Recraft.ai
+          const isLoggedIn = await page.evaluate(() => {
+            // Look for elements that indicate we're logged in to Recraft.ai
+            const userMenu = document.querySelector('[class*="user"]') || document.querySelector('[data-testid*="user"]');
+            const dashboard = document.querySelector('[class*="dashboard"]') || document.querySelector('[data-testid*="dashboard"]');
+            const credits = document.querySelector('[class*="credit"]') || document.querySelector('[class*="balance"]');
+            
+            return !!(userMenu || dashboard || credits);
+          });
+          
+          if (isLoggedIn) {
+            console.log('✅ Successfully logged into Recraft.ai via Discord!');
+            addDebugStep('Recraft.ai Login', 'success', 'Successfully logged into Recraft.ai via Discord');
+          } else {
+            console.log('⚠️ Not logged into Recraft.ai yet, continuing with normal flow...');
+            addDebugStep('Recraft.ai Login', 'warning', 'Not logged into Recraft.ai yet, continuing with normal flow');
           }
         } else {
           console.log('⚠️ Did not redirect to Discord OAuth page');
