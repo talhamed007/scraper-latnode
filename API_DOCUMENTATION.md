@@ -73,7 +73,8 @@ This scraper provides HTTP-based API endpoints for Latenode, Make.com, and KIE.a
 {
   "ok": true,
   "remaining_credits": "450",
-  "rawText": "Remaining credits: 450"
+  "rawText": "Remaining credits: 450",
+  "screenshotBase64": "iVBORw0KGgoAAAANSUhEUgAA..."
 }
 ```
 
