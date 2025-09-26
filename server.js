@@ -3439,6 +3439,50 @@ app.listen(PORT, (err) => {
   console.log(`   - Recraft.ai: /recraft`);
 });
 
+// Recraft.ai Login Test Route (separate from working scrapers)
+const { scrapeRecraftLogin } = require('./recraft-scraper');
+
+app.post('/api/recraft-login', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { discordToken, recraftEmail } = req.body;
+
+  if (!discordToken || !recraftEmail) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Discord token and Recraft.ai email are required'
+    });
+  }
+
+  try {
+    console.log('🎮 Testing Recraft.ai login...');
+    console.log('🔑 Discord Token:', discordToken ? 'Provided' : 'Not provided');
+    console.log('📧 Recraft Email:', recraftEmail);
+    
+    // Call the separate Recraft.ai scraper
+    const result = await scrapeRecraftLogin(discordToken, recraftEmail);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Recraft.ai login test error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Serve Recraft.ai test page
+app.get('/recraft-test', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recraft-test.html'));
+});
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
