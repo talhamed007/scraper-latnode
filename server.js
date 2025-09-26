@@ -5,6 +5,11 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// In-memory storage for debug data (in production, use Redis or database)
+let debugData = {
+  recraft: null
+};
+
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
@@ -27,6 +32,26 @@ app.get('/kie', (req, res) => {
 // Serve the Recraft.ai scraper page
 app.get('/recraft', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft.html'));
+});
+
+// Serve the Recraft.ai debug page
+app.get('/recraft-debug', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recraft-debug.html'));
+});
+
+// Debug API endpoint for Recraft.ai
+app.get('/api/debug-recraft', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (!debugData.recraft) {
+    return res.status(404).json({ 
+      error: 'No debug data available. Run the Recraft.ai scraper first.' 
+    });
+  }
+
+  res.status(200).json(debugData.recraft);
 });
 
 // Health check endpoint for Railway
@@ -963,12 +988,70 @@ app.post('/api/scrape-recraft', async (req, res) => {
     return res.status(400).json({ error: 'Email is required' });
   }
 
+  // Initialize debug data
+  const startTime = Date.now();
+  const debugInfo = {
+    email: email,
+    startTime: new Date().toISOString(),
+    steps: [],
+    screenshots: [],
+    logs: [],
+    finalUrl: null,
+    executionTime: null,
+    ok: false,
+    error: null
+  };
+
   let browser;
   let page;
+
+  // Helper function to add debug step
+  const addDebugStep = (title, status, description, details = null, error = null, screenshot = null) => {
+    const step = {
+      title,
+      status,
+      description,
+      details,
+      error,
+      timestamp: new Date().toISOString(),
+      screenshot: screenshot ? screenshot.toString('base64') : null
+    };
+    debugInfo.steps.push(step);
+    console.log(`📋 DEBUG STEP: ${title} - ${status.toUpperCase()}`);
+  };
+
+  // Helper function to add debug log
+  const addDebugLog = (level, message) => {
+    const log = {
+      level,
+      message,
+      timestamp: new Date().toISOString()
+    };
+    debugInfo.logs.push(log);
+  };
+
+  // Helper function to add screenshot
+  const addScreenshot = async (title) => {
+    try {
+      if (page) {
+        const screenshot = await page.screenshot({ fullPage: true });
+        debugInfo.screenshots.push({
+          title,
+          data: screenshot.toString('base64'),
+          timestamp: new Date().toISOString()
+        });
+        return screenshot;
+      }
+    } catch (e) {
+      addDebugLog('error', `Failed to take screenshot: ${e.message}`);
+    }
+    return null;
+  };
 
   try {
     console.log('🚀 Starting Recraft.ai scraping...');
     console.log('📧 Email:', email);
+    addDebugStep('Scraping Started', 'info', 'Initializing Recraft.ai scraper', `Email: ${email}`);
 
     // Launch browser with optimized settings for Railway
     browser = await puppeteer.launch({
@@ -1011,6 +1094,8 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Take screenshot of landing page
     const landingScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Landing page screenshot taken');
+    
+    addDebugStep('Navigation to Recraft.ai', 'success', 'Successfully navigated to Recraft.ai homepage', `URL: ${page.url()}`, null, landingScreenshot);
     
     // Log current URL for debugging
     const landingUrl = page.url();
@@ -1092,11 +1177,14 @@ app.post('/api/scrape-recraft', async (req, res) => {
       
       if (cookieAccepted) {
         console.log('✅ STEP 1 COMPLETE: Cookie consent handled successfully');
+        addDebugStep('Cookie Consent', 'success', 'Successfully accepted cookie consent');
       } else {
         console.log('ℹ️ STEP 1 COMPLETE: No cookie popup detected or already handled');
+        addDebugStep('Cookie Consent', 'info', 'No cookie popup detected or already handled');
       }
     } catch (e) {
       console.log('⚠️ STEP 1 ERROR: Cookie popup handling failed:', e.message);
+      addDebugStep('Cookie Consent', 'error', 'Failed to handle cookie consent', null, e.message);
     }
 
     console.log('🔍 STEP 2: Looking for Sign In button...');
@@ -1189,10 +1277,14 @@ app.post('/api/scrape-recraft', async (req, res) => {
       }
       
       if (!signInClicked) {
+        addDebugStep('Sign In Button', 'error', 'Could not find Sign In button', null, 'No Sign In button found with any selector');
         throw new Error('Could not find Sign In button');
+      } else {
+        addDebugStep('Sign In Button', 'success', 'Successfully clicked Sign In button');
       }
     } catch (error) {
       console.log('⚠️ Could not click Sign In button:', error.message);
+      addDebugStep('Sign In Button', 'error', 'Failed to click Sign In button', null, error.message);
       throw error;
     }
     
@@ -1307,11 +1399,14 @@ app.post('/api/scrape-recraft', async (req, res) => {
             // Check if we're now on the login page
             if (newUrl.includes('/auth/login') || newUrl.includes('/login')) {
               console.log('✅ Successfully navigated to login page via "Go back" button');
+              addDebugStep('Go Back Button', 'success', 'Successfully clicked "Go back to recraft" button and navigated to login page', `New URL: ${newUrl}`);
             } else {
               console.log('⚠️ Still not on login page after "Go back" click');
+              addDebugStep('Go Back Button', 'warning', 'Clicked "Go back" button but still not on login page', `New URL: ${newUrl}`);
             }
           } else {
             console.log('⚠️ Could not find "Go back to recraft" button');
+            addDebugStep('Go Back Button', 'error', 'Could not find "Go back to recraft" button');
           }
         } catch (e) {
           console.log('⚠️ Error handling "Go back" button:', e.message);
@@ -1368,13 +1463,17 @@ app.post('/api/scrape-recraft', async (req, res) => {
         }
       }
       
-      if (!emailFilled) {
-        throw new Error('Could not find email input field with any selector');
-      }
-    } catch (error) {
-      console.log('⚠️ Email input error:', error.message);
-      throw error;
-    }
+          if (!emailFilled) {
+            addDebugStep('Email Input', 'error', 'Could not find email input field', null, 'No email input found with any selector');
+            throw new Error('Could not find email input field with any selector');
+          } else {
+            addDebugStep('Email Input', 'success', 'Successfully filled email field', `Email: ${email}`);
+          }
+        } catch (error) {
+          console.log('⚠️ Email input error:', error.message);
+          addDebugStep('Email Input', 'error', 'Failed to fill email field', null, error.message);
+          throw error;
+        }
 
     console.log('☑️ STEP 5: Checking verification checkbox...');
     
@@ -1570,6 +1669,12 @@ app.post('/api/scrape-recraft', async (req, res) => {
     });
 
     console.log('✅ Credit info extracted:', creditInfo);
+
+    // Save debug data
+    debugInfo.finalUrl = page.url();
+    debugInfo.executionTime = Date.now() - startTime;
+    debugInfo.ok = true;
+    debugData.recraft = debugInfo;
 
     // Return success response
     res.status(200).json({
