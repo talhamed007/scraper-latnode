@@ -3451,22 +3451,21 @@ app.post('/api/recraft-login', async (req, res) => {
     return res.status(200).end();
   }
 
-  const { discordToken, recraftEmail } = req.body;
+  const { recraftEmail } = req.body;
 
-  if (!discordToken || !recraftEmail) {
+  if (!recraftEmail) {
     return res.status(400).json({
       ok: false,
-      error: 'Discord token and Recraft.ai email are required'
+      error: 'Recraft.ai email is required'
     });
   }
 
   try {
     console.log('🎮 Testing Recraft.ai login...');
-    console.log('🔑 Discord Token:', discordToken ? 'Provided' : 'Not provided');
     console.log('📧 Recraft Email:', recraftEmail);
     
     // Call the separate Recraft.ai scraper
-    const result = await scrapeRecraftLogin(discordToken, recraftEmail);
+    const result = await scrapeRecraftLogin(recraftEmail);
     
     res.json(result);
   } catch (error) {
@@ -3495,7 +3494,7 @@ app.post('/api/recraft-live', async (req, res) => {
     return res.status(200).end();
   }
 
-  const { discordToken, recraftEmail } = req.body;
+  const { discordToken, recraftEmail, sessionData } = req.body;
 
   if (!discordToken || !recraftEmail) {
     return res.status(400).json({
@@ -3510,7 +3509,7 @@ app.post('/api/recraft-live', async (req, res) => {
     console.log('📧 Recraft Email:', recraftEmail);
     
     // Call the live debug scraper
-    const result = await scrapeRecraftLoginLive(discordToken, recraftEmail);
+    const result = await scrapeRecraftLoginLive(discordToken, recraftEmail, sessionData);
     
     res.json(result);
   } catch (error) {

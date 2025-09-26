@@ -164,6 +164,41 @@
                        placeholder="your-email@example.com" required>
             </div>
             
+            <h3>🔧 Discord Session Data (Optional)</h3>
+            <p>Add your Discord session data to help establish a complete session:</p>
+            
+            <div class="form-group">
+                <label for="bisData">BIS Data (JSON):</label>
+                <textarea id="bisData" name="bisData" rows="3" 
+                          placeholder='{"id":null,"config":{"loadManagement":...}}'></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="clickX">Click X:</label>
+                <input type="number" id="clickX" name="clickX" value="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="clickY">Click Y:</label>
+                <input type="number" id="clickY" name="clickY" value="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="moveX">Move X:</label>
+                <input type="number" id="moveX" name="moveX" value="685">
+            </div>
+            
+            <div class="form-group">
+                <label for="moveY">Move Y:</label>
+                <input type="number" id="moveY" name="moveY" value="507">
+            </div>
+            
+            <div class="form-group">
+                <label for="referralProperties">Referral Properties (JSON):</label>
+                <input type="text" id="referralProperties" name="referralProperties" 
+                       value='{"referrer_current":"","referring_domain_current":""}'>
+            </div>
+            
             <button type="submit" id="submitBtn">🔴 Start LIVE Recraft.ai Debug (Opens Browser Window)</button>
         </form>
         
@@ -195,6 +230,12 @@
             
             const discordToken = document.getElementById('discordToken').value;
             const recraftEmail = document.getElementById('recraftEmail').value;
+            const bisData = document.getElementById('bisData').value;
+            const clickX = document.getElementById('clickX').value;
+            const clickY = document.getElementById('clickY').value;
+            const moveX = document.getElementById('moveX').value;
+            const moveY = document.getElementById('moveY').value;
+            const referralProperties = document.getElementById('referralProperties').value;
             
             if (!discordToken || !recraftEmail) {
                 alert('Please fill in both Discord token and Recraft.ai email');
@@ -215,7 +256,15 @@
                     },
                     body: JSON.stringify({
                         discordToken: discordToken,
-                        recraftEmail: recraftEmail
+                        recraftEmail: recraftEmail,
+                        sessionData: {
+                            bisData,
+                            clickX: parseInt(clickX),
+                            clickY: parseInt(clickY),
+                            moveX: parseInt(moveX),
+                            moveY: parseInt(moveY),
+                            referralProperties
+                        }
                     })
                 });
                 

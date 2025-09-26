@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 
 // Real-Time Recraft.ai Login Scraper with Live Browser View
-async function scrapeRecraftLoginLive(discordToken, recraftEmail) {
+async function scrapeRecraftLoginLive(discordToken, recraftEmail, sessionData = null) {
   let browser;
   let page;
   const debugSteps = [];
@@ -131,7 +131,7 @@ async function scrapeRecraftLoginLive(discordToken, recraftEmail) {
 
       // Try multiple injection methods
       console.log('🔑 Attempting comprehensive token injection...');
-      const injectionResult = await page.evaluate((token) => {
+      const injectionResult = await page.evaluate((token, sessionData) => {
         const results = {
           localStorage: { success: false, error: null },
           sessionStorage: { success: false, error: null },
@@ -184,8 +184,61 @@ async function scrapeRecraftLoginLive(discordToken, recraftEmail) {
           results.windowObject.error = e.message;
         }
 
+        // Inject session data if provided
+        if (sessionData) {
+          try {
+            // Inject BIS data
+            if (sessionData.bisData) {
+              try {
+                const bisData = JSON.parse(sessionData.bisData);
+                localStorage.setItem('bis_data', JSON.stringify(bisData));
+                sessionStorage.setItem('bis_data', JSON.stringify(bisData));
+                console.log('✅ BIS data injected');
+              } catch (e) {
+                console.log('❌ BIS data injection failed:', e.message);
+              }
+            }
+            
+            // Inject click coordinates
+            if (sessionData.clickX !== undefined) {
+              localStorage.setItem('click-x', sessionData.clickX.toString());
+              sessionStorage.setItem('click-x', sessionData.clickX.toString());
+            }
+            if (sessionData.clickY !== undefined) {
+              localStorage.setItem('click-y', sessionData.clickY.toString());
+              sessionStorage.setItem('click-y', sessionData.clickY.toString());
+            }
+            
+            // Inject move coordinates
+            if (sessionData.moveX !== undefined) {
+              localStorage.setItem('move-x', sessionData.moveX.toString());
+              sessionStorage.setItem('move-x', sessionData.moveX.toString());
+            }
+            if (sessionData.moveY !== undefined) {
+              localStorage.setItem('move-y', sessionData.moveY.toString());
+              sessionStorage.setItem('move-y', sessionData.moveY.toString());
+            }
+            
+            // Inject referral properties
+            if (sessionData.referralProperties) {
+              try {
+                const referralProps = JSON.parse(sessionData.referralProperties);
+                localStorage.setItem('referralProperties', JSON.stringify(referralProps));
+                sessionStorage.setItem('referralProperties', JSON.stringify(referralProps));
+                console.log('✅ Referral properties injected');
+              } catch (e) {
+                console.log('❌ Referral properties injection failed:', e.message);
+              }
+            }
+            
+            console.log('✅ Session data injection completed');
+          } catch (e) {
+            console.log('❌ Session data injection failed:', e.message);
+          }
+        }
+
         return results;
-      }, discordToken);
+      }, discordToken, sessionData);
 
       console.log('Token injection results:', injectionResult);
       addDebugStep('Token Injection', 'info', 'Comprehensive token injection attempted', injectionResult);

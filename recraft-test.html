@@ -132,16 +132,9 @@
 <body>
     <div class="container">
         <h1>🎮 Recraft.ai Login Test</h1>
-        <p>This will test the Discord token authentication and Recraft.ai login process.</p>
+        <p>This will test the Recraft.ai email login process.</p>
         
         <form id="recraftForm">
-            <div class="form-group">
-                <label for="discordToken">Discord Token:</label>
-                <input type="text" id="discordToken" name="discordToken" 
-                       placeholder="MTI3NDQxNTQwMTAyMzA0OTc5MA.GFu9Qi.RHy74T54y1ZvBbaJO1rNtl-uR2GbjegAVt5qVI" 
-                       value="MTI3NDQxNTQwMTAyMzA0OTc5MA.GFu9Qi.RHy74T54y1ZvBbaJO1rNtl-uR2GbjegAVt5qVI">
-            </div>
-            
             <div class="form-group">
                 <label for="recraftEmail">Recraft.ai Email:</label>
                 <input type="email" id="recraftEmail" name="recraftEmail" 
@@ -176,11 +169,10 @@
             const debugSteps = document.getElementById('debugSteps');
             const screenshots = document.getElementById('screenshots');
             
-            const discordToken = document.getElementById('discordToken').value;
             const recraftEmail = document.getElementById('recraftEmail').value;
             
-            if (!discordToken || !recraftEmail) {
-                alert('Please fill in both Discord token and Recraft.ai email');
+            if (!recraftEmail) {
+                alert('Please fill in your Recraft.ai email');
                 return;
             }
             
@@ -197,7 +189,6 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        discordToken: discordToken,
                         recraftEmail: recraftEmail
                     })
                 });

@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 
-// Recraft.ai Login Scraper - Separate from main server.js
-async function scrapeRecraftLogin(discordToken, recraftEmail) {
+// Recraft.ai Login Scraper - Email Only
+async function scrapeRecraftLogin(recraftEmail) {
   let browser;
   let page;
   const debugSteps = [];
@@ -42,7 +42,6 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
 
   try {
     console.log('🚀 Starting Recraft.ai Login Scraper...');
-    console.log('🔑 Discord Token:', discordToken ? 'Provided' : 'Not provided');
     console.log('📧 Recraft Email:', recraftEmail);
 
     addDebugStep('Scraper Started', 'info', 'Initializing Recraft.ai login scraper');
@@ -51,7 +50,6 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
     addDebugStep('Browser Launch', 'info', 'Launching Puppeteer browser');
     browser = await puppeteer.launch({
       headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -59,820 +57,305 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
+        '--disable-gpu'
       ]
     });
 
     page = await browser.newPage();
-    await page.setViewport({ width: 1440, height: 900 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
+    await page.setViewport({ width: 1280, height: 720 });
     addDebugStep('Browser Launch', 'success', 'Browser launched successfully');
 
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // Navigate to Recraft.ai
+    addDebugStep('Recraft Navigation', 'info', 'Navigating to Recraft.ai login page');
+    console.log('🎯 Navigating to Recraft.ai...');
+    
+    await page.goto('https://www.recraft.ai/', { 
+      waitUntil: 'domcontentloaded', 
+      timeout: 30000 
+    });
+    
+    await sleep(3000);
+    await takeScreenshot('Recraft.ai Homepage');
+    addDebugStep('Recraft Navigation', 'success', 'Navigated to Recraft.ai homepage');
 
-    // STEP 1: Login to Discord FIRST with token
-    console.log('🔐 STEP 1: Logging into Discord FIRST with token...');
-    addDebugStep('Discord Login First', 'info', 'Logging into Discord first to establish session');
-
-    // Validate token first
-    console.log('🔍 Validating Discord token...');
-    const tokenValidation = await page.evaluate(async (token) => {
-      try {
-        const response = await fetch('https://discord.com/api/v9/users/@me', {
-          headers: {
-            'Authorization': token,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          const userData = await response.json();
-          return { success: true, user: userData };
-        } else {
-          return { success: false, status: response.status };
-        }
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }, discordToken);
-
-    console.log('Token validation result:', tokenValidation);
-    addDebugStep('Token Validation', tokenValidation.success ? 'success' : 'error', 
-      tokenValidation.success ? `Token valid for user: ${tokenValidation.user?.username}` : 'Token validation failed', tokenValidation);
-
-    if (!tokenValidation.success) {
-      console.log('⚠️ Discord token validation failed, but continuing with Recraft.ai flow...');
-      addDebugStep('Token Validation', 'warning', 'Discord token validation failed, but continuing with Recraft.ai flow');
-    }
-
-    // Try Discord session storage + token injection approach
-    console.log('🔐 Attempting Discord session storage + token injection...');
-    addDebugStep('Discord Session + Token', 'info', 'Attempting Discord session storage + token injection');
-
+    // Look for and click "Sign in" button
+    addDebugStep('Sign In Button', 'info', 'Looking for Sign in button');
+    console.log('🔍 Looking for Sign in button...');
+    
     try {
-      // Navigate to Discord app first
-      await page.goto('https://discord.com/app', { 
-        waitUntil: 'domcontentloaded', 
-        timeout: 30000 
-      });
+      // Wait for sign in button with multiple selectors
+      await page.waitForSelector('button:has-text("Sign in"), a:has-text("Sign in"), [data-testid*="sign"], [class*="sign-in"], [class*="login"]', { timeout: 10000 });
       
-      await sleep(3000);
-      await takeScreenshot('Discord App Initial');
-      addDebugStep('Discord App Navigation', 'success', 'Navigated to Discord app');
-
-      // Try multiple injection methods
-      console.log('🔑 Attempting comprehensive token injection...');
-      const injectionResult = await page.evaluate((token) => {
-        const results = {
-          localStorage: { success: false, error: null },
-          sessionStorage: { success: false, error: null },
-          cookies: { success: false, error: null },
-          windowObject: { success: false, error: null }
-        };
-
-        try {
-          // Method 1: localStorage
-          localStorage.setItem('token', token);
-          localStorage.setItem('auth_token', token);
-          localStorage.setItem('discord_token', token);
-          localStorage.setItem('access_token', token);
-          localStorage.setItem('authorization', token);
-          results.localStorage.success = true;
-        } catch (e) {
-          results.localStorage.error = e.message;
-        }
-
-        try {
-          // Method 2: sessionStorage
-          sessionStorage.setItem('token', token);
-          sessionStorage.setItem('auth_token', token);
-          sessionStorage.setItem('discord_token', token);
-          sessionStorage.setItem('access_token', token);
-          sessionStorage.setItem('authorization', token);
-          results.sessionStorage.success = true;
-        } catch (e) {
-          results.sessionStorage.error = e.message;
-        }
-
-        try {
-          // Method 3: Cookies
-          document.cookie = `token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-          document.cookie = `auth_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-          document.cookie = `discord_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-          document.cookie = `access_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-          results.cookies.success = true;
-        } catch (e) {
-          results.cookies.error = e.message;
-        }
-
-        try {
-          // Method 4: Window object
-          window.discordToken = token;
-          window.authToken = token;
-          window.accessToken = token;
-          results.windowObject.success = true;
-        } catch (e) {
-          results.windowObject.error = e.message;
-        }
-
-        return results;
-      }, discordToken);
-
-      console.log('Token injection results:', injectionResult);
-      addDebugStep('Token Injection', 'info', 'Comprehensive token injection attempted', injectionResult);
-
-      // Refresh page to apply tokens
-      console.log('🔄 Refreshing Discord page to apply tokens...');
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-      await sleep(5000);
-      await takeScreenshot('Discord App After Token Injection');
-
-      // Check if any injection worked
-      const injectionStatus = await page.evaluate(() => {
-        return {
-          hasLocalStorage: !!(localStorage.getItem('token') || localStorage.getItem('auth_token')),
-          hasSessionStorage: !!(sessionStorage.getItem('token') || sessionStorage.getItem('auth_token')),
-          hasCookies: document.cookie.includes('token') || document.cookie.includes('auth_token'),
-          hasWindowObject: !!(window.discordToken || window.authToken),
-          currentUrl: window.location.href,
-          pageTitle: document.title
-        };
-      });
-
-      console.log('Injection status:', injectionStatus);
-      addDebugStep('Injection Status', 'info', 'Checking if any injection method worked', injectionStatus);
-
-      // Check for Discord login success
-      const discordLoginStatus = await page.evaluate(() => {
-        const userElements = document.querySelectorAll('[class*="user"], [class*="avatar"], [class*="profile"]');
-        const channelElements = document.querySelectorAll('[class*="channel"], [class*="server"]');
-        const sidebarElements = document.querySelectorAll('[class*="sidebar"], [class*="guild"]');
-        const loginElements = document.querySelectorAll('[class*="login"], [class*="signin"]');
-        
-        return {
-          userElementsFound: userElements.length > 0,
-          channelElementsFound: channelElements.length > 0,
-          sidebarElementsFound: sidebarElements.length > 0,
-          loginElementsFound: loginElements.length > 0,
-          currentUrl: window.location.href,
-          pageTitle: document.title
-        };
-      });
-
-      console.log('Discord login status:', discordLoginStatus);
-      
-      if (discordLoginStatus.userElementsFound || discordLoginStatus.channelElementsFound || discordLoginStatus.sidebarElementsFound) {
-        console.log('✅ Discord login successful!');
-        addDebugStep('Discord Login', 'success', 'Discord login successful', discordLoginStatus);
-      } else if (discordLoginStatus.loginElementsFound) {
-        console.log('⚠️ Still on Discord login page');
-        addDebugStep('Discord Login', 'warning', 'Still on Discord login page', discordLoginStatus);
-      } else {
-        console.log('⚠️ Discord login status unclear');
-        addDebugStep('Discord Login', 'warning', 'Discord login status unclear', discordLoginStatus);
-      }
-
-      await takeScreenshot('Discord Login Final Status');
-
-    } catch (e) {
-      console.log('⚠️ Discord session + token injection failed:', e.message);
-      addDebugStep('Discord Session + Token', 'warning', 'Discord session + token injection failed', null, e.message);
-    }
-
-    // Continue to Recraft.ai regardless
-    console.log('🌐 Proceeding to Recraft.ai...');
-    addDebugStep('Recraft Proceed', 'info', 'Proceeding to Recraft.ai flow');
-
-    // STEP 2: Navigate to Recraft.ai
-    console.log('🌐 STEP 2: Navigating to Recraft.ai...');
-    addDebugStep('Recraft Navigation', 'info', 'Navigating to Recraft.ai');
-
-    try {
-      await page.goto('https://www.recraft.ai/', { 
-        waitUntil: 'domcontentloaded', 
-        timeout: 60000 
-      });
-      
-      await sleep(3000);
-      await takeScreenshot('Recraft.ai Homepage');
-      addDebugStep('Recraft Navigation', 'success', 'Successfully navigated to Recraft.ai', `URL: ${page.url()}`);
-
-    } catch (e) {
-      console.log('❌ Failed to navigate to Recraft.ai:', e.message);
-      addDebugStep('Recraft Navigation', 'error', 'Failed to navigate to Recraft.ai', null, e.message);
-      await takeScreenshot('Recraft Navigation Error');
-    }
-
-    // STEP 3: Handle cookie consent
-    console.log('🍪 STEP 3: Handling cookie consent...');
-    addDebugStep('Cookie Consent', 'info', 'Checking for cookie consent popup');
-
-    try {
-      await sleep(2000);
-      
-      const cookieSelectors = [
-        'button:has-text("Accept All Cookies")',
-        'button:has-text("Accept all cookies")',
-        'button:has-text("Accept All")',
-        'button:has-text("Accept all")',
-        'button[data-testid="accept-all-cookies"]',
-        'button[data-testid="accept-cookies"]',
-        '.cookie-accept-all',
-        '.accept-all-cookies'
-      ];
-      
-      let cookieAccepted = false;
-      for (const selector of cookieSelectors) {
-        try {
-          const cookieButton = await page.$(selector);
-          if (cookieButton) {
-            console.log('🍪 Found cookie consent, clicking accept...');
-            await cookieButton.click();
-            await sleep(1000);
-            cookieAccepted = true;
-            addDebugStep('Cookie Consent', 'success', 'Cookie consent accepted');
-            break;
-          }
-        } catch (e) {
-          // Continue to next selector
-        }
-      }
-      
-      if (!cookieAccepted) {
-        console.log('ℹ️ No cookie consent popup found');
-        addDebugStep('Cookie Consent', 'info', 'No cookie consent popup found');
-      }
-      
-      await takeScreenshot('After Cookie Handling');
-
-    } catch (e) {
-      console.log('ℹ️ Cookie consent handling failed:', e.message);
-      addDebugStep('Cookie Consent', 'warning', 'Cookie consent handling failed', null, e.message);
-    }
-
-    // STEP 4: Click Sign In button
-    console.log('🔑 STEP 4: Looking for Sign In button...');
-    addDebugStep('Sign In Button', 'info', 'Looking for Sign In button');
-
-    try {
-      const signInSelectors = [
-        'a[data-testid="main-page-login"]',
-        'a[href*="/auth/login"]',
-        'a:has-text("Sign in")',
-        'a:has-text("Sign In")',
-        'button:has-text("Sign in")',
-        'button:has-text("Sign In")',
-        '[href*="sign-in"]',
-        '[href*="login"]',
-        '.sign-in-button',
-        '.login-button'
-      ];
-      
-      let signInClicked = false;
-      for (const selector of signInSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 3000 });
-          await page.click(selector);
-          signInClicked = true;
-          console.log('✅ Sign in button clicked with selector:', selector);
-          addDebugStep('Sign In Button', 'success', 'Sign in button clicked', `Selector: ${selector}`);
-          break;
-        } catch (e) {
-          console.log('⚠️ Sign in selector failed:', selector, e.message);
-        }
-      }
-      
-      if (!signInClicked) {
-        // Fallback: try to find button by text content
-        const buttons = await page.$$('button, a, [role="button"]');
-        for (const button of buttons) {
-          const text = await page.evaluate(el => el.textContent || el.getAttribute('aria-label') || '', button);
-          if (text && (text.toLowerCase().includes('sign in') || text.toLowerCase().includes('login'))) {
-            console.log('✅ Found Sign in button by text:', text);
-            await button.click();
-            signInClicked = true;
-            addDebugStep('Sign In Button', 'success', 'Sign in button clicked by text', `Text: ${text}`);
-            break;
-          }
-        }
-      }
-      
-      if (!signInClicked) {
-        throw new Error('Could not find Sign In button');
-      }
-      
-      await sleep(3000);
-      await takeScreenshot('After Sign In Click');
-
-    } catch (e) {
-      console.log('❌ Could not click Sign In button:', e.message);
-      addDebugStep('Sign In Button', 'error', 'Could not click Sign In button', null, e.message);
-      await takeScreenshot('Sign In Error');
-    }
-
-    // STEP 5: Handle "Sorry, nothing to see here" error page
-    console.log('🚫 STEP 5: Checking for error page...');
-    addDebugStep('Error Page Check', 'info', 'Checking for error page');
-
-    try {
-      const isErrorPage = await page.evaluate(() => {
-        const pageText = document.body.innerText || '';
-        return pageText.includes('Sorry, nothing to see here') || 
-               pageText.includes('Go back to recraft') ||
-               pageText.includes('error') ||
-               pageText.includes('Error');
-      });
-      
-      if (isErrorPage) {
-        console.log('🚫 Found error page, looking for "Go back to recraft" button...');
-        addDebugStep('Error Page', 'warning', 'Found error page, looking for Go back button');
-        
-        const goBackSelectors = [
-          'a[href="/projects"]',
-          'a.c-bZNrxE',
-          'a[class*="c-bZNrxE"]',
-          'a[class*="c-cfmRqm"]',
-          'a:has-text("Go back to recraft")',
-          'a:has-text("Go back to Recraft")',
-          'button:has-text("Go back to recraft")',
-          'button:has-text("Go back to Recraft")',
-          '[href*="recraft"]',
-          'button[class*="back"]',
-          'a[class*="back"]'
+      // Try to click sign in button
+      const signInClicked = await page.evaluate(() => {
+        const selectors = [
+          'button:has-text("Sign in")',
+          'a:has-text("Sign in")',
+          '[data-testid*="sign"]',
+          '[class*="sign-in"]',
+          '[class*="login"]'
         ];
         
-        let goBackClicked = false;
-        for (const selector of goBackSelectors) {
+        for (const selector of selectors) {
           try {
-            await page.waitForSelector(selector, { timeout: 3000 });
-            await page.click(selector);
-            goBackClicked = true;
-            console.log('✅ Go back button clicked with selector:', selector);
-            addDebugStep('Go Back Button', 'success', 'Go back button clicked', `Selector: ${selector}`);
-            break;
-          } catch (e) {
-            console.log('⚠️ Go back selector failed:', selector, e.message);
-          }
-        }
-        
-        if (goBackClicked) {
-          await sleep(3000);
-          await takeScreenshot('After Go Back Button');
-        } else {
-          console.log('⚠️ Could not find Go back button');
-          addDebugStep('Go Back Button', 'error', 'Could not find Go back button');
-        }
-      } else {
-        console.log('✅ No error page detected');
-        addDebugStep('Error Page Check', 'success', 'No error page detected');
-      }
-      
-    } catch (e) {
-      console.log('ℹ️ Error page check failed:', e.message);
-      addDebugStep('Error Page Check', 'warning', 'Error page check failed', null, e.message);
-    }
-
-    // STEP 6: Fill email and continue
-    console.log('📧 STEP 6: Filling email address...');
-    addDebugStep('Email Entry', 'info', 'Filling in email address');
-
-    try {
-      await sleep(3000);
-      
-      const emailSelectors = [
-        'input[type="email"]',
-        'input[name="email"]',
-        'input[placeholder*="email" i]',
-        'input[placeholder*="Email" i]',
-        'input[autocomplete="email"]',
-        '#email',
-        '.email-input'
-      ];
-      
-      let emailFilled = false;
-      for (const selector of emailSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 3000 });
-          await page.type(selector, recraftEmail, { delay: 50 });
-          emailFilled = true;
-          console.log('✅ Email filled with selector:', selector);
-          addDebugStep('Email Entry', 'success', 'Email filled successfully', `Selector: ${selector}`);
-          break;
-        } catch (e) {
-          console.log('⚠️ Email selector failed:', selector, e.message);
-        }
-      }
-      
-      if (!emailFilled) {
-        throw new Error('Could not find email input field');
-      }
-      
-      await sleep(1000);
-      await takeScreenshot('After Email Entry');
-
-    } catch (e) {
-      console.log('❌ Could not fill email:', e.message);
-      addDebugStep('Email Entry', 'error', 'Could not fill email', null, e.message);
-      await takeScreenshot('Email Entry Error');
-    }
-
-    // STEP 7: Check Cloudflare verification checkbox (skip "Remember me")
-    console.log('🤖 STEP 7: Checking Cloudflare verification checkbox...');
-    addDebugStep('Cloudflare Verification', 'info', 'Checking Cloudflare verification checkbox (skipping Remember me)');
-
-    try {
-      // First, let's see all checkboxes on the page
-      const allCheckboxes = await page.$$('input[type="checkbox"]');
-      console.log(`Found ${allCheckboxes.length} checkboxes on the page`);
-      
-      let cloudflareChecked = false;
-      let rememberMeFound = false;
-      
-      for (let i = 0; i < allCheckboxes.length; i++) {
-        const checkbox = allCheckboxes[i];
-        const ariaLabel = await page.evaluate(el => el.getAttribute('aria-label') || '', checkbox);
-        const id = await page.evaluate(el => el.getAttribute('id') || '', checkbox);
-        const name = await page.evaluate(el => el.getAttribute('name') || '', checkbox);
-        const parentText = await page.evaluate(el => el.parentElement?.textContent || '', checkbox);
-        const isChecked = await page.evaluate(el => el.checked, checkbox);
-        
-        console.log(`Checkbox ${i}: aria-label="${ariaLabel}", id="${id}", name="${name}", parentText="${parentText}", checked=${isChecked}`);
-        
-        // Skip "Remember me" checkbox
-        if (ariaLabel.toLowerCase().includes('remember') || 
-            id.toLowerCase().includes('remember') || 
-            name.toLowerCase().includes('remember') ||
-            parentText.toLowerCase().includes('remember me')) {
-          console.log('⚠️ Skipping "Remember me" checkbox');
-          rememberMeFound = true;
-          continue;
-        }
-        
-        // Look for Cloudflare verification checkbox
-        if (ariaLabel.toLowerCase().includes('verify') || 
-            ariaLabel.toLowerCase().includes('human') ||
-            parentText.toLowerCase().includes('verify') ||
-            parentText.toLowerCase().includes('cloudflare') ||
-            id.toLowerCase().includes('verify') ||
-            name.toLowerCase().includes('verify')) {
-          console.log('✅ Found Cloudflare verification checkbox');
-          if (!isChecked) {
-            await checkbox.click();
-            cloudflareChecked = true;
-            console.log('✅ Cloudflare verification checkbox checked');
-            addDebugStep('Cloudflare Verification', 'success', 'Cloudflare verification checkbox checked', `Checkbox ${i}: ${ariaLabel || id || name}`);
-            break;
-          } else {
-            console.log('ℹ️ Cloudflare verification checkbox already checked');
-            addDebugStep('Cloudflare Verification', 'info', 'Cloudflare verification checkbox already checked');
-            cloudflareChecked = true;
-            break;
-          }
-        }
-      }
-      
-      if (!cloudflareChecked) {
-        console.log('⚠️ Could not find Cloudflare verification checkbox');
-        addDebugStep('Cloudflare Verification', 'warning', 'Could not find Cloudflare verification checkbox');
-      }
-      
-      if (rememberMeFound) {
-        console.log('✅ "Remember me" checkbox found and skipped');
-        addDebugStep('Remember Me Skip', 'success', 'Remember me checkbox found and skipped');
-      }
-      
-      await sleep(1000);
-      await takeScreenshot('After Cloudflare Verification');
-
-    } catch (e) {
-      console.log('ℹ️ Cloudflare verification checkbox handling failed:', e.message);
-      addDebugStep('Cloudflare Verification', 'warning', 'Cloudflare verification checkbox handling failed', null, e.message);
-    }
-
-    // STEP 8: Click Continue button
-    console.log('➡️ STEP 8: Clicking Continue button...');
-    addDebugStep('Continue Button', 'info', 'Clicking Continue button');
-
-    try {
-      const continueSelectors = [
-        'button:has-text("Continue")',
-        'button:has-text("continue")',
-        'button[type="submit"]',
-        '.continue-button'
-      ];
-      
-      let continueClicked = false;
-      for (const selector of continueSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 3000 });
-          await page.click(selector);
-          continueClicked = true;
-          console.log('✅ Continue button clicked with selector:', selector);
-          addDebugStep('Continue Button', 'success', 'Continue button clicked', `Selector: ${selector}`);
-          break;
-        } catch (e) {
-          console.log('⚠️ Continue selector failed:', selector, e.message);
-        }
-      }
-      
-      if (!continueClicked) {
-        // Fallback: try to find button by text content
-        const buttons = await page.$$('button, input[type="submit"]');
-        for (const button of buttons) {
-          const text = await page.evaluate(el => el.textContent || el.value || '', button);
-          if (text && text.toLowerCase().includes('continue')) {
-            console.log('✅ Continue button clicked by text:', text);
-            await button.click();
-            continueClicked = true;
-            addDebugStep('Continue Button', 'success', 'Continue button clicked by text', `Text: ${text}`);
-            break;
-          }
-        }
-      }
-      
-      if (!continueClicked) {
-        throw new Error('Could not find Continue button');
-      }
-      
-      await sleep(3000);
-      await takeScreenshot('After Continue Click');
-
-    } catch (e) {
-      console.log('❌ Could not click Continue button:', e.message);
-      addDebugStep('Continue Button', 'error', 'Could not click Continue button', null, e.message);
-      await takeScreenshot('Continue Button Error');
-    }
-
-    // STEP 9: Look for Discord button
-    console.log('🎮 STEP 9: Looking for Discord button...');
-    addDebugStep('Discord Button', 'info', 'Looking for Discord login button');
-
-    try {
-      await sleep(3000);
-      
-      const discordSelectors = [
-        'button[aria-label*="Discord"]',
-        'button:has-text("Discord")',
-        'a[href*="discord"]',
-        'button svg path[d*="M20.3303"]',
-        'button:has(svg path[d*="M20.3303"])',
-        '[data-testid*="discord"]',
-        'button[class*="discord"]'
-      ];
-      
-      let discordClicked = false;
-      for (const selector of discordSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 3000 });
-          await page.click(selector);
-          discordClicked = true;
-          console.log('✅ Discord button clicked with selector:', selector);
-          addDebugStep('Discord Button', 'success', 'Discord button clicked', `Selector: ${selector}`);
-          break;
-        } catch (e) {
-          console.log('⚠️ Discord selector failed:', selector, e.message);
-        }
-      }
-      
-      if (!discordClicked) {
-        // Fallback: search all buttons for Discord
-        const buttons = await page.$$('button, a');
-        for (const button of buttons) {
-          const text = await page.evaluate(el => el.textContent || '', button);
-          const innerHTML = await page.evaluate(el => el.innerHTML || '', button);
-          
-          if (text.toLowerCase().includes('discord') || innerHTML.includes('M20.3303')) {
-            console.log('✅ Found Discord button by content:', text);
-            await button.click();
-            discordClicked = true;
-            addDebugStep('Discord Button', 'success', 'Discord button clicked by content', `Text: ${text}`);
-            break;
-          }
-        }
-      }
-      
-      if (discordClicked) {
-        await sleep(3000);
-        await takeScreenshot('After Discord Button Click');
-        
-        // Check if we're on Discord OAuth page
-        const currentUrl = page.url();
-        console.log('📍 Current URL after Discord click:', currentUrl);
-        addDebugStep('Discord OAuth Check', 'info', 'Checking if redirected to Discord OAuth page', `URL: ${currentUrl}`);
-        
-        if (currentUrl.includes('discord.com') && currentUrl.includes('oauth')) {
-          console.log('✅ Successfully redirected to Discord OAuth page');
-          addDebugStep('Discord OAuth Redirect', 'success', 'Successfully redirected to Discord OAuth page', `URL: ${currentUrl}`);
-          
-          await takeScreenshot('Discord OAuth Page');
-          
-          // Wait for OAuth page to fully load
-          await sleep(2000);
-          
-          // Look for Authorize button with more comprehensive selectors
-          console.log('🔍 Looking for Discord Authorize button...');
-          addDebugStep('Discord Authorization', 'info', 'Looking for Discord Authorize button');
-          
-          try {
-            const authorizeSelectors = [
-              'button:has-text("Authorize")',
-              'button:has-text("authorize")',
-              'button:has-text("Allow")',
-              'button:has-text("allow")',
-              'button:has-text("Continue")',
-              'button:has-text("continue")',
-              'button[type="submit"]',
-              'button[class*="authorize"]',
-              'button[class*="allow"]',
-              'button[class*="continue"]',
-              'button[class*="approve"]',
-              'button[class*="accept"]',
-              'button[class*="confirm"]',
-              'button[class*="submit"]',
-              'button[class*="primary"]',
-              'button[class*="blue"]',
-              'button[class*="green"]',
-              'button[class*="discord"]',
-              'button[data-testid*="authorize"]',
-              'button[data-testid*="allow"]',
-              'button[data-testid*="continue"]',
-              'button[aria-label*="authorize"]',
-              'button[aria-label*="allow"]',
-              'button[aria-label*="continue"]',
-              'button[title*="authorize"]',
-              'button[title*="allow"]',
-              'button[title*="continue"]'
-            ];
-            
-            let authorized = false;
-            let authorizeButtonFound = false;
-            
-            // First, let's see all buttons on the page
-            const allButtons = await page.$$('button, input[type="submit"], input[type="button"]');
-            console.log(`Found ${allButtons.length} buttons on Discord OAuth page`);
-            
-            for (let i = 0; i < allButtons.length; i++) {
-              const button = allButtons[i];
-              const text = await page.evaluate(el => el.textContent || el.value || '', button);
-              const ariaLabel = await page.evaluate(el => el.getAttribute('aria-label') || '', button);
-              const className = await page.evaluate(el => el.className || '', button);
-              const id = await page.evaluate(el => el.id || '', button);
-              
-              console.log(`Button ${i}: text="${text}", aria-label="${ariaLabel}", class="${className}", id="${id}"`);
-              
-              if (text && (text.toLowerCase().includes('authorize') || 
-                         text.toLowerCase().includes('allow') || 
-                         text.toLowerCase().includes('continue') ||
-                         text.toLowerCase().includes('approve') ||
-                         text.toLowerCase().includes('accept') ||
-                         text.toLowerCase().includes('confirm'))) {
-                console.log(`✅ Found potential authorize button by text: "${text}"`);
-                authorizeButtonFound = true;
-                try {
-                  await button.click();
-                  authorized = true;
-                  console.log('✅ Authorize button clicked by text:', text);
-                  addDebugStep('Discord Authorization', 'success', 'Authorize button clicked by text', `Text: ${text}`);
-                  break;
-                } catch (e) {
-                  console.log('⚠️ Failed to click button by text:', e.message);
-                }
-              }
-            }
-            
-            // If no button found by text, try selectors
-            if (!authorized) {
-              for (const selector of authorizeSelectors) {
-                try {
-                  await page.waitForSelector(selector, { timeout: 2000 });
-                  await page.click(selector);
-                  authorized = true;
-                  console.log('✅ Authorize button clicked with selector:', selector);
-                  addDebugStep('Discord Authorization', 'success', 'Authorize button clicked with selector', `Selector: ${selector}`);
-                  break;
-                } catch (e) {
-                  console.log('⚠️ Authorize selector failed:', selector, e.message);
-                }
-              }
-            }
-            
-            if (!authorizeButtonFound) {
-              console.log('⚠️ No authorize button found on Discord OAuth page');
-              addDebugStep('Discord Authorization', 'warning', 'No authorize button found on Discord OAuth page');
-            }
-            
-            if (authorized) {
-              console.log('✅ Discord authorization initiated, waiting for redirect...');
-              addDebugStep('Discord Authorization', 'success', 'Discord authorization initiated');
-              
-              // Wait for redirect with longer timeout
-              await sleep(5000);
-              await takeScreenshot('After Discord Authorization');
-              
-              // Check if we're back on Recraft.ai
-              const finalUrl = page.url();
-              console.log('📍 Final URL after authorization:', finalUrl);
-              addDebugStep('Return to Recraft', 'info', 'Checking if returned to Recraft.ai after Discord auth', `URL: ${finalUrl}`);
-              
-              if (finalUrl.includes('recraft.ai')) {
-                console.log('✅ Successfully returned to Recraft.ai after Discord auth');
-                addDebugStep('Return to Recraft', 'success', 'Successfully returned to Recraft.ai after Discord auth', `URL: ${finalUrl}`);
-              } else if (finalUrl.includes('discord.com')) {
-                console.log('⚠️ Still on Discord - authorization may have failed');
-                addDebugStep('Return to Recraft', 'warning', 'Still on Discord - authorization may have failed', `URL: ${finalUrl}`);
-              } else {
-                console.log('⚠️ Unexpected redirect location');
-                addDebugStep('Return to Recraft', 'warning', 'Unexpected redirect location', `URL: ${finalUrl}`);
-              }
-            } else {
-              addDebugStep('Discord Authorization', 'error', 'Could not find or click Authorize button on OAuth page');
+            const element = document.querySelector(selector);
+            if (element) {
+              element.click();
+              return true;
             }
           } catch (e) {
-            console.log('❌ Discord authorization failed:', e.message);
-            addDebugStep('Discord Authorization', 'error', 'Discord authorization failed', null, e.message);
-            await takeScreenshot('Discord Authorization Error');
+            // Continue to next selector
           }
-        } else if (currentUrl.includes('recraft.ai')) {
-          console.log('✅ Already on Recraft.ai - Discord session may be established');
-          addDebugStep('Discord Session Check', 'success', 'Already on Recraft.ai - Discord session may be established', `URL: ${currentUrl}`);
-        } else {
-          console.log('⚠️ Did not redirect to Discord OAuth page');
-          addDebugStep('Discord OAuth Redirect', 'warning', 'Did not redirect to Discord OAuth page', `Current URL: ${currentUrl}`);
         }
-      } else {
-        addDebugStep('Discord Button', 'error', 'Could not find Discord button');
-        console.log('⚠️ Could not find Discord button');
-      }
-      
-    } catch (e) {
-      console.log('⚠️ Discord button handling failed:', e.message);
-      addDebugStep('Discord Button', 'error', 'Discord button handling failed', null, e.message);
-      await takeScreenshot('Discord Button Error');
-    }
-
-    // STEP 10: Check if we're logged in to Recraft.ai
-    console.log('🔍 STEP 10: Checking Recraft.ai login status...');
-    addDebugStep('Recraft Login Check', 'info', 'Checking if logged into Recraft.ai');
-
-    try {
-      const isLoggedIn = await page.evaluate(() => {
-        const userMenu = document.querySelector('[class*="user"]') || document.querySelector('[data-testid*="user"]');
-        const dashboard = document.querySelector('[class*="dashboard"]') || document.querySelector('[data-testid*="dashboard"]');
-        const credits = document.querySelector('[class*="credit"]') || document.querySelector('[class*="balance"]');
-        
-        return !!(userMenu || dashboard || credits);
+        return false;
       });
-      
-      if (isLoggedIn) {
-        console.log('✅ Successfully logged into Recraft.ai!');
-        addDebugStep('Recraft Login Check', 'success', 'Successfully logged into Recraft.ai');
+
+      if (signInClicked) {
+        addDebugStep('Sign In Button', 'success', 'Clicked Sign in button');
+        console.log('✅ Sign in button clicked');
       } else {
-        console.log('⚠️ Not logged into Recraft.ai yet');
-        addDebugStep('Recraft Login Check', 'warning', 'Not logged into Recraft.ai yet');
+        addDebugStep('Sign In Button', 'warning', 'Could not find or click Sign in button');
+        console.log('⚠️ Could not find Sign in button, trying alternative approach');
       }
-      
-      await takeScreenshot('Final Recraft.ai Status');
-      
-    } catch (e) {
-      console.log('⚠️ Recraft.ai login check failed:', e.message);
-      addDebugStep('Recraft Login Check', 'error', 'Recraft.ai login check failed', null, e.message);
+    } catch (error) {
+      addDebugStep('Sign In Button', 'error', 'Error finding Sign in button', null, error.message);
+      console.log('❌ Error finding Sign in button:', error.message);
     }
 
-    // Return success response with debug data
+    await sleep(3000);
+    await takeScreenshot('After Sign In Click');
+
+    // Navigate to the login URL directly
+    addDebugStep('Direct Login URL', 'info', 'Navigating to Recraft.ai login URL');
+    console.log('🔗 Navigating to Recraft.ai login URL...');
+    
+    await page.goto('https://id.recraft.ai/realms/recraft/protocol/openid-connect/auth?client_id=frontend-client&scope=openid%20email%20profile&response_type=code&redirect_uri=https%3A%2F%2Fwww.recraft.ai%2Fapi%2Fauth%2Fcallback%2Fkeycloak&grant_type=authorization_code&state=RmXXBVX5QQ-yw7gVJnQhM2a56j55TwJJzpl2MLlMQ6s&code_challenge=0xUu8RvStUZJZrXxoYEMwDJ40lZGhhZ96hqTbSc8rHI&code_challenge_method=S256', { 
+      waitUntil: 'domcontentloaded', 
+      timeout: 30000 
+    });
+    
+    await sleep(3000);
+    await takeScreenshot('Recraft.ai Login Page');
+    addDebugStep('Direct Login URL', 'success', 'Navigated to Recraft.ai login page');
+
+    // Check for "Sorry, nothing to see here" error page
+    const errorPageCheck = await page.evaluate(() => {
+      const errorText = document.body.innerText.toLowerCase();
+      const hasError = errorText.includes('sorry, nothing to see here') || 
+                      errorText.includes('nothing to see here') ||
+                      errorText.includes('go back to recraft');
+      
+      if (hasError) {
+        // Look for "Go back to recraft" button
+        const goBackButton = document.querySelector('a[href="/projects"], a:has-text("Go back to recraft"), button:has-text("Go back to recraft")');
+        return {
+          hasError: true,
+          goBackButton: !!goBackButton,
+          buttonText: goBackButton ? goBackButton.innerText : null
+        };
+      }
+      
+      return { hasError: false };
+    });
+
+    if (errorPageCheck.hasError) {
+      addDebugStep('Error Page Detection', 'warning', 'Detected error page, attempting to go back');
+      console.log('⚠️ Detected error page, looking for Go back button...');
+      
+      if (errorPageCheck.goBackButton) {
+        try {
+          await page.click('a[href="/projects"], a:has-text("Go back to recraft"), button:has-text("Go back to recraft")');
+          await sleep(3000);
+          await takeScreenshot('After Go Back Click');
+          addDebugStep('Error Page Recovery', 'success', 'Clicked Go back button');
+          console.log('✅ Clicked Go back button');
+        } catch (error) {
+          addDebugStep('Error Page Recovery', 'error', 'Failed to click Go back button', null, error.message);
+          console.log('❌ Failed to click Go back button:', error.message);
+        }
+      }
+    }
+
+    // Wait for email input field
+    addDebugStep('Email Input', 'info', 'Waiting for email input field');
+    console.log('📧 Waiting for email input field...');
+    
+    try {
+      await page.waitForSelector('input[type="email"], input[name="email"], input[id="email"], input[placeholder*="email"], input[placeholder*="Email"]', { timeout: 15000 });
+      addDebugStep('Email Input', 'success', 'Found email input field');
+      console.log('✅ Found email input field');
+    } catch (error) {
+      addDebugStep('Email Input', 'error', 'Could not find email input field', null, error.message);
+      console.log('❌ Could not find email input field:', error.message);
+    }
+
+    await sleep(2000);
+    await takeScreenshot('Email Input Field Found');
+
+    // Fill email
+    addDebugStep('Email Entry', 'info', 'Filling email field');
+    console.log('✍️ Filling email field...');
+    
+    try {
+      await page.type('input[type="email"], input[name="email"], input[id="email"], input[placeholder*="email"], input[placeholder*="Email"]', recraftEmail, { delay: 100 });
+      addDebugStep('Email Entry', 'success', 'Email filled successfully');
+      console.log('✅ Email filled successfully');
+    } catch (error) {
+      addDebugStep('Email Entry', 'error', 'Failed to fill email', null, error.message);
+      console.log('❌ Failed to fill email:', error.message);
+    }
+
+    await sleep(2000);
+    await takeScreenshot('Email Filled');
+
+    // Look for and check the Cloudflare verification checkbox
+    addDebugStep('Cloudflare Checkbox', 'info', 'Looking for Cloudflare verification checkbox');
+    console.log('☑️ Looking for Cloudflare verification checkbox...');
+    
+    try {
+      // Look for checkbox that's not "Remember me"
+      const checkboxFound = await page.evaluate(() => {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        for (const checkbox of checkboxes) {
+          const label = checkbox.closest('label');
+          const labelText = label ? label.innerText.toLowerCase() : '';
+          const nearbyText = checkbox.parentElement.innerText.toLowerCase();
+          
+          // Skip "Remember me" checkbox
+          if (labelText.includes('remember') || nearbyText.includes('remember')) {
+            continue;
+          }
+          
+          // Look for verification-related text
+          if (labelText.includes('verify') || labelText.includes('human') || 
+              nearbyText.includes('verify') || nearbyText.includes('human') ||
+              labelText.includes('cloudflare') || nearbyText.includes('cloudflare')) {
+            return { found: true, text: labelText || nearbyText };
+          }
+        }
+        return { found: false };
+      });
+
+      if (checkboxFound.found) {
+        console.log('✅ Found Cloudflare checkbox:', checkboxFound.text);
+        await page.click('input[type="checkbox"]:not([id*="remember"]):not([name*="remember"])');
+        addDebugStep('Cloudflare Checkbox', 'success', 'Checked Cloudflare verification checkbox');
+        console.log('✅ Cloudflare checkbox checked');
+      } else {
+        addDebugStep('Cloudflare Checkbox', 'warning', 'Could not find Cloudflare checkbox');
+        console.log('⚠️ Could not find Cloudflare checkbox');
+      }
+    } catch (error) {
+      addDebugStep('Cloudflare Checkbox', 'error', 'Error with Cloudflare checkbox', null, error.message);
+      console.log('❌ Error with Cloudflare checkbox:', error.message);
+    }
+
+    await sleep(2000);
+    await takeScreenshot('Cloudflare Checkbox Checked');
+
+    // Look for and click Continue button
+    addDebugStep('Continue Button', 'info', 'Looking for Continue button');
+    console.log('➡️ Looking for Continue button...');
+    
+    try {
+      await page.waitForSelector('button:has-text("Continue"), input[type="submit"], button[type="submit"], button:has-text("Next"), button:has-text("Submit")', { timeout: 10000 });
+      
+      const continueClicked = await page.evaluate(() => {
+        const selectors = [
+          'button:has-text("Continue")',
+          'input[type="submit"]',
+          'button[type="submit"]',
+          'button:has-text("Next")',
+          'button:has-text("Submit")'
+        ];
+        
+        for (const selector of selectors) {
+          try {
+            const element = document.querySelector(selector);
+            if (element) {
+              element.click();
+              return true;
+            }
+          } catch (e) {
+            // Continue to next selector
+          }
+        }
+        return false;
+      });
+
+      if (continueClicked) {
+        addDebugStep('Continue Button', 'success', 'Clicked Continue button');
+        console.log('✅ Continue button clicked');
+      } else {
+        addDebugStep('Continue Button', 'error', 'Could not find or click Continue button');
+        console.log('❌ Could not find Continue button');
+      }
+    } catch (error) {
+      addDebugStep('Continue Button', 'error', 'Error finding Continue button', null, error.message);
+      console.log('❌ Error finding Continue button:', error.message);
+    }
+
+    await sleep(5000);
+    await takeScreenshot('After Continue Click');
+
+    // Check if we're on verification code page
+    const verificationCheck = await page.evaluate(() => {
+      const pageText = document.body.innerText.toLowerCase();
+      const hasVerification = pageText.includes('verification') || 
+                             pageText.includes('code') || 
+                             pageText.includes('enter the code') ||
+                             pageText.includes('check your email');
+      
+      return {
+        hasVerification,
+        currentUrl: window.location.href,
+        pageTitle: document.title
+      };
+    });
+
+    if (verificationCheck.hasVerification) {
+      addDebugStep('Verification Code Page', 'success', 'Reached verification code page');
+      console.log('✅ Reached verification code page');
+      console.log('📧 Check your email for the verification code');
+    } else {
+      addDebugStep('Verification Code Page', 'warning', 'Did not reach verification code page');
+      console.log('⚠️ Did not reach verification code page');
+    }
+
+    await sleep(3000);
+    await takeScreenshot('Final State');
+
+    // Final status
+    const finalStatus = await page.evaluate(() => {
+      return {
+        currentUrl: window.location.href,
+        pageTitle: document.title,
+        hasEmailInput: !!document.querySelector('input[type="email"]'),
+        hasCodeInput: !!document.querySelector('input[type="text"], input[placeholder*="code"]'),
+        hasVerificationText: document.body.innerText.toLowerCase().includes('verification')
+      };
+    });
+
+    console.log('Final status:', finalStatus);
+    addDebugStep('Final Status', 'info', 'Login process completed', finalStatus);
+
     return {
-      ok: true,
+      success: true,
       message: 'Recraft.ai login process completed',
-      finalUrl: page.url(),
-      debugSteps: debugSteps,
-      screenshots: screenshots
+      finalUrl: finalStatus.currentUrl,
+      debugSteps,
+      screenshots
     };
 
   } catch (error) {
-    console.error('❌ Scraping error:', error);
+    console.error('❌ Recraft.ai login error:', error);
+    addDebugStep('Error', 'error', 'Login process failed', null, error.message);
     
-    // Take error screenshot if possible
-    let errorScreenshot = null;
-    try {
-      if (page) {
-        errorScreenshot = await page.screenshot({ fullPage: true });
-      }
-    } catch (e) {
-      console.log('Could not take error screenshot:', e.message);
-    }
-
     return {
-      ok: false,
+      success: false,
       error: error.message,
-      debugSteps: debugSteps,
-      screenshots: screenshots,
-      errorScreenshot: errorScreenshot ? errorScreenshot.toString('base64') : null
+      debugSteps,
+      screenshots
     };
   } finally {
     if (browser) {
@@ -880,5 +363,8 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
     }
   }
 }
+
+// Helper function for sleep
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 module.exports = { scrapeRecraftLogin };
