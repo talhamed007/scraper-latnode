@@ -83,32 +83,33 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     console.log('🔍 Looking for Google login button...');
     
     try {
-      // Wait for Google login button using the specific SVG element
-      await page.waitForSelector('svg[viewBox="0 0 24 24"] title:has-text("Google"), button:has(svg[viewBox="0 0 24 24"]), button:has(svg title:has-text("Google"))', { timeout: 15000 });
+      // Wait for Google login link using the specific attributes
+      await page.waitForSelector('a[data-provider="google"], a[href*="broker/google/login"], a:has(svg[viewBox="0 0 24 24"])', { timeout: 15000 });
       
-      // Try to click Google button using the specific SVG
+      // Try to click Google button using the specific link
       const googleClicked = await page.evaluate(() => {
-        // First, try to find the exact Google SVG with the specific paths
-        const googleSvg = document.querySelector('svg[viewBox="0 0 24 24"]');
-        if (googleSvg) {
-          const title = googleSvg.querySelector('title');
-          if (title && title.textContent.includes('Google')) {
-            const button = googleSvg.closest('button');
-            if (button) {
-              button.click();
-              return true;
-            }
-          }
+        // First, try to find the Google link by data-provider attribute
+        const googleLink = document.querySelector('a[data-provider="google"]');
+        if (googleLink) {
+          googleLink.click();
+          return true;
         }
         
-        // Look for buttons containing the Google SVG
-        const buttons = document.querySelectorAll('button');
-        for (const button of buttons) {
-          const svg = button.querySelector('svg[viewBox="0 0 24 24"]');
+        // Look for link with Google broker URL
+        const googleBrokerLink = document.querySelector('a[href*="broker/google/login"]');
+        if (googleBrokerLink) {
+          googleBrokerLink.click();
+          return true;
+        }
+        
+        // Look for links containing the Google SVG
+        const links = document.querySelectorAll('a');
+        for (const link of links) {
+          const svg = link.querySelector('svg[viewBox="0 0 24 24"]');
           if (svg) {
             const title = svg.querySelector('title');
             if (title && title.textContent.includes('Google')) {
-              button.click();
+              link.click();
               return true;
             }
           }
@@ -116,13 +117,12 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
         
         // Fallback selectors
         const selectors = [
-          'button[class*="google"]',
-          'button:has-text("Google")',
+          'a[class*="google"]',
           'a:has-text("Google")',
           '[data-testid*="google"]',
           '[class*="google"]',
           'svg[viewBox*="24"]',
-          'button[aria-label*="Google"]'
+          'a[aria-label*="Google"]'
         ];
         
         for (const selector of selectors) {
