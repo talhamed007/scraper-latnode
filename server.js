@@ -2821,27 +2821,34 @@ async function scrapeMakeCredits(email, password) {
       
       // Look for credit patterns in the entire page text
       const creditPatterns = [
+        // Pattern 1: "Credits left: 3.251/10.000" (credits left / total)
         /Credits?\s*left\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
-        /Credits?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits?\s*left/i,
+        
+        // Pattern 2: "~6.749/10.000 (67% used)" (credits used / total)
+        /~?([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i,
+        /Credits?\s*~?([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i,
+        
+        // Pattern 3: General "number/number" patterns
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*Credits/i,
-        /Credits?\s*left\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
+        /Credits?\s*:?\s*([0-9.,]+)\s*\/\s*([0-9.,]+)/i,
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*left/i,
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*credits/i,
         /([0-9.,]+)\s*of\s*([0-9.,]+)\s*credits/i,
-        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*used/i,
-        // Specific patterns for Make.com dashboard
-        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i,
-        /Credits\s*([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i,
-        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*used/i
       ];
       
       let creditsMatch = null;
+      let isCreditsLeft = false; // Track if we found credits left or credits used
       
       // Try each credit pattern
-      for (let pattern of creditPatterns) {
+      for (let i = 0; i < creditPatterns.length; i++) {
+        const pattern = creditPatterns[i];
         creditsMatch = allText.match(pattern);
         if (creditsMatch) {
           console.log('Found credits with pattern:', pattern);
+          // Patterns 0-1 are "credits left" format, patterns 2+ are "credits used" format
+          isCreditsLeft = (i <= 1);
           break;
         }
       }
@@ -2852,6 +2859,7 @@ async function scrapeMakeCredits(email, password) {
         const creditContext = allText.match(/credit[^0-9]*([0-9.,]+)\s*\/\s*([0-9.,]+)/i);
         if (creditContext) {
           creditsMatch = creditContext;
+          isCreditsLeft = true; // Assume it's credits left if found near "credit"
           console.log('Found credits in context:', creditContext);
         }
       }
@@ -2863,24 +2871,48 @@ async function scrapeMakeCredits(email, password) {
         if (matches.length > 0) {
           // Take the first reasonable match (not too small numbers)
           for (const match of matches) {
-            const left = parseFloat(match[1].replace(/,/g, ''));
-            const total = parseFloat(match[2].replace(/,/g, ''));
-            if (left > 0 && total > 0 && left <= total && total > 100) { // Reasonable credit range
+            const first = parseFloat(match[1].replace(/,/g, ''));
+            const second = parseFloat(match[2].replace(/,/g, ''));
+            if (first > 0 && second > 0 && first <= second && second > 100) { // Reasonable credit range
               creditsMatch = match;
-              console.log('Found credits with number pattern:', match);
+              // If first number is much smaller than second, it's likely credits left
+              // If first number is close to second, it's likely credits used
+              isCreditsLeft = (first < second * 0.8);
+              console.log('Found credits with number pattern:', match, 'isCreditsLeft:', isCreditsLeft);
               break;
             }
           }
         }
       }
       
-      console.log('Final credits match:', creditsMatch);
+      console.log('Final credits match:', creditsMatch, 'isCreditsLeft:', isCreditsLeft);
+      
+      let credits_left = null;
+      let credits_total = null;
+      let credits_used = null;
+      
+      if (creditsMatch) {
+        const first = parseFloat(creditsMatch[1].replace(/,/g, ''));
+        const second = parseFloat(creditsMatch[2].replace(/,/g, ''));
+        
+        if (isCreditsLeft) {
+          // We found "credits left / total" format
+          credits_left = creditsMatch[1];
+          credits_total = creditsMatch[2];
+          credits_used = (second - first).toString();
+        } else {
+          // We found "credits used / total" format
+          credits_used = creditsMatch[1];
+          credits_total = creditsMatch[2];
+          credits_left = (second - first).toString();
+        }
+      }
       
       return {
         rawText: allText.substring(0, 2000), // First 2000 chars for debugging
-        credits_left: creditsMatch ? creditsMatch[1] : null,
-        credits_total: creditsMatch ? creditsMatch[2] : null,
-        credits_used: creditsMatch ? (parseFloat(creditsMatch[2].replace(/,/g, '')) - parseFloat(creditsMatch[1].replace(/,/g, ''))).toString() : null
+        credits_left: credits_left,
+        credits_total: credits_total,
+        credits_used: credits_used
       };
     });
     
