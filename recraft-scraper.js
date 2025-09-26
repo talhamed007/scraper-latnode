@@ -178,12 +178,24 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await sleep(2000);
     await takeScreenshot('Google Email Input Found');
 
-    // Fill Google email
-    addDebugStep('Google Email Entry', 'info', 'Filling Google email field');
-    console.log('✍️ Filling Google email field...');
+    // Clear and fill Google email
+    addDebugStep('Google Email Entry', 'info', 'Clearing and filling Google email field');
+    console.log('✍️ Clearing and filling Google email field...');
     
     try {
+      // Clear the field first
+      await page.click('input[type="email"], input[name="identifier"], input[id="identifierId"], input[placeholder*="email"], input[placeholder*="Email"]');
+      await page.keyboard.down('Control');
+      await page.keyboard.press('KeyA');
+      await page.keyboard.up('Control');
+      await page.keyboard.press('Delete');
+      
+      // Type the email
       await page.type('input[type="email"], input[name="identifier"], input[id="identifierId"], input[placeholder*="email"], input[placeholder*="Email"]', googleEmail, { delay: 100 });
+      
+      // Wait a moment for the email to be processed
+      await sleep(2000);
+      
       addDebugStep('Google Email Entry', 'success', 'Google email filled successfully');
       console.log('✅ Google email filled successfully');
     } catch (error) {
@@ -194,14 +206,23 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await sleep(2000);
     await takeScreenshot('Google Email Filled');
 
-    // Click Next/Continue button for email
+    // Click Next button for email (using specific ID)
     addDebugStep('Google Email Next', 'info', 'Looking for Next button after email');
     console.log('➡️ Looking for Next button after email...');
     
     try {
-      await page.waitForSelector('button:has-text("Next"), input[type="submit"], button[type="submit"], button:has-text("Continue"), button:has-text("Sign in")', { timeout: 10000 });
+      // Wait for the specific identifierNext button
+      await page.waitForSelector('#identifierNext, button:has-text("Next"), input[type="submit"], button[type="submit"]', { timeout: 10000 });
       
       const nextClicked = await page.evaluate(() => {
+        // Try the specific identifierNext button first
+        const identifierNext = document.querySelector('#identifierNext');
+        if (identifierNext) {
+          identifierNext.click();
+          return true;
+        }
+        
+        // Fallback to general selectors
         const selectors = [
           'button:has-text("Next")',
           'input[type="submit"]',
@@ -255,12 +276,24 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await sleep(2000);
     await takeScreenshot('Google Password Input Found');
 
-    // Fill Google password
-    addDebugStep('Google Password Entry', 'info', 'Filling Google password field');
-    console.log('🔐 Filling Google password field...');
+    // Clear and fill Google password
+    addDebugStep('Google Password Entry', 'info', 'Clearing and filling Google password field');
+    console.log('🔐 Clearing and filling Google password field...');
     
     try {
+      // Clear the field first
+      await page.click('input[type="password"], input[name="password"], input[id="password"], input[placeholder*="password"], input[placeholder*="Password"]');
+      await page.keyboard.down('Control');
+      await page.keyboard.press('KeyA');
+      await page.keyboard.up('Control');
+      await page.keyboard.press('Delete');
+      
+      // Type the password
       await page.type('input[type="password"], input[name="password"], input[id="password"], input[placeholder*="password"], input[placeholder*="Password"]', googlePassword, { delay: 100 });
+      
+      // Wait a moment for the password to be processed
+      await sleep(2000);
+      
       addDebugStep('Google Password Entry', 'success', 'Google password filled successfully');
       console.log('✅ Google password filled successfully');
     } catch (error) {
@@ -271,14 +304,23 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await sleep(2000);
     await takeScreenshot('Google Password Filled');
 
-    // Click Next/Continue button for password
+    // Click Next button for password (using specific ID)
     addDebugStep('Google Password Next', 'info', 'Looking for Next button after password');
     console.log('➡️ Looking for Next button after password...');
     
     try {
-      await page.waitForSelector('button:has-text("Next"), input[type="submit"], button[type="submit"], button:has-text("Continue"), button:has-text("Sign in")', { timeout: 10000 });
+      // Wait for the specific passwordNext button
+      await page.waitForSelector('#passwordNext, button:has-text("Next"), input[type="submit"], button[type="submit"]', { timeout: 10000 });
       
       const nextClicked = await page.evaluate(() => {
+        // Try the specific passwordNext button first
+        const passwordNext = document.querySelector('#passwordNext');
+        if (passwordNext) {
+          passwordNext.click();
+          return true;
+        }
+        
+        // Fallback to general selectors
         const selectors = [
           'button:has-text("Next")',
           'input[type="submit"]',
