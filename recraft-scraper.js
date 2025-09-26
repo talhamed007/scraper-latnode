@@ -112,79 +112,44 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
       addDebugStep('Token Validation', 'warning', 'Discord token validation failed, but continuing with Recraft.ai flow');
     }
 
-    // Navigate to Discord app to establish session
-    console.log('🌐 Navigating to Discord app to establish session...');
-    await page.goto('https://discord.com/app', { 
-      waitUntil: 'domcontentloaded', 
-      timeout: 30000 
-    });
-    
-    await sleep(3000);
-    await takeScreenshot('Discord App Initial');
-    addDebugStep('Discord App Navigation', 'success', 'Navigated to Discord app');
+    // Alternative approach: Try manual Discord login
+    console.log('🔐 Attempting manual Discord login...');
+    addDebugStep('Discord Manual Login', 'info', 'Attempting manual Discord login with email/password');
 
-    // Inject Discord token into browser storage
-    console.log('🔑 Injecting Discord token into browser storage...');
-    const tokenInjection = await page.evaluate((token) => {
-      try {
-        // Set token in localStorage
-        localStorage.setItem('token', token);
-        localStorage.setItem('auth_token', token);
-        localStorage.setItem('discord_token', token);
-        
-        // Set token in sessionStorage
-        sessionStorage.setItem('token', token);
-        sessionStorage.setItem('auth_token', token);
-        sessionStorage.setItem('discord_token', token);
-        
-        // Set token in cookies
-        document.cookie = `token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-        document.cookie = `auth_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-        document.cookie = `discord_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
-        
-        return { success: true, message: 'Token injected successfully' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }, discordToken);
-
-    console.log('Token injection result:', tokenInjection);
-    addDebugStep('Token Injection', tokenInjection.success ? 'success' : 'error', 
-      tokenInjection.success ? 'Token injected successfully' : 'Token injection failed', tokenInjection);
-
-    // Refresh page to apply token
-    console.log('🔄 Refreshing Discord page to apply token...');
-    await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-    await sleep(5000);
-    await takeScreenshot('Discord App After Token');
-
-    // Check if Discord login was successful
-    const discordLoginStatus = await page.evaluate(() => {
-      const userElements = document.querySelectorAll('[class*="user"], [class*="avatar"], [class*="profile"]');
-      const channelElements = document.querySelectorAll('[class*="channel"], [class*="server"]');
-      const sidebarElements = document.querySelectorAll('[class*="sidebar"], [class*="guild"]');
+    try {
+      // Navigate to Discord login page
+      await page.goto('https://discord.com/login', { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 30000 
+      });
       
-      return {
-        userElementsFound: userElements.length > 0,
-        channelElementsFound: channelElements.length > 0,
-        sidebarElementsFound: sidebarElements.length > 0,
-        currentUrl: window.location.href,
-        pageTitle: document.title,
-        hasToken: !!localStorage.getItem('token') || !!sessionStorage.getItem('token')
-      };
-    });
+      await sleep(3000);
+      await takeScreenshot('Discord Login Page');
+      addDebugStep('Discord Login Page', 'success', 'Navigated to Discord login page');
 
-    console.log('Discord login status:', discordLoginStatus);
-    
-    if (discordLoginStatus.userElementsFound || discordLoginStatus.channelElementsFound || discordLoginStatus.sidebarElementsFound) {
-      console.log('✅ Discord login successful!');
-      addDebugStep('Discord Login', 'success', 'Discord login successful', discordLoginStatus);
-    } else {
-      console.log('⚠️ Discord login may have failed, but continuing...');
-      addDebugStep('Discord Login', 'warning', 'Discord login may have failed, but continuing', discordLoginStatus);
+      // Look for email and password fields
+      const emailField = await page.$('input[name="email"], input[type="email"]');
+      const passwordField = await page.$('input[name="password"], input[type="password"]');
+      
+      if (emailField && passwordField) {
+        console.log('✅ Found Discord login fields, but need credentials...');
+        addDebugStep('Discord Login Fields', 'info', 'Found Discord login fields, but manual credentials needed');
+        
+        // For now, just take a screenshot and continue
+        await takeScreenshot('Discord Login Fields Found');
+      } else {
+        console.log('⚠️ Could not find Discord login fields');
+        addDebugStep('Discord Login Fields', 'warning', 'Could not find Discord login fields');
+      }
+      
+    } catch (e) {
+      console.log('⚠️ Discord manual login failed:', e.message);
+      addDebugStep('Discord Manual Login', 'warning', 'Discord manual login failed', null, e.message);
     }
 
-    await takeScreenshot('Discord Login Final Status');
+    // Continue to Recraft.ai regardless
+    console.log('🌐 Proceeding to Recraft.ai...');
+    addDebugStep('Recraft Proceed', 'info', 'Proceeding to Recraft.ai flow');
 
     // STEP 2: Navigate to Recraft.ai
     console.log('🌐 STEP 2: Navigating to Recraft.ai...');
