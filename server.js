@@ -2222,6 +2222,131 @@ app.post('/api/scrape-recraft', async (req, res) => {
   }
 });
 
+// HTTP-based Latenode scraper endpoint
+app.post('/api/http/latenode', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Email and password are required'
+    });
+  }
+
+  try {
+    console.log('🌐 HTTP Latenode scraping for:', email);
+    
+    // Simulate API call to Latenode (you would replace this with actual HTTP requests)
+    // For now, returning mock data - you can implement actual HTTP scraping here
+    const mockData = {
+      ok: true,
+      credits_used: '150',
+      credits_total: '1000',
+      credits_left: '850',
+      plugAndPlay_used: '25',
+      plugAndPlay_total: '100',
+      plugAndPlay_left: '75',
+      rawText: 'Credits left: 850 / 1000, Plug & Play Tokens: 75 / 100'
+    };
+
+    res.json(mockData);
+  } catch (error) {
+    console.error('❌ HTTP Latenode error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// HTTP-based Make.com scraper endpoint
+app.post('/api/http/make', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Email and password are required'
+    });
+  }
+
+  try {
+    console.log('🌐 HTTP Make.com scraping for:', email);
+    
+    // Simulate API call to Make.com (you would replace this with actual HTTP requests)
+    const mockData = {
+      ok: true,
+      credits_used: '200',
+      credits_total: '500',
+      credits_left: '300',
+      rawText: 'Credits left: 300 / 500'
+    };
+
+    res.json(mockData);
+  } catch (error) {
+    console.error('❌ HTTP Make.com error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// HTTP-based KIE.ai scraper endpoint
+app.post('/api/http/kie', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Email and password are required'
+    });
+  }
+
+  try {
+    console.log('🌐 HTTP KIE.ai scraping for:', email);
+    
+    // Simulate API call to KIE.ai (you would replace this with actual HTTP requests)
+    const mockData = {
+      ok: true,
+      remaining_credits: '450',
+      rawText: 'Remaining credits: 450'
+    };
+
+    res.json(mockData);
+  } catch (error) {
+    console.error('❌ HTTP KIE.ai error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
 // Add error handling for server startup
 app.listen(PORT, (err) => {
   if (err) {
