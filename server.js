@@ -2707,9 +2707,64 @@ async function scrapeMakeCredits(email, password) {
 
     console.log('📊 Navigating to dashboard...');
     
+    // First, try to click on the Organization button to get to the proper dashboard
+    try {
+      console.log('🏢 Looking for Organization button...');
+      
+      // Wait for the page to load completely
+      await sleep(3000);
+      
+      // Look for Organization button/link in the top navigation
+      const orgSelectors = [
+        'a[href*="/organization"]',
+        'button:has-text("Organization")',
+        'a:has-text("Organization")',
+        '[data-testid*="organization"]',
+        '.organization-link',
+        'a[href*="/dashboard"]'
+      ];
+      
+      let orgClicked = false;
+      for (const selector of orgSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.click(selector);
+          orgClicked = true;
+          console.log(`✅ Clicked Organization button with selector: ${selector}`);
+          await sleep(2000);
+          break;
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      // Fallback: try to find Organization by text content
+      if (!orgClicked) {
+        const orgElements = await page.$$('a, button, [role="button"]');
+        for (const element of orgElements) {
+          const text = await page.evaluate(el => el.textContent || el.getAttribute('href') || '', element);
+          if (text && (text.toLowerCase().includes('organization') || text.includes('/organization'))) {
+            console.log('✅ Clicked Organization button by text:', text);
+            await element.click();
+            await sleep(2000);
+            orgClicked = true;
+            break;
+          }
+        }
+      }
+      
+      if (orgClicked) {
+        console.log('✅ Successfully clicked Organization button');
+      } else {
+        console.log('⚠️ Could not find Organization button, trying direct navigation...');
+      }
+    } catch (e) {
+      console.log('⚠️ Error clicking Organization button:', e.message);
+    }
+    
     // Navigate to dashboard if not already there
     const currentUrl = page.url();
-    if (!currentUrl.includes('/dashboard')) {
+    if (!currentUrl.includes('/dashboard') && !currentUrl.includes('/organization')) {
       await page.goto('https://eu2.make.com/organization/dashboard', { 
         waitUntil: 'domcontentloaded', 
         timeout: 60000 
@@ -2773,7 +2828,11 @@ async function scrapeMakeCredits(email, password) {
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*left/i,
         /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*credits/i,
         /([0-9.,]+)\s*of\s*([0-9.,]+)\s*credits/i,
-        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*used/i
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*used/i,
+        // Specific patterns for Make.com dashboard
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i,
+        /Credits\s*([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i,
+        /([0-9.,]+)\s*\/\s*([0-9.,]+)\s*\([0-9]+%\s*used\)/i
       ];
       
       let creditsMatch = null;
