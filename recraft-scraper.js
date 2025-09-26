@@ -108,7 +108,8 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
       tokenValidation.success ? `Token valid for user: ${tokenValidation.user?.username}` : 'Token validation failed', tokenValidation);
 
     if (!tokenValidation.success) {
-      throw new Error('Discord token is invalid');
+      console.log('⚠️ Discord token validation failed, but continuing with Recraft.ai flow...');
+      addDebugStep('Token Validation', 'warning', 'Discord token validation failed, but continuing with Recraft.ai flow');
     }
 
     // Navigate to Discord app to establish session
