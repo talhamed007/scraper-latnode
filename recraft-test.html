@@ -215,29 +215,57 @@
                     `<h3>✅ Success!</h3><p>${data.message}</p><p><strong>Final URL:</strong> ${data.finalUrl}</p>` :
                     `<h3>❌ Error!</h3><p>${data.error}</p>`;
                 
-                // Show debug info
+                // Show debug info with screenshots below each step
                 if (data.debugSteps && data.debugSteps.length > 0) {
                     debugInfo.style.display = 'block';
-                    debugSteps.innerHTML = data.debugSteps.map(step => `
-                        <div class="debug-step ${step.status}">
-                            <strong>${step.title}</strong> - ${step.status.toUpperCase()}<br>
-                            <small>${step.description}</small>
-                            ${step.details ? `<br><small><strong>Details:</strong> ${JSON.stringify(step.details)}</small>` : ''}
-                            ${step.error ? `<br><small><strong>Error:</strong> ${step.error}</small>` : ''}
-                            <br><small>Time: ${new Date(step.timestamp).toLocaleString()}</small>
-                        </div>
-                    `).join('');
+                    debugSteps.innerHTML = data.debugSteps.map((step, index) => {
+                        // Find screenshot for this step (by matching title or timestamp)
+                        const stepScreenshot = data.screenshots ? data.screenshots.find(screenshot => 
+                            screenshot.title.toLowerCase().includes(step.title.toLowerCase()) ||
+                            Math.abs(new Date(screenshot.timestamp) - new Date(step.timestamp)) < 5000 // Within 5 seconds
+                        ) : null;
+                        
+                        return `
+                            <div class="debug-step ${step.status}">
+                                <strong>${step.title}</strong> - ${step.status.toUpperCase()}<br>
+                                <small>${step.description}</small>
+                                ${step.details ? `<br><small><strong>Details:</strong> ${JSON.stringify(step.details)}</small>` : ''}
+                                ${step.error ? `<br><small><strong>Error:</strong> ${step.error}</small>` : ''}
+                                <br><small>Time: ${new Date(step.timestamp).toLocaleString()}</small>
+                                ${stepScreenshot ? `
+                                    <div class="screenshot" style="margin-top: 10px;">
+                                        <h5>📸 ${stepScreenshot.title}</h5>
+                                        <img src="data:image/png;base64,${stepScreenshot.data}" alt="${stepScreenshot.title}" style="max-width: 100%; border: 1px solid #ddd; border-radius: 5px;">
+                                        <p><small>Screenshot Time: ${new Date(stepScreenshot.timestamp).toLocaleString()}</small></p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('');
                 }
                 
-                // Show screenshots
+                // Show any remaining screenshots that weren't matched to steps
                 if (data.screenshots && data.screenshots.length > 0) {
-                    screenshots.innerHTML = data.screenshots.map(screenshot => `
-                        <div class="screenshot">
-                            <h4>📸 ${screenshot.title}</h4>
-                            <img src="data:image/png;base64,${screenshot.data}" alt="${screenshot.title}">
-                            <p><small>Time: ${new Date(screenshot.timestamp).toLocaleString()}</small></p>
-                        </div>
-                    `).join('');
+                    const matchedScreenshots = data.debugSteps ? data.debugSteps.map(step => 
+                        data.screenshots.find(screenshot => 
+                            screenshot.title.toLowerCase().includes(step.title.toLowerCase()) ||
+                            Math.abs(new Date(screenshot.timestamp) - new Date(step.timestamp)) < 5000
+                        )
+                    ).filter(Boolean) : [];
+                    
+                    const unmatchedScreenshots = data.screenshots.filter(screenshot => 
+                        !matchedScreenshots.includes(screenshot)
+                    );
+                    
+                    if (unmatchedScreenshots.length > 0) {
+                        screenshots.innerHTML = unmatchedScreenshots.map(screenshot => `
+                            <div class="screenshot">
+                                <h4>📸 ${screenshot.title}</h4>
+                                <img src="data:image/png;base64,${screenshot.data}" alt="${screenshot.title}">
+                                <p><small>Time: ${new Date(screenshot.timestamp).toLocaleString()}</small></p>
+                            </div>
+                        `).join('');
+                    }
                 }
                 
             } catch (error) {

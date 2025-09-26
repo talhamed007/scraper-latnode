@@ -425,56 +425,77 @@ async function scrapeRecraftLogin(discordToken, recraftEmail) {
       await takeScreenshot('Email Entry Error');
     }
 
-    // STEP 7: Check verification checkbox
-    console.log('🤖 STEP 7: Checking verification checkbox...');
-    addDebugStep('Human Verification', 'info', 'Checking human verification checkbox');
+    // STEP 7: Check Cloudflare verification checkbox (skip "Remember me")
+    console.log('🤖 STEP 7: Checking Cloudflare verification checkbox...');
+    addDebugStep('Cloudflare Verification', 'info', 'Checking Cloudflare verification checkbox (skipping Remember me)');
 
     try {
-      const checkboxSelectors = [
-        'input[type="checkbox"]',
-        'input[name*="human" i]',
-        'input[name*="verify" i]',
-        'input[name*="captcha" i]',
-        '.human-verify',
-        '.verify-human',
-        '[data-testid="human-verify"]'
-      ];
+      // First, let's see all checkboxes on the page
+      const allCheckboxes = await page.$$('input[type="checkbox"]');
+      console.log(`Found ${allCheckboxes.length} checkboxes on the page`);
       
-      let checkboxChecked = false;
-      for (const selector of checkboxSelectors) {
-        try {
-          const checkbox = await page.$(selector);
-          if (checkbox) {
-            const isChecked = await page.evaluate(el => el.checked, checkbox);
-            if (!isChecked) {
-              await checkbox.click();
-              checkboxChecked = true;
-              console.log('✅ Human verification checkbox checked with selector:', selector);
-              addDebugStep('Human Verification', 'success', 'Human verification checkbox checked', `Selector: ${selector}`);
-              break;
-            } else {
-              console.log('ℹ️ Human verification checkbox already checked');
-              addDebugStep('Human Verification', 'info', 'Human verification checkbox already checked');
-              checkboxChecked = true;
-              break;
-            }
+      let cloudflareChecked = false;
+      let rememberMeFound = false;
+      
+      for (let i = 0; i < allCheckboxes.length; i++) {
+        const checkbox = allCheckboxes[i];
+        const ariaLabel = await page.evaluate(el => el.getAttribute('aria-label') || '', checkbox);
+        const id = await page.evaluate(el => el.getAttribute('id') || '', checkbox);
+        const name = await page.evaluate(el => el.getAttribute('name') || '', checkbox);
+        const parentText = await page.evaluate(el => el.parentElement?.textContent || '', checkbox);
+        const isChecked = await page.evaluate(el => el.checked, checkbox);
+        
+        console.log(`Checkbox ${i}: aria-label="${ariaLabel}", id="${id}", name="${name}", parentText="${parentText}", checked=${isChecked}`);
+        
+        // Skip "Remember me" checkbox
+        if (ariaLabel.toLowerCase().includes('remember') || 
+            id.toLowerCase().includes('remember') || 
+            name.toLowerCase().includes('remember') ||
+            parentText.toLowerCase().includes('remember me')) {
+          console.log('⚠️ Skipping "Remember me" checkbox');
+          rememberMeFound = true;
+          continue;
+        }
+        
+        // Look for Cloudflare verification checkbox
+        if (ariaLabel.toLowerCase().includes('verify') || 
+            ariaLabel.toLowerCase().includes('human') ||
+            parentText.toLowerCase().includes('verify') ||
+            parentText.toLowerCase().includes('cloudflare') ||
+            id.toLowerCase().includes('verify') ||
+            name.toLowerCase().includes('verify')) {
+          console.log('✅ Found Cloudflare verification checkbox');
+          if (!isChecked) {
+            await checkbox.click();
+            cloudflareChecked = true;
+            console.log('✅ Cloudflare verification checkbox checked');
+            addDebugStep('Cloudflare Verification', 'success', 'Cloudflare verification checkbox checked', `Checkbox ${i}: ${ariaLabel || id || name}`);
+            break;
+          } else {
+            console.log('ℹ️ Cloudflare verification checkbox already checked');
+            addDebugStep('Cloudflare Verification', 'info', 'Cloudflare verification checkbox already checked');
+            cloudflareChecked = true;
+            break;
           }
-        } catch (e) {
-          console.log('⚠️ Checkbox selector failed:', selector, e.message);
         }
       }
       
-      if (!checkboxChecked) {
-        console.log('⚠️ Could not find human verification checkbox');
-        addDebugStep('Human Verification', 'warning', 'Could not find human verification checkbox');
+      if (!cloudflareChecked) {
+        console.log('⚠️ Could not find Cloudflare verification checkbox');
+        addDebugStep('Cloudflare Verification', 'warning', 'Could not find Cloudflare verification checkbox');
+      }
+      
+      if (rememberMeFound) {
+        console.log('✅ "Remember me" checkbox found and skipped');
+        addDebugStep('Remember Me Skip', 'success', 'Remember me checkbox found and skipped');
       }
       
       await sleep(1000);
-      await takeScreenshot('After Human Verification');
+      await takeScreenshot('After Cloudflare Verification');
 
     } catch (e) {
-      console.log('ℹ️ Human verification checkbox handling failed:', e.message);
-      addDebugStep('Human Verification', 'warning', 'Human verification checkbox handling failed', null, e.message);
+      console.log('ℹ️ Cloudflare verification checkbox handling failed:', e.message);
+      addDebugStep('Cloudflare Verification', 'warning', 'Cloudflare verification checkbox handling failed', null, e.message);
     }
 
     // STEP 8: Click Continue button
