@@ -999,6 +999,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
   const startTime = Date.now();
   const debugInfo = {
     email: email,
+    discordEmail: discordCredentials.email,
     startTime: new Date().toISOString(),
     steps: [],
     screenshots: [],
@@ -1055,37 +1056,61 @@ app.post('/api/scrape-recraft', async (req, res) => {
     return null;
   };
 
+  // Add initial debug step
+  addDebugStep('Scraping Started', 'info', 'Initializing Recraft.ai scraper with Discord login', `Email: ${email}, Discord Email: ${discordCredentials.email}`);
+  addDebugLog('info', `Starting scraper with email: ${email}`);
+  addDebugLog('info', `Discord credentials: ${discordCredentials.email ? 'Email provided' : 'No email'}, ${discordCredentials.password ? 'Password provided' : 'No password'}, ${discordCredentials.token ? 'Token provided' : 'No token'}`);
+
   try {
     console.log('🚀 Starting Recraft.ai scraping...');
     console.log('📧 Email:', email);
-    addDebugStep('Scraping Started', 'info', 'Initializing Recraft.ai scraper', `Email: ${email}`);
 
     // Launch browser with optimized settings for Railway
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
-    });
+    addDebugStep('Browser Launch', 'info', 'Launching Puppeteer browser');
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
+        ]
+      });
+      addDebugStep('Browser Launch', 'success', 'Puppeteer browser launched successfully');
+    } catch (browserError) {
+      addDebugStep('Browser Launch', 'error', 'Failed to launch Puppeteer browser', null, browserError.message);
+      throw browserError;
+    }
 
-    page = await browser.newPage();
+    addDebugStep('Page Creation', 'info', 'Creating new page');
+    try {
+      page = await browser.newPage();
+      addDebugStep('Page Creation', 'success', 'New page created successfully');
+    } catch (pageError) {
+      addDebugStep('Page Creation', 'error', 'Failed to create new page', null, pageError.message);
+      throw pageError;
+    }
     
-    // Set viewport and user agent
-    await page.setViewport({ width: 1440, height: 900 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    addDebugStep('Page Configuration', 'info', 'Setting viewport and user agent');
+    try {
+      await page.setViewport({ width: 1440, height: 900 });
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      addDebugStep('Page Configuration', 'success', 'Page viewport and user agent set');
+    } catch (configError) {
+      addDebugStep('Page Configuration', 'error', 'Failed to configure page', null, configError.message);
+      throw configError;
+    }
 
     // Helper function for sleep
     const sleep = ms => new Promise(r => setTimeout(r, ms));
