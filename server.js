@@ -1086,54 +1086,44 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Helper function for sleep
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // Step 1: Login to Discord with token
-    console.log('🔐 STEP 1: Logging into Discord with token...');
+    // Step 1: Verify Discord token and prepare for OAuth
+    console.log('🔐 STEP 1: Verifying Discord token...');
     try {
-      await page.goto('https://discord.com/login', { 
-        waitUntil: 'domcontentloaded', 
-        timeout: 30000 
-      });
-      
-      // Wait for page to load
-      await sleep(3000);
-      
-      // Set Discord token in localStorage and cookies
-      await page.evaluate((token) => {
-        localStorage.setItem('token', token);
-        window.localStorage.setItem('token', token);
-        document.cookie = `token=${token}; path=/; domain=.discord.com`;
-        document.cookie = `token=${token}; path=/; domain=discord.com`;
-      }, token);
-      
-      // Navigate to Discord API to verify token
-      await page.goto('https://discord.com/api/users/@me', { 
-        waitUntil: 'domcontentloaded', 
-        timeout: 30000 
-      });
-      
-      // Check if we're logged in by looking for user data
-      const userData = await page.evaluate(() => {
-        try {
-          return JSON.parse(document.body.innerText);
-        } catch (e) {
-          return null;
+      // First, verify the token works by calling Discord API
+      console.log('🔍 Verifying Discord token...');
+      const response = await fetch('https://discord.com/api/users/@me', {
+        headers: {
+          'Authorization': token,
+          'Content-Type': 'application/json'
         }
       });
       
-      if (userData && userData.id) {
-        console.log('✅ Successfully logged into Discord:', userData.username);
-        addDebugStep('Discord Login', 'success', `Successfully logged into Discord as ${userData.username}`, `User ID: ${userData.id}`);
+      if (response.ok) {
+        const userData = await response.json();
+        console.log('✅ Discord token is valid! User:', userData.username);
+        addDebugStep('Discord Token Verification', 'success', `Token verified for user: ${userData.username}`, `User ID: ${userData.id}`);
+        
+        // Store user info for later use
+        const discordUser = {
+          id: userData.id,
+          username: userData.username,
+          email: userData.email
+        };
+        
+        // We'll use this token later when Discord OAuth is triggered
+        console.log('📝 Discord user info stored for OAuth flow');
+        addDebugStep('Discord User Info', 'success', 'Discord user info stored for OAuth flow', JSON.stringify(discordUser));
+        
       } else {
-        console.log('⚠️ Discord login may have failed, continuing...');
-        addDebugStep('Discord Login', 'warning', 'Discord login verification failed, continuing...');
+        console.log('❌ Discord token is invalid or expired');
+        addDebugStep('Discord Token Verification', 'error', 'Discord token is invalid or expired', null, `Status: ${response.status}`);
+        throw new Error('Discord token is invalid or expired');
       }
       
-      // Take screenshot of Discord login
-      const discordScreenshot = await addScreenshot('Discord Login State');
-      
     } catch (e) {
-      console.log('⚠️ Discord login failed:', e.message);
-      addDebugStep('Discord Login', 'error', 'Discord login failed', null, e.message);
+      console.log('⚠️ Discord token verification failed:', e.message);
+      addDebugStep('Discord Token Verification', 'error', 'Discord token verification failed', null, e.message);
+      // Continue anyway - we'll try the OAuth flow
     }
 
     console.log('🌐 STEP 2: Navigating to Recraft.ai...');
@@ -1720,7 +1710,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
           throw error;
         }
 
-    // Step 7: Click Discord button for authentication
+    // Step 7: Click Discord button for OAuth authentication
     console.log('🎮 STEP 7: Looking for Discord button...');
     try {
       // Look for Discord button using the SVG path you provided
@@ -1777,45 +1767,75 @@ app.post('/api/scrape-recraft', async (req, res) => {
         // Take screenshot after Discord button click
         const afterDiscordScreenshot = await addScreenshot('After Discord Button Click');
         
-        // Wait for Discord authorization popup
-        console.log('⏳ Waiting for Discord authorization popup...');
+        // Wait for Discord OAuth popup to open
+        console.log('⏳ Waiting for Discord OAuth popup...');
         await sleep(5000);
         
-        // Look for authorization popup and click "Authorize"
-        try {
-          const authorizeSelectors = [
-            'button:has-text("Authorize")',
-            'button:has-text("authorize")',
-            'button:has-text("Allow")',
-            'button:has-text("allow")',
-            'button[type="submit"]',
-            'button[class*="authorize"]',
-            'button[class*="allow"]'
-          ];
+        // Check if we're on Discord OAuth page
+        const currentUrl = page.url();
+        console.log('📍 Current URL after Discord click:', currentUrl);
+        
+        if (currentUrl.includes('discord.com') && currentUrl.includes('oauth')) {
+          console.log('✅ Successfully redirected to Discord OAuth page');
+          addDebugStep('Discord OAuth Redirect', 'success', 'Successfully redirected to Discord OAuth page', `URL: ${currentUrl}`);
           
-          let authorized = false;
-          for (const selector of authorizeSelectors) {
-            try {
-              await page.waitForSelector(selector, { timeout: 5000 });
-              await page.click(selector);
-              authorized = true;
-              console.log('✅ Clicked Authorize button with selector:', selector);
-              await sleep(3000);
-              break;
-            } catch (e) {
-              console.log('⚠️ Authorize selector failed:', selector, e.message);
+          // Take screenshot of OAuth page
+          const oauthScreenshot = await addScreenshot('Discord OAuth Page');
+          
+          // Look for "Authorize" button on OAuth page
+          try {
+            const authorizeSelectors = [
+              'button:has-text("Authorize")',
+              'button:has-text("authorize")',
+              'button:has-text("Allow")',
+              'button:has-text("allow")',
+              'button[type="submit"]',
+              'button[class*="authorize"]',
+              'button[class*="allow"]',
+              'button[class*="green"]',
+              'button[class*="primary"]'
+            ];
+            
+            let authorized = false;
+            for (const selector of authorizeSelectors) {
+              try {
+                console.log(`🔍 Trying authorize selector: ${selector}`);
+                await page.waitForSelector(selector, { timeout: 5000 });
+                await page.click(selector);
+                authorized = true;
+                console.log('✅ Clicked Authorize button with selector:', selector);
+                await sleep(5000); // Wait longer for redirect back
+                break;
+              } catch (e) {
+                console.log('⚠️ Authorize selector failed:', selector, e.message);
+              }
             }
+            
+            if (authorized) {
+              addDebugStep('Discord Authorization', 'success', 'Successfully authorized Discord login');
+              const afterAuthScreenshot = await addScreenshot('After Discord Authorization');
+              
+              // Check if we're back on Recraft.ai
+              const finalUrl = page.url();
+              console.log('📍 Final URL after authorization:', finalUrl);
+              
+              if (finalUrl.includes('recraft.ai')) {
+                console.log('✅ Successfully returned to Recraft.ai after Discord auth');
+                addDebugStep('Return to Recraft', 'success', 'Successfully returned to Recraft.ai after Discord auth', `URL: ${finalUrl}`);
+              } else {
+                console.log('⚠️ Did not return to Recraft.ai after Discord auth');
+                addDebugStep('Return to Recraft', 'warning', 'Did not return to Recraft.ai after Discord auth', `URL: ${finalUrl}`);
+              }
+            } else {
+              addDebugStep('Discord Authorization', 'warning', 'Could not find Authorize button on OAuth page');
+            }
+          } catch (e) {
+            console.log('⚠️ Discord authorization failed:', e.message);
+            addDebugStep('Discord Authorization', 'error', 'Discord authorization failed', null, e.message);
           }
-          
-          if (authorized) {
-            addDebugStep('Discord Authorization', 'success', 'Successfully authorized Discord login');
-            const afterAuthScreenshot = await addScreenshot('After Discord Authorization');
-          } else {
-            addDebugStep('Discord Authorization', 'warning', 'Could not find Authorize button');
-          }
-        } catch (e) {
-          console.log('⚠️ Discord authorization failed:', e.message);
-          addDebugStep('Discord Authorization', 'error', 'Discord authorization failed', null, e.message);
+        } else {
+          console.log('⚠️ Did not redirect to Discord OAuth page');
+          addDebugStep('Discord OAuth Redirect', 'warning', 'Did not redirect to Discord OAuth page', `Current URL: ${currentUrl}`);
         }
         
       } else {
