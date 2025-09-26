@@ -83,11 +83,38 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     console.log('🔍 Looking for Google login button...');
     
     try {
-      // Wait for Google login button - more specific selectors
-      await page.waitForSelector('button[class*="google"], button:has-text("Google"), a:has-text("Google"), [data-testid*="google"], [class*="google"], svg[viewBox*="24"], button[aria-label*="Google"]', { timeout: 15000 });
+      // Wait for Google login button using the specific SVG element
+      await page.waitForSelector('svg[viewBox="0 0 24 24"] title:has-text("Google"), button:has(svg[viewBox="0 0 24 24"]), button:has(svg title:has-text("Google"))', { timeout: 15000 });
       
-      // Try to click Google button
+      // Try to click Google button using the specific SVG
       const googleClicked = await page.evaluate(() => {
+        // First, try to find the exact Google SVG with the specific paths
+        const googleSvg = document.querySelector('svg[viewBox="0 0 24 24"]');
+        if (googleSvg) {
+          const title = googleSvg.querySelector('title');
+          if (title && title.textContent.includes('Google')) {
+            const button = googleSvg.closest('button');
+            if (button) {
+              button.click();
+              return true;
+            }
+          }
+        }
+        
+        // Look for buttons containing the Google SVG
+        const buttons = document.querySelectorAll('button');
+        for (const button of buttons) {
+          const svg = button.querySelector('svg[viewBox="0 0 24 24"]');
+          if (svg) {
+            const title = svg.querySelector('title');
+            if (title && title.textContent.includes('Google')) {
+              button.click();
+              return true;
+            }
+          }
+        }
+        
+        // Fallback selectors
         const selectors = [
           'button[class*="google"]',
           'button:has-text("Google")',
@@ -95,10 +122,7 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           '[data-testid*="google"]',
           '[class*="google"]',
           'svg[viewBox*="24"]',
-          'button[aria-label*="Google"]',
-          // Look for buttons with Google logo SVG
-          'button:has(svg[viewBox*="24"])',
-          'button:has(svg[class*="google"])'
+          'button[aria-label*="Google"]'
         ];
         
         for (const selector of selectors) {
