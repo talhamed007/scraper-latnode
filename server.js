@@ -1097,6 +1097,9 @@ app.post('/api/scrape-recraft', async (req, res) => {
     
     addDebugStep('Navigation to Recraft.ai', 'success', 'Successfully navigated to Recraft.ai homepage', `URL: ${page.url()}`, null, landingScreenshot);
     
+    // Wait for page to fully load
+    await sleep(3000);
+    
     // Log current URL for debugging
     const landingUrl = page.url();
     console.log('📍 Landing URL:', landingUrl);
@@ -1182,9 +1185,18 @@ app.post('/api/scrape-recraft', async (req, res) => {
         console.log('ℹ️ STEP 1 COMPLETE: No cookie popup detected or already handled');
         addDebugStep('Cookie Consent', 'info', 'No cookie popup detected or already handled');
       }
+      
+      // Take screenshot after cookie handling
+      await sleep(2000);
+      const afterCookieScreenshot = await addScreenshot('After Cookie Handling');
+      
     } catch (e) {
       console.log('⚠️ STEP 1 ERROR: Cookie popup handling failed:', e.message);
       addDebugStep('Cookie Consent', 'error', 'Failed to handle cookie consent', null, e.message);
+      
+      // Take screenshot even on error
+      await sleep(2000);
+      const errorScreenshot = await addScreenshot('Cookie Error State');
     }
 
     console.log('🔍 STEP 2: Looking for Sign In button...');
@@ -1281,10 +1293,18 @@ app.post('/api/scrape-recraft', async (req, res) => {
         throw new Error('Could not find Sign In button');
       } else {
         addDebugStep('Sign In Button', 'success', 'Successfully clicked Sign In button');
+        
+        // Take screenshot after clicking Sign In
+        await sleep(3000);
+        const afterSignInScreenshot = await addScreenshot('After Sign In Click');
       }
     } catch (error) {
       console.log('⚠️ Could not click Sign In button:', error.message);
       addDebugStep('Sign In Button', 'error', 'Failed to click Sign In button', null, error.message);
+      
+      // Take screenshot even on error
+      await sleep(2000);
+      const errorScreenshot = await addScreenshot('Sign In Error State');
       throw error;
     }
     
@@ -1404,9 +1424,18 @@ app.post('/api/scrape-recraft', async (req, res) => {
               console.log('⚠️ Still not on login page after "Go back" click');
               addDebugStep('Go Back Button', 'warning', 'Clicked "Go back" button but still not on login page', `New URL: ${newUrl}`);
             }
+            
+            // Take screenshot after Go Back button
+            await sleep(3000);
+            const afterGoBackScreenshot = await addScreenshot('After Go Back Button Click');
+            
           } else {
             console.log('⚠️ Could not find "Go back to recraft" button');
             addDebugStep('Go Back Button', 'error', 'Could not find "Go back to recraft" button');
+            
+            // Take screenshot of error page
+            await sleep(2000);
+            const errorPageScreenshot = await addScreenshot('Error Page - No Go Back Button');
           }
         } catch (e) {
           console.log('⚠️ Error handling "Go back" button:', e.message);
@@ -1468,10 +1497,18 @@ app.post('/api/scrape-recraft', async (req, res) => {
             throw new Error('Could not find email input field with any selector');
           } else {
             addDebugStep('Email Input', 'success', 'Successfully filled email field', `Email: ${email}`);
+            
+            // Take screenshot after email input
+            await sleep(2000);
+            const afterEmailScreenshot = await addScreenshot('After Email Input');
           }
         } catch (error) {
           console.log('⚠️ Email input error:', error.message);
           addDebugStep('Email Input', 'error', 'Failed to fill email field', null, error.message);
+          
+          // Take screenshot even on error
+          await sleep(2000);
+          const errorScreenshot = await addScreenshot('Email Input Error State');
           throw error;
         }
 
@@ -1505,12 +1542,20 @@ app.post('/api/scrape-recraft', async (req, res) => {
         }
       }
       
-      if (!checkboxChecked) {
-        console.log('ℹ️ No verification checkbox found, continuing...');
-      }
-    } catch (e) {
-      console.log('ℹ️ Verification checkbox handling failed, continuing...');
-    }
+          if (!checkboxChecked) {
+            console.log('ℹ️ No verification checkbox found, continuing...');
+            addDebugStep('Verification Checkbox', 'info', 'No verification checkbox found, continuing...');
+          } else {
+            addDebugStep('Verification Checkbox', 'success', 'Successfully clicked verification checkbox');
+          }
+        } catch (e) {
+          console.log('ℹ️ Verification checkbox handling failed, continuing...');
+          addDebugStep('Verification Checkbox', 'warning', 'Verification checkbox handling failed', null, e.message);
+        }
+        
+        // Take screenshot after verification checkbox
+        await sleep(2000);
+        const afterCheckboxScreenshot = await addScreenshot('After Verification Checkbox');
 
     console.log('🚪 STEP 6: Clicking Continue button...');
     
@@ -1552,13 +1597,25 @@ app.post('/api/scrape-recraft', async (req, res) => {
         }
       }
       
-      if (!continueClicked) {
-        throw new Error('Could not find Continue button');
-      }
-    } catch (error) {
-      console.log('⚠️ Could not click Continue button:', error.message);
-      throw error;
-    }
+          if (!continueClicked) {
+            addDebugStep('Continue Button', 'error', 'Could not find Continue button', null, 'No Continue button found with any selector');
+            throw new Error('Could not find Continue button');
+          } else {
+            addDebugStep('Continue Button', 'success', 'Successfully clicked Continue button');
+            
+            // Take screenshot after Continue button
+            await sleep(3000);
+            const afterContinueScreenshot = await addScreenshot('After Continue Button Click');
+          }
+        } catch (error) {
+          console.log('⚠️ Could not click Continue button:', error.message);
+          addDebugStep('Continue Button', 'error', 'Failed to click Continue button', null, error.message);
+          
+          // Take screenshot even on error
+          await sleep(2000);
+          const errorScreenshot = await addScreenshot('Continue Button Error State');
+          throw error;
+        }
 
     console.log('📧 STEP 7: Waiting for verification code page...');
     
@@ -1568,6 +1625,8 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Take screenshot of verification page
     const verificationScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Verification page screenshot taken');
+    
+    addDebugStep('Verification Code Page', 'success', 'Successfully reached verification code page', `URL: ${page.url()}`, null, verificationScreenshot);
 
     console.log('⏳ STEP 8: Waiting for manual verification code entry...');
     
@@ -1575,6 +1634,10 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // This is a limitation - we can't automatically read emails
     // The user will need to enter the code manually
     await sleep(10000); // Wait 10 seconds for user to enter code
+    
+    // Take screenshot after waiting for verification
+    const afterVerificationWaitScreenshot = await addScreenshot('After Verification Wait');
+    addDebugStep('Manual Verification Wait', 'info', 'Waited 10 seconds for manual verification code entry', null, null, afterVerificationWaitScreenshot);
     
     console.log('🔍 STEP 9: Checking if verification was successful...');
     
@@ -1613,6 +1676,10 @@ app.post('/api/scrape-recraft', async (req, res) => {
     }
     
     await sleep(3000);
+    
+    // Take screenshot after dashboard navigation
+    const afterDashboardNavScreenshot = await addScreenshot('After Dashboard Navigation');
+    addDebugStep('Dashboard Navigation', 'success', 'Successfully navigated to dashboard', `URL: ${page.url()}`, null, afterDashboardNavScreenshot);
 
     console.log('📸 STEP 11: Taking dashboard screenshot...');
     
@@ -1669,6 +1736,10 @@ app.post('/api/scrape-recraft', async (req, res) => {
     });
 
     console.log('✅ Credit info extracted:', creditInfo);
+    
+    // Take final screenshot after credit extraction
+    const finalScreenshot = await addScreenshot('Final Credit Extraction');
+    addDebugStep('Credit Extraction', 'success', 'Successfully extracted credit information', `Credits: ${creditInfo?.credits_left || 'N/A'}`, null, finalScreenshot);
 
     // Save debug data
     debugInfo.finalUrl = page.url();
