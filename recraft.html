@@ -223,9 +223,19 @@
         </div>
         
         <div class="form-group">
+            <label for="discordEmail">Discord Email:</label>
+            <input type="email" id="discordEmail" name="discordEmail" placeholder="Enter your Discord email">
+        </div>
+        
+        <div class="form-group">
+            <label for="discordPassword">Discord Password:</label>
+            <input type="password" id="discordPassword" name="discordPassword" placeholder="Enter your Discord password">
+        </div>
+        
+        <div class="form-group">
             <label for="discordToken">Discord Token (Optional):</label>
             <input type="text" id="discordToken" name="discordToken" placeholder="Enter Discord token for direct login">
-            <small class="help-text">Leave empty to use default token</small>
+            <small class="help-text">Leave empty to use email/password login</small>
         </div>
         
         <button type="submit" class="btn" id="submitBtn">
@@ -259,6 +269,8 @@
             e.preventDefault();
             
             const email = document.getElementById('email').value;
+            const discordEmail = document.getElementById('discordEmail').value;
+            const discordPassword = document.getElementById('discordPassword').value;
             const discordToken = document.getElementById('discordToken').value;
             const submitBtn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
@@ -277,7 +289,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ email, discordToken })
+                    body: JSON.stringify({ email, discordEmail, discordPassword, discordToken })
                 });
                 
                 const data = await response.json();
