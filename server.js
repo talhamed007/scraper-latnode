@@ -1450,10 +1450,10 @@ app.post('/api/scrape-recraft', async (req, res) => {
     console.log('📍 Final URL before email input:', finalUrl);
     
     // If we're still not on a login page, try to navigate to it manually
-    if (!finalUrl.includes('/auth/login') && !finalUrl.includes('/login')) {
+    if (!finalUrl.includes('/auth/login') && !finalUrl.includes('/login') && !finalUrl.includes('id.recraft.ai')) {
       console.log('🔄 Still not on login page, trying to navigate to login page manually...');
       try {
-        await page.goto('https://www.recraft.ai/auth/login', { 
+        await page.goto('https://id.recraft.ai/realms/recraft/protocol/openid-connect/auth?client_id=frontend-client&scope=openid%20email%20profile&response_type=code&redirect_uri=https%3A%2F%2Fwww.recraft.ai%2Fapi%2Fauth%2Fcallback%2Fkeycloak&grant_type=authorization_code&state=RmXXBVX5QQ-yw7gVJnQhM2a56j55TwJJzpl2MLlMQ6s&code_challenge=0xUu8RvStUZJZrXxoYEMwDJ40lZGhhZ96hqTbSc8rHI&code_challenge_method=S256', { 
           waitUntil: 'domcontentloaded', 
           timeout: 30000 
         });
@@ -1514,10 +1514,12 @@ app.post('/api/scrape-recraft', async (req, res) => {
 
     console.log('☑️ STEP 5: Checking verification checkbox...');
     
-    // Look for and click verification checkbox (Cloudflare)
+    // Look for and click verification checkbox (Cloudflare "Verify you are human")
     try {
       const checkboxSelectors = [
-        'input[type="checkbox"]',
+        'input[type="checkbox"][aria-label*="human"]',
+        'input[type="checkbox"][aria-label*="verify"]',
+        'input[type="checkbox"]:not([aria-label*="remember"])', // Exclude "Remember me" checkbox
         '.cf-challenge-running input[type="checkbox"]',
         '[data-ray] input[type="checkbox"]',
         'input[name="cf-turnstile-response"]',
@@ -1530,9 +1532,21 @@ app.post('/api/scrape-recraft', async (req, res) => {
         try {
           const checkbox = await page.$(selector);
           if (checkbox) {
+            // Check if this is the "Remember me" checkbox and skip it
+            const ariaLabel = await page.evaluate(el => el.getAttribute('aria-label') || '', checkbox);
+            const id = await page.evaluate(el => el.getAttribute('id') || '', checkbox);
+            const name = await page.evaluate(el => el.getAttribute('name') || '', checkbox);
+            
+            if (ariaLabel.toLowerCase().includes('remember') || 
+                id.toLowerCase().includes('remember') || 
+                name.toLowerCase().includes('remember')) {
+              console.log('⚠️ Skipping "Remember me" checkbox:', ariaLabel || id || name);
+              continue;
+            }
+            
             await checkbox.click();
             checkboxChecked = true;
-            console.log('✅ Clicked verification checkbox with selector:', selector);
+            console.log('✅ Clicked verification checkbox with selector:', selector, 'Label:', ariaLabel);
             await sleep(2000);
             break;
           }
@@ -1542,6 +1556,42 @@ app.post('/api/scrape-recraft', async (req, res) => {
         }
       }
       
+          if (!checkboxChecked) {
+            console.log('🔄 Trying fallback method - searching all checkboxes...');
+            // Fallback: find all checkboxes and look for the verification one
+            const allCheckboxes = await page.$$('input[type="checkbox"]');
+            for (let i = 0; i < allCheckboxes.length; i++) {
+              const checkbox = allCheckboxes[i];
+              const ariaLabel = await page.evaluate(el => el.getAttribute('aria-label') || '', checkbox);
+              const id = await page.evaluate(el => el.getAttribute('id') || '', checkbox);
+              const name = await page.evaluate(el => el.getAttribute('name') || '', checkbox);
+              const parentText = await page.evaluate(el => el.parentElement?.textContent || '', checkbox);
+              
+              console.log(`🔍 Checkbox ${i}: aria-label="${ariaLabel}", id="${id}", name="${name}", parentText="${parentText}"`);
+              
+              // Skip "Remember me" checkbox
+              if (ariaLabel.toLowerCase().includes('remember') || 
+                  id.toLowerCase().includes('remember') || 
+                  name.toLowerCase().includes('remember') ||
+                  parentText.toLowerCase().includes('remember')) {
+                console.log('⚠️ Skipping "Remember me" checkbox');
+                continue;
+              }
+              
+              // Look for verification/human checkbox
+              if (ariaLabel.toLowerCase().includes('human') || 
+                  ariaLabel.toLowerCase().includes('verify') ||
+                  parentText.toLowerCase().includes('human') ||
+                  parentText.toLowerCase().includes('verify')) {
+                console.log('✅ Found verification checkbox by text content');
+                await checkbox.click();
+                checkboxChecked = true;
+                await sleep(2000);
+                break;
+              }
+            }
+          }
+          
           if (!checkboxChecked) {
             console.log('ℹ️ No verification checkbox found, continuing...');
             addDebugStep('Verification Checkbox', 'info', 'No verification checkbox found, continuing...');
