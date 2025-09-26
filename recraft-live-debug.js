@@ -114,39 +114,138 @@ async function scrapeRecraftLoginLive(discordToken, recraftEmail) {
       addDebugStep('Token Validation', 'warning', 'Discord token validation failed, but continuing with Recraft.ai flow');
     }
 
-    // Alternative approach: Try manual Discord login
-    console.log('🔐 Attempting manual Discord login...');
-    addDebugStep('Discord Manual Login', 'info', 'Attempting manual Discord login with email/password');
+    // Try Discord session storage + token injection approach
+    console.log('🔐 Attempting Discord session storage + token injection...');
+    addDebugStep('Discord Session + Token', 'info', 'Attempting Discord session storage + token injection');
 
     try {
-      // Navigate to Discord login page
-      await page.goto('https://discord.com/login', { 
+      // Navigate to Discord app first
+      await page.goto('https://discord.com/app', { 
         waitUntil: 'domcontentloaded', 
         timeout: 30000 
       });
       
       await sleep(3000);
-      await takeScreenshot('Discord Login Page');
-      addDebugStep('Discord Login Page', 'success', 'Navigated to Discord login page');
+      await takeScreenshot('Discord App Initial');
+      addDebugStep('Discord App Navigation', 'success', 'Navigated to Discord app');
 
-      // Look for email and password fields
-      const emailField = await page.$('input[name="email"], input[type="email"]');
-      const passwordField = await page.$('input[name="password"], input[type="password"]');
-      
-      if (emailField && passwordField) {
-        console.log('✅ Found Discord login fields, but need credentials...');
-        addDebugStep('Discord Login Fields', 'info', 'Found Discord login fields, but manual credentials needed');
+      // Try multiple injection methods
+      console.log('🔑 Attempting comprehensive token injection...');
+      const injectionResult = await page.evaluate((token) => {
+        const results = {
+          localStorage: { success: false, error: null },
+          sessionStorage: { success: false, error: null },
+          cookies: { success: false, error: null },
+          windowObject: { success: false, error: null }
+        };
+
+        try {
+          // Method 1: localStorage
+          localStorage.setItem('token', token);
+          localStorage.setItem('auth_token', token);
+          localStorage.setItem('discord_token', token);
+          localStorage.setItem('access_token', token);
+          localStorage.setItem('authorization', token);
+          results.localStorage.success = true;
+        } catch (e) {
+          results.localStorage.error = e.message;
+        }
+
+        try {
+          // Method 2: sessionStorage
+          sessionStorage.setItem('token', token);
+          sessionStorage.setItem('auth_token', token);
+          sessionStorage.setItem('discord_token', token);
+          sessionStorage.setItem('access_token', token);
+          sessionStorage.setItem('authorization', token);
+          results.sessionStorage.success = true;
+        } catch (e) {
+          results.sessionStorage.error = e.message;
+        }
+
+        try {
+          // Method 3: Cookies
+          document.cookie = `token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
+          document.cookie = `auth_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
+          document.cookie = `discord_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
+          document.cookie = `access_token=${token}; domain=.discord.com; path=/; secure; samesite=none`;
+          results.cookies.success = true;
+        } catch (e) {
+          results.cookies.error = e.message;
+        }
+
+        try {
+          // Method 4: Window object
+          window.discordToken = token;
+          window.authToken = token;
+          window.accessToken = token;
+          results.windowObject.success = true;
+        } catch (e) {
+          results.windowObject.error = e.message;
+        }
+
+        return results;
+      }, discordToken);
+
+      console.log('Token injection results:', injectionResult);
+      addDebugStep('Token Injection', 'info', 'Comprehensive token injection attempted', injectionResult);
+
+      // Refresh page to apply tokens
+      console.log('🔄 Refreshing Discord page to apply tokens...');
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+      await sleep(5000);
+      await takeScreenshot('Discord App After Token Injection');
+
+      // Check if any injection worked
+      const injectionStatus = await page.evaluate(() => {
+        return {
+          hasLocalStorage: !!(localStorage.getItem('token') || localStorage.getItem('auth_token')),
+          hasSessionStorage: !!(sessionStorage.getItem('token') || sessionStorage.getItem('auth_token')),
+          hasCookies: document.cookie.includes('token') || document.cookie.includes('auth_token'),
+          hasWindowObject: !!(window.discordToken || window.authToken),
+          currentUrl: window.location.href,
+          pageTitle: document.title
+        };
+      });
+
+      console.log('Injection status:', injectionStatus);
+      addDebugStep('Injection Status', 'info', 'Checking if any injection method worked', injectionStatus);
+
+      // Check for Discord login success
+      const discordLoginStatus = await page.evaluate(() => {
+        const userElements = document.querySelectorAll('[class*="user"], [class*="avatar"], [class*="profile"]');
+        const channelElements = document.querySelectorAll('[class*="channel"], [class*="server"]');
+        const sidebarElements = document.querySelectorAll('[class*="sidebar"], [class*="guild"]');
+        const loginElements = document.querySelectorAll('[class*="login"], [class*="signin"]');
         
-        // For now, just take a screenshot and continue
-        await takeScreenshot('Discord Login Fields Found');
-      } else {
-        console.log('⚠️ Could not find Discord login fields');
-        addDebugStep('Discord Login Fields', 'warning', 'Could not find Discord login fields');
-      }
+        return {
+          userElementsFound: userElements.length > 0,
+          channelElementsFound: channelElements.length > 0,
+          sidebarElementsFound: sidebarElements.length > 0,
+          loginElementsFound: loginElements.length > 0,
+          currentUrl: window.location.href,
+          pageTitle: document.title
+        };
+      });
+
+      console.log('Discord login status:', discordLoginStatus);
       
+      if (discordLoginStatus.userElementsFound || discordLoginStatus.channelElementsFound || discordLoginStatus.sidebarElementsFound) {
+        console.log('✅ Discord login successful!');
+        addDebugStep('Discord Login', 'success', 'Discord login successful', discordLoginStatus);
+      } else if (discordLoginStatus.loginElementsFound) {
+        console.log('⚠️ Still on Discord login page');
+        addDebugStep('Discord Login', 'warning', 'Still on Discord login page', discordLoginStatus);
+      } else {
+        console.log('⚠️ Discord login status unclear');
+        addDebugStep('Discord Login', 'warning', 'Discord login status unclear', discordLoginStatus);
+      }
+
+      await takeScreenshot('Discord Login Final Status');
+
     } catch (e) {
-      console.log('⚠️ Discord manual login failed:', e.message);
-      addDebugStep('Discord Manual Login', 'warning', 'Discord manual login failed', null, e.message);
+      console.log('⚠️ Discord session + token injection failed:', e.message);
+      addDebugStep('Discord Session + Token', 'warning', 'Discord session + token injection failed', null, e.message);
     }
 
     // Continue to Recraft.ai regardless
