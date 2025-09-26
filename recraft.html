@@ -184,6 +184,13 @@
             padding: 15px;
             margin-bottom: 20px;
         }
+        
+        .help-text {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
 
         .info-box h4 {
             color: #1976d2;
@@ -209,16 +216,22 @@
             <p>This scraper will send a verification code to your email. Please check your inbox after clicking "Check Credits" and enter the code when prompted.</p>
         </div>
 
-        <form id="scraperForm">
-            <div class="form-group">
-                <label for="email">Email:</label>
-                <input type="email" id="email" name="email" required placeholder="Enter your Recraft.ai email">
-            </div>
-            
-            <button type="submit" class="btn" id="submitBtn">
-                Check Credits
-            </button>
-        </form>
+    <form id="scraperForm">
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required placeholder="Enter your Recraft.ai email">
+        </div>
+        
+        <div class="form-group">
+            <label for="discordToken">Discord Token (Optional):</label>
+            <input type="text" id="discordToken" name="discordToken" placeholder="Enter Discord token for direct login">
+            <small class="help-text">Leave empty to use default token</small>
+        </div>
+        
+        <button type="submit" class="btn" id="submitBtn">
+            Check Credits with Discord
+        </button>
+    </form>
         
         <div style="text-align: center; margin-top: 20px;">
             <a href="/recraft-debug" class="btn" target="_blank" style="background: #6c757d; text-decoration: none; display: inline-block;">
@@ -246,6 +259,7 @@
             e.preventDefault();
             
             const email = document.getElementById('email').value;
+            const discordToken = document.getElementById('discordToken').value;
             const submitBtn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
             const results = document.getElementById('results');
@@ -263,7 +277,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email, discordToken })
                 });
                 
                 const data = await response.json();

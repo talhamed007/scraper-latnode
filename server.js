@@ -982,11 +982,14 @@ app.post('/api/scrape-recraft', async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  const { email } = req.body;
+  const { email, discordToken } = req.body;
 
   if (!email) {
     return res.status(400).json({ error: 'Email is required' });
   }
+
+  // Use provided Discord token or default
+  const token = discordToken || 'MTI3NDQxNTQwMTAyMzA0OTc5MA.GFu9Qi.RHy74T54y1ZvBbaJO1rNtl-uR2GbjegAVt5qVI';
 
   // Initialize debug data
   const startTime = Date.now();
@@ -1083,7 +1086,57 @@ app.post('/api/scrape-recraft', async (req, res) => {
     // Helper function for sleep
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    console.log('🌐 Navigating to Recraft.ai...');
+    // Step 1: Login to Discord with token
+    console.log('🔐 STEP 1: Logging into Discord with token...');
+    try {
+      await page.goto('https://discord.com/login', { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 30000 
+      });
+      
+      // Wait for page to load
+      await sleep(3000);
+      
+      // Set Discord token in localStorage and cookies
+      await page.evaluate((token) => {
+        localStorage.setItem('token', token);
+        window.localStorage.setItem('token', token);
+        document.cookie = `token=${token}; path=/; domain=.discord.com`;
+        document.cookie = `token=${token}; path=/; domain=discord.com`;
+      }, token);
+      
+      // Navigate to Discord API to verify token
+      await page.goto('https://discord.com/api/users/@me', { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 30000 
+      });
+      
+      // Check if we're logged in by looking for user data
+      const userData = await page.evaluate(() => {
+        try {
+          return JSON.parse(document.body.innerText);
+        } catch (e) {
+          return null;
+        }
+      });
+      
+      if (userData && userData.id) {
+        console.log('✅ Successfully logged into Discord:', userData.username);
+        addDebugStep('Discord Login', 'success', `Successfully logged into Discord as ${userData.username}`, `User ID: ${userData.id}`);
+      } else {
+        console.log('⚠️ Discord login may have failed, continuing...');
+        addDebugStep('Discord Login', 'warning', 'Discord login verification failed, continuing...');
+      }
+      
+      // Take screenshot of Discord login
+      const discordScreenshot = await addScreenshot('Discord Login State');
+      
+    } catch (e) {
+      console.log('⚠️ Discord login failed:', e.message);
+      addDebugStep('Discord Login', 'error', 'Discord login failed', null, e.message);
+    }
+
+    console.log('🌐 STEP 2: Navigating to Recraft.ai...');
     
     // Navigate to Recraft.ai landing page
     await page.goto('https://www.recraft.ai/', { 
@@ -1104,8 +1157,8 @@ app.post('/api/scrape-recraft', async (req, res) => {
     const landingUrl = page.url();
     console.log('📍 Landing URL:', landingUrl);
 
-    // Step 1: Handle cookie consent popup if present
-    console.log('🍪 STEP 1: Checking for cookie consent popup...');
+    // Step 3: Handle cookie consent popup if present
+    console.log('🍪 STEP 3: Checking for cookie consent popup...');
     try {
       await sleep(2000);
       
@@ -1199,7 +1252,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       const errorScreenshot = await addScreenshot('Cookie Error State');
     }
 
-    console.log('🔍 STEP 2: Looking for Sign In button...');
+    console.log('🔍 STEP 4: Looking for Sign In button...');
     
     // First, let's see what elements are available on the page
     console.log('📋 Checking available clickable elements...');
@@ -1667,7 +1720,114 @@ app.post('/api/scrape-recraft', async (req, res) => {
           throw error;
         }
 
-    console.log('📧 STEP 7: Waiting for verification code page...');
+    // Step 7: Click Discord button for authentication
+    console.log('🎮 STEP 7: Looking for Discord button...');
+    try {
+      // Look for Discord button using the SVG path you provided
+      const discordSelectors = [
+        'button[aria-label*="Discord"]',
+        'button:has-text("Discord")',
+        'a[href*="discord"]',
+        'button svg path[d*="M20.3303"]', // Your specific SVG path
+        'button:has(svg path[d*="M20.3303"])',
+        '[data-testid*="discord"]',
+        'button[class*="discord"]'
+      ];
+      
+      let discordClicked = false;
+      for (const selector of discordSelectors) {
+        try {
+          console.log(`🎮 Trying Discord selector: ${selector}`);
+          await page.waitForSelector(selector, { timeout: 5000 });
+          await page.click(selector);
+          discordClicked = true;
+          console.log('✅ Clicked Discord button with selector:', selector);
+          await sleep(3000);
+          break;
+        } catch (e) {
+          console.log('⚠️ Discord selector failed:', selector, e.message);
+        }
+      }
+      
+      if (!discordClicked) {
+        // Fallback: search all buttons for Discord
+        console.log('🔄 Trying fallback method for Discord button...');
+        const buttons = await page.$$('button, a');
+        for (let i = 0; i < buttons.length; i++) {
+          const button = buttons[i];
+          const text = await page.evaluate(el => el.textContent || '', button);
+          const href = await page.evaluate(el => el.href || '', button);
+          const innerHTML = await page.evaluate(el => el.innerHTML || '', button);
+          
+          if (text.toLowerCase().includes('discord') || 
+              href.toLowerCase().includes('discord') ||
+              innerHTML.includes('M20.3303')) {
+            console.log(`✅ Found Discord button by content: "${text}"`);
+            await button.click();
+            await sleep(3000);
+            discordClicked = true;
+            break;
+          }
+        }
+      }
+      
+      if (discordClicked) {
+        addDebugStep('Discord Button', 'success', 'Successfully clicked Discord button');
+        
+        // Take screenshot after Discord button click
+        const afterDiscordScreenshot = await addScreenshot('After Discord Button Click');
+        
+        // Wait for Discord authorization popup
+        console.log('⏳ Waiting for Discord authorization popup...');
+        await sleep(5000);
+        
+        // Look for authorization popup and click "Authorize"
+        try {
+          const authorizeSelectors = [
+            'button:has-text("Authorize")',
+            'button:has-text("authorize")',
+            'button:has-text("Allow")',
+            'button:has-text("allow")',
+            'button[type="submit"]',
+            'button[class*="authorize"]',
+            'button[class*="allow"]'
+          ];
+          
+          let authorized = false;
+          for (const selector of authorizeSelectors) {
+            try {
+              await page.waitForSelector(selector, { timeout: 5000 });
+              await page.click(selector);
+              authorized = true;
+              console.log('✅ Clicked Authorize button with selector:', selector);
+              await sleep(3000);
+              break;
+            } catch (e) {
+              console.log('⚠️ Authorize selector failed:', selector, e.message);
+            }
+          }
+          
+          if (authorized) {
+            addDebugStep('Discord Authorization', 'success', 'Successfully authorized Discord login');
+            const afterAuthScreenshot = await addScreenshot('After Discord Authorization');
+          } else {
+            addDebugStep('Discord Authorization', 'warning', 'Could not find Authorize button');
+          }
+        } catch (e) {
+          console.log('⚠️ Discord authorization failed:', e.message);
+          addDebugStep('Discord Authorization', 'error', 'Discord authorization failed', null, e.message);
+        }
+        
+      } else {
+        addDebugStep('Discord Button', 'error', 'Could not find Discord button');
+        console.log('⚠️ Could not find Discord button, continuing with email flow...');
+      }
+    } catch (e) {
+      console.log('⚠️ Discord button handling failed:', e.message);
+      addDebugStep('Discord Button', 'error', 'Discord button handling failed', null, e.message);
+    }
+
+    console.log('📧 STEP 8: Waiting for verification code page...');
     
     // Wait for verification code page
     await page.waitForSelector('input[type="text"], input[name="code"], input[placeholder*="code"]', { timeout: 30000 });
@@ -1678,7 +1838,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
     
     addDebugStep('Verification Code Page', 'success', 'Successfully reached verification code page', `URL: ${page.url()}`, null, verificationScreenshot);
 
-    console.log('⏳ STEP 8: Waiting for manual verification code entry...');
+    console.log('⏳ STEP 9: Waiting for manual verification code entry...');
     
     // Wait for user to manually enter verification code
     // This is a limitation - we can't automatically read emails
@@ -1689,7 +1849,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
     const afterVerificationWaitScreenshot = await addScreenshot('After Verification Wait');
     addDebugStep('Manual Verification Wait', 'info', 'Waited 10 seconds for manual verification code entry', null, null, afterVerificationWaitScreenshot);
     
-    console.log('🔍 STEP 9: Checking if verification was successful...');
+    console.log('🔍 STEP 10: Checking if verification was successful...');
     
     // Check if we're on the dashboard or still on verification page
     const currentUrl = page.url();
@@ -1715,7 +1875,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
       return;
     }
 
-    console.log('📊 STEP 10: Navigating to dashboard...');
+    console.log('📊 STEP 11: Navigating to dashboard...');
     
     // Navigate to dashboard if not already there
     if (!currentUrl.includes('/dashboard') && !currentUrl.includes('/app')) {
@@ -1731,13 +1891,13 @@ app.post('/api/scrape-recraft', async (req, res) => {
     const afterDashboardNavScreenshot = await addScreenshot('After Dashboard Navigation');
     addDebugStep('Dashboard Navigation', 'success', 'Successfully navigated to dashboard', `URL: ${page.url()}`, null, afterDashboardNavScreenshot);
 
-    console.log('📸 STEP 11: Taking dashboard screenshot...');
+    console.log('📸 STEP 12: Taking dashboard screenshot...');
     
     // Take screenshot of the dashboard
     const dashboardScreenshot = await page.screenshot({ fullPage: true }).catch(() => null);
     console.log('📸 Dashboard screenshot taken');
 
-    console.log('🔍 STEP 12: Extracting credit information...');
+    console.log('🔍 STEP 13: Extracting credit information...');
     
     // Extract credit information from the dashboard
     const creditInfo = await page.evaluate(() => {
