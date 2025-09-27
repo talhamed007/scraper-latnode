@@ -392,12 +392,8 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           if (button.offsetParent !== null && !button.disabled) { // Visible and enabled
             console.log('Found visible enabled button, clicking it');
             
-            // Add human-like delay before clicking
-            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-            
             // Scroll to button if needed
             button.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await new Promise(resolve => setTimeout(resolve, 500));
             
             // Click the button
             button.click();
