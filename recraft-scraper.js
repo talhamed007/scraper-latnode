@@ -211,74 +211,108 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     console.log('➡️ Looking for Next button after email...');
     
     try {
-      // Wait for the Next button using the exact Google button classes
-      await page.waitForSelector('button.VfPpkd-LgbsSe[jsname="LgbsSe"], button[jsname="LgbsSe"] span:has-text("Next"), button:has-text("Next")', { timeout: 15000 });
+      // Smart button detection - wait for ANY button to appear
+      await page.waitForSelector('button, input[type="submit"], input[type="button"]', { timeout: 15000 });
       
       const nextClicked = await page.evaluate(() => {
-        // Try the exact Google button with specific classes
-        const googleButton = document.querySelector('button.VfPpkd-LgbsSe[jsname="LgbsSe"]');
-        if (googleButton) {
-          const span = googleButton.querySelector('span');
-          if (span && span.textContent.trim() === 'Next') {
-            console.log('Found Google Next button with exact classes');
-            googleButton.click();
-            return true;
-          }
-        }
+        console.log('Starting smart button detection...');
         
-        // Look for button with jsname="LgbsSe" and "Next" text
-        const googleButtons = document.querySelectorAll('button[jsname="LgbsSe"]');
-        for (const button of googleButtons) {
-          const span = button.querySelector('span');
-          if (span && span.textContent.trim() === 'Next') {
-            console.log('Found Google Next button by jsname and span text');
-            button.click();
-            return true;
-          }
-        }
+        // Get ALL buttons on the page
+        const allButtons = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
+        console.log(`Found ${allButtons.length} buttons on the page`);
         
-        // Look for button with "Next" text specifically
-        const nextButtons = document.querySelectorAll('button');
-        for (const button of nextButtons) {
+        // Log all buttons for debugging
+        for (let i = 0; i < allButtons.length; i++) {
+          const button = allButtons[i];
           const text = button.innerText || button.textContent || '';
-          if (text.trim() === 'Next') {
-            console.log('Found Next button by text:', text);
+          const classes = button.className || '';
+          const id = button.id || '';
+          console.log(`Button ${i}: text="${text.trim()}", classes="${classes}", id="${id}"`);
+        }
+        
+        // Strategy 1: Look for button with "Next" text (case insensitive)
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+          if (text === 'next') {
+            console.log('Found Next button by exact text match');
             button.click();
             return true;
           }
         }
         
-        // Try the specific identifierNext button
-        const identifierNext = document.querySelector('#identifierNext');
-        if (identifierNext) {
-          console.log('Found identifierNext button');
-          identifierNext.click();
+        // Strategy 2: Look for button containing "Next" text
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+          if (text.includes('next')) {
+            console.log('Found Next button by partial text match:', text);
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 3: Look for span with "Next" text inside buttons
+        for (const button of allButtons) {
+          const spans = button.querySelectorAll('span');
+          for (const span of spans) {
+            const text = (span.innerText || span.textContent || '').trim().toLowerCase();
+            if (text === 'next') {
+              console.log('Found Next button by span text match');
+              button.click();
+              return true;
+            }
+          }
+        }
+        
+        // Strategy 4: Look for Google-specific button classes
+        for (const button of allButtons) {
+          if (button.className.includes('VfPpkd-LgbsSe') || button.getAttribute('jsname') === 'LgbsSe') {
+            console.log('Found Google button by classes');
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 5: If only one button, click it
+        if (allButtons.length === 1) {
+          console.log('Only one button found, clicking it');
+          allButtons[0].click();
           return true;
         }
         
-        // Fallback to general selectors
-        const selectors = [
-          'button:has-text("Next")',
-          'input[type="submit"]',
-          'button[type="submit"]',
-          'button:has-text("Continue")',
-          'button:has-text("Sign in")'
-        ];
-        
-        for (const selector of selectors) {
-          try {
-            const element = document.querySelector(selector);
-            if (element) {
-              console.log('Found button with selector:', selector);
-              element.click();
-              return true;
-            }
-          } catch (e) {
-            // Continue to next selector
+        // Strategy 6: Look for blue/primary buttons (Google Next buttons are usually blue)
+        for (const button of allButtons) {
+          const style = window.getComputedStyle(button);
+          const backgroundColor = style.backgroundColor;
+          const color = style.color;
+          
+          // Check if it's a blue button (Google Next buttons are typically blue)
+          if (backgroundColor.includes('rgb(11, 87, 208)') || backgroundColor.includes('rgb(11, 87, 208)') || 
+              backgroundColor.includes('blue') || button.className.includes('primary')) {
+            console.log('Found blue/primary button, clicking it');
+            button.click();
+            return true;
           }
         }
         
-        console.log('No Next button found');
+        // Strategy 7: Look for buttons with specific Google attributes
+        for (const button of allButtons) {
+          if (button.getAttribute('jsname') || button.getAttribute('jscontroller') || button.getAttribute('jsaction')) {
+            console.log('Found button with Google attributes, clicking it');
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 8: Click the first clickable button
+        for (const button of allButtons) {
+          if (button.offsetParent !== null && !button.disabled) { // Visible and enabled
+            console.log('Found visible enabled button, clicking it');
+            button.click();
+            return true;
+          }
+        }
+        
+        console.log('No suitable button found');
         return false;
       });
 
