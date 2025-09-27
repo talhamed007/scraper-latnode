@@ -509,50 +509,130 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     console.log('➡️ Looking for Next button after password...');
     
     try {
-      // Wait for the specific passwordNext button
-      await page.waitForSelector('#passwordNext, button:has-text("Next"), input[type="submit"], button[type="submit"]', { timeout: 10000 });
+      // Smart button detection - wait for ANY button to appear
+      await page.waitForSelector('button, input[type="submit"], input[type="button"]', { timeout: 15000 });
       
       const nextClicked = await page.evaluate(() => {
-        // Try the specific passwordNext button first
+        console.log('Starting smart password button detection...');
+        
+        // Get ALL buttons on the page
+        const allButtons = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
+        console.log(`Found ${allButtons.length} buttons on the password page`);
+        
+        // Log all buttons for debugging
+        for (let i = 0; i < allButtons.length; i++) {
+          const button = allButtons[i];
+          const text = button.innerText || button.textContent || '';
+          const classes = button.className || '';
+          const id = button.id || '';
+          console.log(`Password Button ${i}: text="${text.trim()}", classes="${classes}", id="${id}"`);
+        }
+        
+        // Strategy 1: Look for button with "Next" text (case insensitive)
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+          if (text === 'next') {
+            console.log('Found Next button by exact text match');
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 2: Look for button containing "Next" text
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+          if (text.includes('next')) {
+            console.log('Found Next button by partial text match:', text);
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 3: Look for span with "Next" text inside buttons
+        for (const button of allButtons) {
+          const spans = button.querySelectorAll('span');
+          for (const span of spans) {
+            const text = (span.innerText || span.textContent || '').trim().toLowerCase();
+            if (text === 'next') {
+              console.log('Found Next button by span text match');
+              button.click();
+              return true;
+            }
+          }
+        }
+        
+        // Strategy 4: Look for Google-specific button classes
+        for (const button of allButtons) {
+          if (button.className.includes('VfPpkd-LgbsSe') || button.getAttribute('jsname') === 'LgbsSe') {
+            console.log('Found Google button by classes');
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 5: Look for passwordNext button specifically
         const passwordNext = document.querySelector('#passwordNext');
         if (passwordNext) {
+          console.log('Found passwordNext button by ID');
           passwordNext.click();
           return true;
         }
         
-        // Fallback to general selectors
-        const selectors = [
-          'button:has-text("Next")',
-          'input[type="submit"]',
-          'button[type="submit"]',
-          'button:has-text("Continue")',
-          'button:has-text("Sign in")'
-        ];
+        // Strategy 6: If only one button, click it
+        if (allButtons.length === 1) {
+          console.log('Only one button found, clicking it');
+          allButtons[0].click();
+          return true;
+        }
         
-        for (const selector of selectors) {
-          try {
-            const element = document.querySelector(selector);
-            if (element) {
-              element.click();
-              return true;
-            }
-          } catch (e) {
-            // Continue to next selector
+        // Strategy 7: Look for blue/primary buttons (Google Next buttons are usually blue)
+        for (const button of allButtons) {
+          const style = window.getComputedStyle(button);
+          const backgroundColor = style.backgroundColor;
+          
+          // Check if it's a blue button (Google Next buttons are typically blue)
+          if (backgroundColor.includes('rgb(11, 87, 208)') || backgroundColor.includes('blue') || button.className.includes('primary')) {
+            console.log('Found blue/primary button, clicking it');
+            button.click();
+            return true;
           }
         }
+        
+        // Strategy 8: Click the first clickable button
+        for (const button of allButtons) {
+          if (button.offsetParent !== null && !button.disabled) { // Visible and enabled
+            console.log('Found visible enabled button, clicking it');
+            button.click();
+            return true;
+          }
+        }
+        
+        console.log('No suitable button found');
         return false;
       });
 
       if (nextClicked) {
         addDebugStep('Google Password Next', 'success', 'Clicked Next button after password');
         console.log('✅ Next button clicked after password');
+        
+        // Wait longer for Google to process the password
+        console.log('⏳ Waiting for Google to process the password...');
+        await sleep(5000);
+        
+        // Take screenshot to see what happened
+        await takeScreenshot('After Password Next Click');
+        
+        // Wait a bit more for potential redirects
+        await sleep(3000);
       } else {
-        addDebugStep('Google Password Next', 'error', 'Could not find or click Next button');
-        console.log('❌ Could not find Next button');
+        addDebugStep('Google Password Next', 'error', 'Could not find or click Next button - STOPPING HERE');
+        console.log('❌ Could not find Next button - STOPPING HERE');
+        throw new Error('Could not find Next button - cannot proceed to Recraft.ai');
       }
     } catch (error) {
-      addDebugStep('Google Password Next', 'error', 'Error finding Next button', null, error.message);
-      console.log('❌ Error finding Next button:', error.message);
+      addDebugStep('Google Password Next', 'error', 'Error finding Next button - STOPPING HERE', null, error.message);
+      console.log('❌ Error finding Next button - STOPPING HERE:', error.message);
+      throw error; // Stop execution here
     }
 
     await sleep(10000);
