@@ -644,7 +644,10 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     
     try {
       // Wait for any button to appear (the "IK begrijp het" button)
-      await page.waitForSelector('button, a, input[type="submit"]', { timeout: 10000 });
+      await page.waitForSelector('button, a, input[type="submit"]', { timeout: 15000 });
+      
+      // Wait a bit more for the page to fully load
+      await sleep(3000);
       
       const welcomeButtonClicked = await page.evaluate(() => {
         console.log('Starting smart welcome page button detection...');
@@ -672,7 +675,17 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           }
         }
         
-        // Strategy 2: Look for button containing "begrijp" (partial text)
+        // Strategy 2: Look for "Ik begrijp het" button (case variation)
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim();
+          if (text === 'Ik begrijp het') {
+            console.log('Found "Ik begrijp het" button by exact text match (lowercase i)');
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 3: Look for button containing "begrijp" (partial text)
         for (const button of allButtons) {
           const text = (button.innerText || button.textContent || '').trim();
           if (text.includes('begrijp')) {
@@ -682,7 +695,7 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           }
         }
         
-        // Strategy 3: Look for button containing "IK" (partial text)
+        // Strategy 4: Look for button containing "IK" (partial text)
         for (const button of allButtons) {
           const text = (button.innerText || button.textContent || '').trim();
           if (text.includes('IK')) {
@@ -692,7 +705,17 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           }
         }
         
-        // Strategy 4: Look for blue/primary buttons (Google buttons are usually blue)
+        // Strategy 5: Look for button containing "Ik" (partial text, lowercase)
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim();
+          if (text.includes('Ik')) {
+            console.log('Found button by partial text match:', text);
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 6: Look for blue/primary buttons (Google buttons are usually blue)
         for (const button of allButtons) {
           const style = window.getComputedStyle(button);
           const backgroundColor = style.backgroundColor;
@@ -705,14 +728,24 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           }
         }
         
-        // Strategy 5: If only one button, click it
+        // Strategy 7: Look for any button with "begrijp" in any case
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+          if (text.includes('begrijp')) {
+            console.log('Found button by case-insensitive partial text match:', text);
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 8: If only one button, click it
         if (allButtons.length === 1) {
           console.log('Only one button found, clicking it');
           allButtons[0].click();
           return true;
         }
         
-        // Strategy 6: Click the first clickable button
+        // Strategy 9: Click the first clickable button
         for (const button of allButtons) {
           if (button.offsetParent !== null && !button.disabled) { // Visible and enabled
             console.log('Found visible enabled button, clicking it');
