@@ -46,8 +46,8 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
 
     addDebugStep('Scraper Started', 'info', 'Initializing Recraft.ai login scraper');
 
-    // Launch browser
-    addDebugStep('Browser Launch', 'info', 'Launching Puppeteer browser');
+    // Launch browser with stealth settings
+    addDebugStep('Browser Launch', 'info', 'Launching Puppeteer browser with stealth settings');
     browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -57,13 +57,76 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-web-security',
+        '--disable-features=TranslateUI',
+        '--disable-ipc-flooding-protection',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-background-timer-throttling',
+        '--disable-client-side-phishing-detection',
+        '--disable-sync',
+        '--disable-default-apps',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-hang-monitor',
+        '--disable-prompt-on-repost',
+        '--disable-domain-reliability',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-ipc-flooding-protection',
+        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ]
     });
 
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
-    addDebugStep('Browser Launch', 'success', 'Browser launched successfully');
+    
+    // Add stealth settings to avoid detection
+    await page.evaluateOnNewDocument(() => {
+      // Remove webdriver property
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+      
+      // Mock plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+      
+      // Mock languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+      
+      // Mock permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery(parameters)
+      );
+    });
+    
+    // Set realistic user agent
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    // Add extra headers
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+      'Upgrade-Insecure-Requests': '1',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    });
+    
+    addDebugStep('Browser Launch', 'success', 'Browser launched with stealth settings');
 
     // Navigate directly to Recraft.ai login page
     addDebugStep('Recraft Login Navigation', 'info', 'Navigating directly to Recraft.ai login page');
@@ -178,26 +241,47 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await sleep(2000);
     await takeScreenshot('Google Email Input Found');
 
-    // Clear and fill Google email
-    addDebugStep('Google Email Entry', 'info', 'Clearing and filling Google email field');
-    console.log('✍️ Clearing and filling Google email field...');
+    // Clear and fill Google email with human-like behavior
+    addDebugStep('Google Email Entry', 'info', 'Clearing and filling Google email field with human-like behavior');
+    console.log('✍️ Clearing and filling Google email field with human-like behavior...');
     
     try {
-      // Clear the field first
-      await page.click('input[type="email"], input[name="identifier"], input[id="identifierId"], input[placeholder*="email"], input[placeholder*="Email"]');
-      await page.keyboard.down('Control');
-      await page.keyboard.press('KeyA');
-      await page.keyboard.up('Control');
-      await page.keyboard.press('Delete');
+      // Find the email input field
+      const emailInput = await page.$('input[type="email"], input[name="identifier"], input[id="identifierId"], input[placeholder*="email"], input[placeholder*="Email"]');
       
-      // Type the email
-      await page.type('input[type="email"], input[name="identifier"], input[id="identifierId"], input[placeholder*="email"], input[placeholder*="Email"]', googleEmail, { delay: 100 });
-      
-      // Wait a moment for the email to be processed
-      await sleep(2000);
-      
-      addDebugStep('Google Email Entry', 'success', 'Google email filled successfully');
-      console.log('✅ Google email filled successfully');
+      if (emailInput) {
+        // Move mouse to the input field (human-like)
+        const box = await emailInput.boundingBox();
+        if (box) {
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 10 });
+          await sleep(500);
+        }
+        
+        // Click the field
+        await emailInput.click();
+        await sleep(1000);
+        
+        // Clear the field
+        await page.keyboard.down('Control');
+        await page.keyboard.press('KeyA');
+        await page.keyboard.up('Control');
+        await page.keyboard.press('Delete');
+        await sleep(500);
+        
+        // Type the email with human-like delays
+        for (const char of googleEmail) {
+          await page.keyboard.type(char);
+          await sleep(50 + Math.random() * 100); // Random delay between 50-150ms
+        }
+        
+        // Wait for the email to be processed
+        await sleep(3000);
+        
+        addDebugStep('Google Email Entry', 'success', 'Google email filled successfully');
+        console.log('✅ Google email filled successfully');
+      } else {
+        throw new Error('Email input field not found');
+      }
     } catch (error) {
       addDebugStep('Google Email Entry', 'error', 'Failed to fill Google email', null, error.message);
       console.log('❌ Failed to fill Google email:', error.message);
@@ -303,10 +387,19 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           }
         }
         
-        // Strategy 8: Click the first clickable button
+        // Strategy 8: Click the first clickable button with human-like behavior
         for (const button of allButtons) {
           if (button.offsetParent !== null && !button.disabled) { // Visible and enabled
             console.log('Found visible enabled button, clicking it');
+            
+            // Add human-like delay before clicking
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+            
+            // Scroll to button if needed
+            button.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Click the button
             button.click();
             return true;
           }
@@ -319,6 +412,16 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
       if (nextClicked) {
         addDebugStep('Google Email Next', 'success', 'Clicked Next button after email');
         console.log('✅ Next button clicked after email');
+        
+        // Wait longer for Google to process the request
+        console.log('⏳ Waiting for Google to process the email...');
+        await sleep(5000);
+        
+        // Take screenshot to see what happened
+        await takeScreenshot('After Next Button Click');
+        
+        // Wait a bit more for potential redirects
+        await sleep(3000);
       } else {
         addDebugStep('Google Email Next', 'error', 'Could not find or click Next button - STOPPING HERE');
         console.log('❌ Could not find Next button - STOPPING HERE');
