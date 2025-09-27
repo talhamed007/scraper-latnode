@@ -211,38 +211,49 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     console.log('➡️ Looking for Next button after email...');
     
     try {
-      // Wait for the Next button with multiple approaches
-      await page.waitForSelector('#identifierNext, button:has-text("Next"), button[jsname="LgbsSe"], button[type="button"]:has-text("Next")', { timeout: 15000 });
+      // Wait for the Next button using the exact Google button classes
+      await page.waitForSelector('button.VfPpkd-LgbsSe[jsname="LgbsSe"], button[jsname="LgbsSe"] span:has-text("Next"), button:has-text("Next")', { timeout: 15000 });
       
       const nextClicked = await page.evaluate(() => {
-        // Try the specific identifierNext button first
-        const identifierNext = document.querySelector('#identifierNext');
-        if (identifierNext) {
-          console.log('Found identifierNext button');
-          identifierNext.click();
-          return true;
+        // Try the exact Google button with specific classes
+        const googleButton = document.querySelector('button.VfPpkd-LgbsSe[jsname="LgbsSe"]');
+        if (googleButton) {
+          const span = googleButton.querySelector('span');
+          if (span && span.textContent.trim() === 'Next') {
+            console.log('Found Google Next button with exact classes');
+            googleButton.click();
+            return true;
+          }
+        }
+        
+        // Look for button with jsname="LgbsSe" and "Next" text
+        const googleButtons = document.querySelectorAll('button[jsname="LgbsSe"]');
+        for (const button of googleButtons) {
+          const span = button.querySelector('span');
+          if (span && span.textContent.trim() === 'Next') {
+            console.log('Found Google Next button by jsname and span text');
+            button.click();
+            return true;
+          }
         }
         
         // Look for button with "Next" text specifically
         const nextButtons = document.querySelectorAll('button');
         for (const button of nextButtons) {
           const text = button.innerText || button.textContent || '';
-          if (text.trim().toLowerCase() === 'next') {
+          if (text.trim() === 'Next') {
             console.log('Found Next button by text:', text);
             button.click();
             return true;
           }
         }
         
-        // Look for button with jsname="LgbsSe" (Google's button class)
-        const googleButtons = document.querySelectorAll('button[jsname="LgbsSe"]');
-        for (const button of googleButtons) {
-          const text = button.innerText || button.textContent || '';
-          if (text.trim().toLowerCase() === 'next') {
-            console.log('Found Google Next button:', text);
-            button.click();
-            return true;
-          }
+        // Try the specific identifierNext button
+        const identifierNext = document.querySelector('#identifierNext');
+        if (identifierNext) {
+          console.log('Found identifierNext button');
+          identifierNext.click();
+          return true;
         }
         
         // Fallback to general selectors
