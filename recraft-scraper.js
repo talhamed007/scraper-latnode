@@ -638,6 +638,109 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await sleep(10000);
     await takeScreenshot('After Password Next Click');
 
+    // Check for Google welcome page and click "IK begrijp het" button
+    addDebugStep('Google Welcome Page', 'info', 'Checking for Google welcome page and "IK begrijp het" button');
+    console.log('🔍 Checking for Google welcome page and "IK begrijp het" button...');
+    
+    try {
+      // Wait for any button to appear (the "IK begrijp het" button)
+      await page.waitForSelector('button, a, input[type="submit"]', { timeout: 10000 });
+      
+      const welcomeButtonClicked = await page.evaluate(() => {
+        console.log('Starting smart welcome page button detection...');
+        
+        // Get ALL buttons on the page
+        const allButtons = document.querySelectorAll('button, a, input[type="submit"]');
+        console.log(`Found ${allButtons.length} buttons on the welcome page`);
+        
+        // Log all buttons for debugging
+        for (let i = 0; i < allButtons.length; i++) {
+          const button = allButtons[i];
+          const text = button.innerText || button.textContent || '';
+          const classes = button.className || '';
+          const id = button.id || '';
+          console.log(`Welcome Button ${i}: text="${text.trim()}", classes="${classes}", id="${id}"`);
+        }
+        
+        // Strategy 1: Look for "IK begrijp het" button (exact text)
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim();
+          if (text === 'IK begrijp het') {
+            console.log('Found "IK begrijp het" button by exact text match');
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 2: Look for button containing "begrijp" (partial text)
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim();
+          if (text.includes('begrijp')) {
+            console.log('Found button by partial text match:', text);
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 3: Look for button containing "IK" (partial text)
+        for (const button of allButtons) {
+          const text = (button.innerText || button.textContent || '').trim();
+          if (text.includes('IK')) {
+            console.log('Found button by partial text match:', text);
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 4: Look for blue/primary buttons (Google buttons are usually blue)
+        for (const button of allButtons) {
+          const style = window.getComputedStyle(button);
+          const backgroundColor = style.backgroundColor;
+          
+          // Check if it's a blue button
+          if (backgroundColor.includes('rgb(26, 115, 232)') || backgroundColor.includes('blue') || button.className.includes('primary')) {
+            console.log('Found blue/primary button, clicking it');
+            button.click();
+            return true;
+          }
+        }
+        
+        // Strategy 5: If only one button, click it
+        if (allButtons.length === 1) {
+          console.log('Only one button found, clicking it');
+          allButtons[0].click();
+          return true;
+        }
+        
+        // Strategy 6: Click the first clickable button
+        for (const button of allButtons) {
+          if (button.offsetParent !== null && !button.disabled) { // Visible and enabled
+            console.log('Found visible enabled button, clicking it');
+            button.click();
+            return true;
+          }
+        }
+        
+        console.log('No suitable button found');
+        return false;
+      });
+
+      if (welcomeButtonClicked) {
+        addDebugStep('Google Welcome Page', 'success', 'Clicked "IK begrijp het" button');
+        console.log('✅ "IK begrijp het" button clicked');
+        
+        // Wait for navigation
+        await sleep(5000);
+        await takeScreenshot('After Accepting Google Terms');
+      } else {
+        addDebugStep('Google Welcome Page', 'warning', 'Could not find "IK begrijp het" button, continuing...');
+        console.log('⚠️ Could not find "IK begrijp het" button, continuing...');
+      }
+    } catch (error) {
+      addDebugStep('Google Welcome Page', 'warning', 'Error finding welcome page button, continuing...', null, error.message);
+      console.log('⚠️ Error finding welcome page button, continuing...');
+    }
+
     // Check if we're redirected back to Recraft.ai
     const redirectCheck = await page.evaluate(() => {
       const currentUrl = window.location.href;
