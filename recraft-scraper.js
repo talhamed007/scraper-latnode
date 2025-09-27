@@ -206,20 +206,43 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
     await sleep(2000);
     await takeScreenshot('Google Email Filled');
 
-    // Click Next button for email (using specific ID)
+    // Click Next button for email (using specific ID and text)
     addDebugStep('Google Email Next', 'info', 'Looking for Next button after email');
     console.log('➡️ Looking for Next button after email...');
     
     try {
-      // Wait for the specific identifierNext button
-      await page.waitForSelector('#identifierNext, button:has-text("Next"), input[type="submit"], button[type="submit"]', { timeout: 10000 });
+      // Wait for the Next button with multiple approaches
+      await page.waitForSelector('#identifierNext, button:has-text("Next"), button[jsname="LgbsSe"], button[type="button"]:has-text("Next")', { timeout: 15000 });
       
       const nextClicked = await page.evaluate(() => {
         // Try the specific identifierNext button first
         const identifierNext = document.querySelector('#identifierNext');
         if (identifierNext) {
+          console.log('Found identifierNext button');
           identifierNext.click();
           return true;
+        }
+        
+        // Look for button with "Next" text specifically
+        const nextButtons = document.querySelectorAll('button');
+        for (const button of nextButtons) {
+          const text = button.innerText || button.textContent || '';
+          if (text.trim().toLowerCase() === 'next') {
+            console.log('Found Next button by text:', text);
+            button.click();
+            return true;
+          }
+        }
+        
+        // Look for button with jsname="LgbsSe" (Google's button class)
+        const googleButtons = document.querySelectorAll('button[jsname="LgbsSe"]');
+        for (const button of googleButtons) {
+          const text = button.innerText || button.textContent || '';
+          if (text.trim().toLowerCase() === 'next') {
+            console.log('Found Google Next button:', text);
+            button.click();
+            return true;
+          }
         }
         
         // Fallback to general selectors
@@ -235,6 +258,7 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
           try {
             const element = document.querySelector(selector);
             if (element) {
+              console.log('Found button with selector:', selector);
               element.click();
               return true;
             }
@@ -242,6 +266,8 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
             // Continue to next selector
           }
         }
+        
+        console.log('No Next button found');
         return false;
       });
 
@@ -249,16 +275,46 @@ async function scrapeRecraftLogin(googleEmail, googlePassword) {
         addDebugStep('Google Email Next', 'success', 'Clicked Next button after email');
         console.log('✅ Next button clicked after email');
       } else {
-        addDebugStep('Google Email Next', 'error', 'Could not find or click Next button');
-        console.log('❌ Could not find Next button');
+        addDebugStep('Google Email Next', 'error', 'Could not find or click Next button - STOPPING HERE');
+        console.log('❌ Could not find Next button - STOPPING HERE');
+        throw new Error('Could not find Next button - cannot proceed to password step');
       }
     } catch (error) {
-      addDebugStep('Google Email Next', 'error', 'Error finding Next button', null, error.message);
-      console.log('❌ Error finding Next button:', error.message);
+      addDebugStep('Google Email Next', 'error', 'Error finding Next button - STOPPING HERE', null, error.message);
+      console.log('❌ Error finding Next button - STOPPING HERE:', error.message);
+      throw error; // Stop execution here
     }
 
     await sleep(5000);
     await takeScreenshot('After Email Next Click');
+
+    // Verify we're on the password page before proceeding
+    addDebugStep('Password Page Verification', 'info', 'Verifying we are on the password page');
+    console.log('🔍 Verifying we are on the password page...');
+    
+    const passwordPageCheck = await page.evaluate(() => {
+      const currentUrl = window.location.href;
+      const hasPasswordField = !!document.querySelector('input[type="password"]');
+      const hasPasswordText = document.body.innerText.toLowerCase().includes('password');
+      const hasNextButton = !!document.querySelector('#passwordNext');
+      
+      return {
+        currentUrl,
+        hasPasswordField,
+        hasPasswordText,
+        hasNextButton,
+        pageTitle: document.title
+      };
+    });
+    
+    console.log('Password page check:', passwordPageCheck);
+    addDebugStep('Password Page Verification', 'info', 'Checking if we reached password page', passwordPageCheck);
+    
+    if (!passwordPageCheck.hasPasswordField) {
+      addDebugStep('Password Page Verification', 'error', 'Not on password page - missing password field');
+      console.log('❌ Not on password page - missing password field');
+      throw new Error('Not on password page - cannot proceed');
+    }
 
     // Wait for Google password input field
     addDebugStep('Google Password Input', 'info', 'Waiting for Google password input field');
