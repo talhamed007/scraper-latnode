@@ -3467,7 +3467,18 @@ app.post('/api/recraft-login', async (req, res) => {
     // Call the separate Recraft.ai scraper
     const result = await scrapeRecraftLogin(googleEmail, googlePassword);
     
-    res.json(result);
+    // Ensure the response has the expected format
+    const response = {
+      ok: result.success,
+      success: result.success,
+      message: result.message || (result.success ? 'Login successful' : 'Login failed'),
+      finalUrl: result.finalUrl,
+      debugSteps: result.debugSteps,
+      screenshots: result.screenshots,
+      error: result.error
+    };
+    
+    res.json(response);
   } catch (error) {
     console.error('❌ Recraft.ai login test error:', error);
     res.status(500).json({
