@@ -694,7 +694,6 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
             await takeScreenshot('After Clicking Image Icon', page);
 
             // Skip Recraft V3 Raw - default style is already selected
-            addDebugStep('Style Selection', 'info', 'Skipping Recraft V3 Raw selection - default style is already selected');
             await sleep(2000); // Wait for page to settle
             await takeScreenshot('After Image Click', page);
 

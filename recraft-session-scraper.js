@@ -355,9 +355,11 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
   addDebugStep('Image Generation', 'info', `🎨 Starting image generation with prompt: "${prompt}"`);
   
   try {
-    // Navigate to new project if not already there
+    // Check if we're already in a project editor
     const currentUrl = await page.url();
-    if (!currentUrl.includes('editor') && !currentUrl.includes('new')) {
+    const isInEditor = currentUrl.includes('editor') || currentUrl.includes('project/') || currentUrl.includes('new');
+    
+    if (!isInEditor) {
       addDebugStep('Navigation', 'info', 'Navigating to new project...');
       
       // Handle privacy popup if present
@@ -381,6 +383,9 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
         await page.click('button, [role="button"]');
         await sleep(3000);
       }
+    } else {
+      addDebugStep('Navigation', 'info', 'Already in project editor, skipping navigation');
+    }
       
       await takeScreenshot('New Project');
     }
@@ -426,11 +431,9 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
         await takeScreenshot('Image Selection');
     
        // Skip Recraft V3 Raw - default style is already selected
-       addDebugStep('Style Selection', 'info', 'Skipping Recraft V3 Raw selection - default style is already selected');
        await sleep(2000); // Wait for page to settle
        
       // Skip Photorealism Apply - default style is already Photorealism
-      addDebugStep('Style Selection', 'info', 'Skipping Photorealism selection - default style is already Photorealism');
       await sleep(2000); // Wait for page to settle
       await takeScreenshot('Style Applied');
     
