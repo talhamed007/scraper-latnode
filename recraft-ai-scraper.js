@@ -64,11 +64,12 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
     
     addDebugStep('Initialization', 'info', 'Starting AI-powered Recraft.ai scraper...');
     
-    // Launch browser with stealth settings
+    // Launch browser with Railway-compatible settings
     addDebugStep('Browser Launch', 'info', 'Launching browser with AI guidance...');
     
-    browser = await puppeteer.launch({
-      headless: false, // Keep visible for AI analysis
+    try {
+      browser = await puppeteer.launch({
+      headless: 'new', // Use new headless mode for Railway compatibility
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -85,12 +86,47 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
         '--disable-field-trial-config',
         '--disable-back-forward-cache',
         '--disable-ipc-flooding-protection',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--disable-logging',
+        '--disable-permissions-api',
+        '--disable-presentation-api',
+        '--disable-print-preview',
+        '--disable-speech-api',
+        '--disable-file-system',
+        '--disable-notifications',
+        '--disable-geolocation',
+        '--disable-media-session',
+        '--disable-client-side-phishing-detection',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-features=TranslateUI,BlinkGenPropertyTrees',
         '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ],
-      defaultViewport: { width: 1366, height: 768 }
+      defaultViewport: { width: 1366, height: 768 },
+      ignoreDefaultArgs: ['--disable-extensions'],
+      ignoreHTTPSErrors: true,
+      timeout: 60000
     });
     
+    addDebugStep('Browser Launch', 'success', 'Browser launched successfully');
+    
     page = await browser.newPage();
+    
+    } catch (browserError) {
+      addDebugStep('Browser Launch', 'error', 'Failed to launch browser', null, browserError.message);
+      throw new Error(`Failed to launch browser: ${browserError.message}. This might be due to Railway's server environment limitations.`);
+    }
     
     // Enhanced stealth settings
     await page.evaluateOnNewDocument(() => {

@@ -3495,6 +3495,9 @@ try {
   console.log('⚠️ AI module not available:', error.message);
 }
 
+// Recraft.ai Simple Route (fallback for Railway)
+const { scrapeRecraftSimple } = require('./recraft-simple-scraper');
+
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -3582,6 +3585,47 @@ app.post('/api/recraft-ai', async (req, res) => {
 // Serve Recraft.ai AI test page
 app.get('/recraft-ai', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft-ai-test.html'));
+});
+
+// Recraft.ai Simple Route (Railway-compatible)
+app.post('/api/recraft-simple', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { googleEmail, googlePassword } = req.body;
+
+  if (!googleEmail || !googlePassword) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Google email and password are required for simple scraping'
+    });
+  }
+
+  try {
+    console.log('🚀 Starting simple Recraft.ai scraping...');
+    console.log('📧 Google Email:', googleEmail);
+    
+    // Call the simple scraper
+    const result = await scrapeRecraftSimple(googleEmail, googlePassword);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Simple Recraft.ai error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Serve Recraft.ai simple test page
+app.get('/recraft-simple', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recraft-simple-test.html'));
 });
 
 // Handle uncaught exceptions
