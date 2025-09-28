@@ -66,6 +66,7 @@ async function sleep(ms) {
 async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
   let browser = null;
   let page = null;
+  let finalImageUrl = null;
   
   // Make io available globally in this module
   global.io = io;
@@ -959,47 +960,102 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                                       await sleep(2000);
                                       await takeScreenshot('Generation Completed', page);
                                       
-                                      // --- NEW STEP 6: Click on the generated image ---
-                                      addDebugStep('Click Generated Image', 'info', 'Looking for and clicking on generated image...');
+                                      // --- NEW STEP 6: Right-click and copy image link ---
+                                      addDebugStep('Image Link Extraction', 'info', 'Right-clicking on generated image to copy link...');
+                                      let finalImageUrl = null;
                                       try {
-                                        const imageClicked = await page.evaluate(() => {
-                                          // Look for generated images in the canvas area
-                                          const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img');
-                                          for (const img of images) {
-                                            if (img.offsetParent !== null) { // Visible image
-                                              console.log('Found generated image, clicking...');
-                                              img.click();
-                                              return true;
+                                        // Find the generated image
+                                        const imageElement = await page.waitForSelector('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img', { timeout: 10000 });
+                                        
+                                        if (imageElement) {
+                                          // Right-click on the image to open context menu
+                                          await imageElement.click({ button: 'right' });
+                                          addDebugStep('Image Link Extraction', 'info', 'Right-clicked on image, context menu should appear');
+                                          await sleep(1000);
+                                          
+                                          // Look for "Copy image link" or similar option in context menu
+                                          const copyImageLinkClicked = await page.evaluate(() => {
+                                            const contextMenuItems = document.querySelectorAll('[role="menuitem"], [role="option"], .context-menu-item, [class*="context-menu"], [class*="menu-item"]');
+                                            for (const item of contextMenuItems) {
+                                              const text = (item.innerText || item.textContent || '').toLowerCase();
+                                              if (text.includes('copy') && text.includes('image') && text.includes('link')) {
+                                                item.click();
+                                                console.log('Clicked "Copy image link" from context menu');
+                                                return true;
+                                              }
                                             }
+                                            return false;
+                                          });
+                                          
+                                          if (copyImageLinkClicked) {
+                                            addDebugStep('Image Link Extraction', 'success', 'Clicked "Copy image link" from context menu');
+                                            await sleep(1000);
+                                            
+                                            // Get the copied link from clipboard
+                                            const copiedLink = await page.evaluate(() => {
+                                              return navigator.clipboard.readText();
+                                            });
+                                            
+                                            if (copiedLink) {
+                                              addDebugStep('Image Link Extraction', 'success', `Copied image link: ${copiedLink}`);
+                                              
+                                              // Open the copied link in a new tab
+                                              addDebugStep('Image Link Extraction', 'info', 'Opening copied link in new tab...');
+                                              const newPage = await browser.newPage();
+                                              await newPage.goto(copiedLink, { waitUntil: 'networkidle2', timeout: 30000 });
+                                              await sleep(2000);
+                                              await takeScreenshot('Opened Image in New Tab', newPage);
+                                              
+                                              // Right-click on the image in the new tab to get final address
+                                              addDebugStep('Image Link Extraction', 'info', 'Right-clicking on image in new tab to copy address...');
+                                              const newImageElement = await newPage.waitForSelector('img', { timeout: 10000 });
+                                              await newImageElement.click({ button: 'right' });
+                                              await sleep(1000);
+                                              
+                                              // Look for "Copy image address" or similar option
+                                              const copyImageAddressClicked = await newPage.evaluate(() => {
+                                                const contextMenuItems = document.querySelectorAll('[role="menuitem"], [role="option"], .context-menu-item, [class*="context-menu"], [class*="menu-item"]');
+                                                for (const item of contextMenuItems) {
+                                                  const text = (item.innerText || item.textContent || '').toLowerCase();
+                                                  if (text.includes('copy') && text.includes('image') && text.includes('address')) {
+                                                    item.click();
+                                                    console.log('Clicked "Copy image address" from context menu');
+                                                    return true;
+                                                  }
+                                                }
+                                                return false;
+                                              });
+                                              
+                                              if (copyImageAddressClicked) {
+                                                addDebugStep('Image Link Extraction', 'success', 'Clicked "Copy image address" from context menu');
+                                                await sleep(1000);
+                                                
+                                                // Get the final copied address from clipboard
+                                                finalImageUrl = await newPage.evaluate(() => {
+                                                  return navigator.clipboard.readText();
+                                                });
+                                                
+                                                if (finalImageUrl) {
+                                                  addDebugStep('Image Link Extraction', 'success', `Final image address: ${finalImageUrl}`);
+                                                } else {
+                                                  addDebugStep('Image Link Extraction', 'warning', 'Could not get final image address from clipboard');
+                                                }
+                                              } else {
+                                                addDebugStep('Image Link Extraction', 'warning', 'Could not find "Copy image address" option in context menu');
+                                              }
+                                              
+                                              await newPage.close();
+                                            } else {
+                                              addDebugStep('Image Link Extraction', 'warning', 'Could not get copied link from clipboard');
+                                            }
+                                          } else {
+                                            addDebugStep('Image Link Extraction', 'warning', 'Could not find "Copy image link" option in context menu');
                                           }
-                                          console.log('No generated image found to click');
-                                          return false;
-                                        });
-
-                                        if (imageClicked) {
-                                          addDebugStep('Click Generated Image', 'success', 'Successfully clicked on generated image');
-                                          await sleep(2000);
-                                          await takeScreenshot('After Clicking Image', page);
                                         } else {
-                                          addDebugStep('Click Generated Image', 'warning', 'Could not find generated image to click');
+                                          addDebugStep('Image Link Extraction', 'warning', 'Could not find generated image to right-click');
                                         }
                                       } catch (error) {
-                                        addDebugStep('Click Generated Image', 'error', 'Error clicking generated image', null, error.message);
-                                      }
-                                      
-                                      // Try to get the generated image link
-                                      const imageLink = await page.evaluate(() => {
-                                        const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img');
-                                        if (images.length > 0) {
-                                          return images[0].src;
-                                        }
-                                        return null;
-                                      });
-                                      
-                                      if (imageLink) {
-                                        addDebugStep('Image Link', 'success', `Generated image link: ${imageLink}`);
-                                      } else {
-                                        addDebugStep('Image Link', 'warning', 'Could not find generated image link');
+                                        addDebugStep('Image Link Extraction', 'error', 'Error extracting image link via right-click', null, error.message);
                                       }
                                       
                                     } catch (error) {
@@ -1073,6 +1129,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
       success: isSuccess,
       finalUrl: finalUrl,
       finalTitle: finalTitle,
+      finalImageUrl: finalImageUrl,
       steps: debugSteps,
       message: isSuccess ? 'Simple login successful!' : 'Simple login completed with warnings'
     };
