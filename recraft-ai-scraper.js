@@ -865,6 +865,15 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                                 return false;
                               });
                               
+                              // Clear the textarea first to avoid duplication
+                              await page.evaluate(() => {
+                                const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
+                                if (textarea) {
+                                  textarea.value = '';
+                                  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                              });
+                              
                               // Use Puppeteer's type method as backup
                               await page.type('textarea[name="prompt"][data-testid="recraft-textarea"]', 'banana bread in kitchen with sun light', { delay: 100 });
                               
@@ -967,14 +976,37 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                                     addDebugStep('Generation Wait', 'info', 'Waiting for image generation to complete...');
                                     
                                     try {
-                                      // Wait for either generated images to appear or generation to complete
+                                      // Wait for generation to start first
                                       await page.waitForFunction(() => {
-                                        // Look for generated images or completion indicators
-                                        const hasImages = document.querySelectorAll('img[src*="recraft"], [class*="generated"], [class*="result"]').length > 0;
-                                        const hasLoading = document.querySelector('[class*="loading"], [class*="generating"]') !== null;
-                                        const hasProgress = document.querySelector('[class*="progress"], [class*="status"]') !== null;
+                                        const generatingText = document.body.innerText.toLowerCase().includes('generating');
+                                        const generatingIndicator = document.querySelector('[class*="generating"], [class*="loading"], [class*="progress"]');
+                                        return generatingText || generatingIndicator;
+                                      }, { timeout: 10000 });
+                                      
+                                      addDebugStep('Generation Wait', 'info', 'Generation started, waiting for completion...');
+                                      
+                                      // Wait for generation to complete
+                                      await page.waitForFunction(() => {
+                                        // Look for generated images
+                                        const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img, [class*="preview"] img');
+                                        const hasVisibleImages = Array.from(images).some(img => img.offsetParent !== null);
                                         
-                                        return hasImages || (!hasLoading && !hasProgress);
+                                        // Check if generating indicators are gone
+                                        const generatingText = document.body.innerText.toLowerCase().includes('generating');
+                                        const generatingIndicator = document.querySelector('[class*="generating"], [class*="loading"], [class*="progress"]');
+                                        
+                                        // Check for canvas or image containers with content
+                                        const canvas = document.querySelector('canvas, [class*="canvas"], [class*="preview"], [class*="result"]');
+                                        const hasCanvasContent = canvas && canvas.children.length > 0;
+                                        
+                                        console.log('Generation check:', {
+                                          hasVisibleImages,
+                                          generatingText,
+                                          hasGeneratingIndicator: !!generatingIndicator,
+                                          hasCanvasContent
+                                        });
+                                        
+                                        return (hasVisibleImages || hasCanvasContent) && !generatingText && !generatingIndicator;
                                       }, { timeout: 60000 }); // Wait up to 60 seconds
                                       
                                       addDebugStep('Generation Wait', 'success', 'Image generation completed');
