@@ -246,12 +246,23 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
             for (const button of allButtons) {
               if (button.offsetParent === null) continue; // Skip hidden buttons
               
-              const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+              const text = (button.innerText || button.textContent || '').trim();
+              const lowerText = text.toLowerCase();
               const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
               const className = (button.className || '').toLowerCase();
               
+              console.log('Checking button:', text, 'aria-label:', ariaLabel, 'class:', className);
+              
+              // Look for "Accept All" buttons in cookie popups (exact match first)
+              if (text === 'Accept All' || lowerText === 'accept all') {
+                button.click();
+                closedCount++;
+                console.log('Clicked Accept All button:', text);
+                continue;
+              }
+              
               // Look for close buttons (X buttons) in popups
-              if (text === '×' || text === '✕' || text === 'close' || 
+              if (text === '×' || text === '✕' || text === 'Close' || lowerText === 'close' || 
                   ariaLabel.includes('close') || className.includes('close')) {
                 button.click();
                 closedCount++;
@@ -259,10 +270,10 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                 continue;
               }
               
-              // Look for "Accept All" buttons in cookie popups
-              if (text.includes('accept all') || text.includes('accept') || 
-                  text.includes('ok') || text.includes('got it') ||
-                  text.includes('agree') || text.includes('continue')) {
+              // Look for other accept buttons
+              if (lowerText.includes('accept') || lowerText.includes('ok') || 
+                  lowerText.includes('got it') || lowerText.includes('agree') || 
+                  lowerText.includes('continue')) {
                 button.click();
                 closedCount++;
                 console.log('Clicked Accept/OK button:', text);
@@ -270,8 +281,8 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
               }
               
               // Look for "Learn more" or similar buttons that might close popups
-              if (text.includes('learn more') || text.includes('dismiss') ||
-                  text.includes('skip') || text.includes('not now')) {
+              if (lowerText.includes('learn more') || lowerText.includes('dismiss') ||
+                  lowerText.includes('skip') || lowerText.includes('not now')) {
                 button.click();
                 closedCount++;
                 console.log('Clicked Learn more/Dismiss button:', text);
@@ -288,6 +299,63 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
             await takeScreenshot('After Closing Popups', page);
           } else {
             addDebugStep('Popup Handling', 'info', 'No popups found to close');
+          }
+          
+          // Click on "Create new project" button
+          addDebugStep('Create Project', 'info', 'Looking for and clicking Create new project button...');
+          
+          try {
+            // Wait a bit for the page to settle after popup handling
+            await sleep(2000);
+            
+            // Look for and click the "Create new project" button
+            const createProjectClicked = await page.evaluate(() => {
+              // Get all buttons and clickable elements
+              const allButtons = document.querySelectorAll('button, a, [role="button"], div[onclick]');
+              
+              for (const button of allButtons) {
+                if (button.offsetParent === null) continue; // Skip hidden elements
+                
+                const text = (button.innerText || button.textContent || '').trim();
+                const lowerText = text.toLowerCase();
+                
+                console.log('Checking create project button:', text);
+                
+                // Look for "Create new project" button (exact match)
+                if (text === 'Create new project' || lowerText === 'create new project') {
+                  button.click();
+                  console.log('Clicked Create new project button:', text);
+                  return true;
+                }
+                
+                // Look for buttons containing "create" and "project"
+                if (lowerText.includes('create') && lowerText.includes('project')) {
+                  button.click();
+                  console.log('Clicked Create project button (partial match):', text);
+                  return true;
+                }
+                
+                // Look for buttons containing "new project"
+                if (lowerText.includes('new project')) {
+                  button.click();
+                  console.log('Clicked New project button:', text);
+                  return true;
+                }
+              }
+              
+              return false;
+            });
+            
+            if (createProjectClicked) {
+              addDebugStep('Create Project', 'success', 'Successfully clicked Create new project button');
+              await sleep(2000);
+              await takeScreenshot('After Clicking Create Project', page);
+            } else {
+              addDebugStep('Create Project', 'warning', 'Could not find Create new project button');
+            }
+            
+          } catch (error) {
+            addDebugStep('Create Project', 'error', 'Error clicking Create new project button', null, error.message);
           }
           
         } catch (error) {
