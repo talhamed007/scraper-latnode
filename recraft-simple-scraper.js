@@ -871,54 +871,38 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                             // --- NEW STEP 4: Input prompt text ---
                             addDebugStep('Prompt Input', 'info', 'Clicking on textarea and entering prompt...');
                             try {
-                              const promptEntered = await page.evaluate(() => {
-                                // Find the textarea
+                              // First, click and focus the textarea
+                              await page.click('textarea[name="prompt"][data-testid="recraft-textarea"]');
+                              await sleep(1000);
+                              
+                              // Clear existing text and type new prompt
+                              await page.evaluate(() => {
                                 const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
                                 if (textarea) {
-                                  console.log('Found textarea, current value:', textarea.value);
+                                  // Select all text
+                                  textarea.select();
+                                  // Clear it
+                                  textarea.value = '';
+                                  // Set new value
+                                  textarea.value = 'banana bread in kitchen with sun light';
                                   
-                                  // Scroll to textarea to ensure it's visible
-                                  textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  // Trigger events
+                                  const events = ['input', 'change', 'keyup', 'keydown'];
+                                  events.forEach(eventType => {
+                                    const event = new Event(eventType, { bubbles: true, cancelable: true });
+                                    textarea.dispatchEvent(event);
+                                  });
                                   
-                                  // Click on the textarea to focus it
-                                  textarea.focus();
-                                  textarea.click();
-                                  
-                                  // Wait a bit for focus
-                                  setTimeout(() => {
-                                    // Select all existing text
-                                    textarea.select();
-                                    
-                                    // Clear the field completely
-                                    textarea.value = '';
-                                    
-                                    // Set new prompt
-                                    textarea.value = 'banana bread in kitchen with sun light';
-                                    
-                                    // Trigger multiple events to ensure UI updates
-                                    const events = ['input', 'change', 'keyup', 'keydown', 'blur', 'focus'];
-                                    events.forEach(eventType => {
-                                      const event = new Event(eventType, { bubbles: true, cancelable: true });
-                                      textarea.dispatchEvent(event);
-                                    });
-                                    
-                                    // Also trigger React events if needed
-                                    const reactEvent = new Event('input', { bubbles: true, cancelable: true });
-                                    Object.defineProperty(reactEvent, 'target', { value: textarea, enumerable: true });
-                                    textarea.dispatchEvent(reactEvent);
-                                    
-                                    // Force a change event
-                                    const changeEvent = new Event('change', { bubbles: true, cancelable: true });
-                                    textarea.dispatchEvent(changeEvent);
-                                    
-                                    console.log('Entered prompt: banana bread in kitchen with sun light, new value:', textarea.value);
-                                  }, 500);
-                                  
+                                  console.log('Set prompt value to:', textarea.value);
                                   return true;
                                 }
-                                console.log('Textarea not found');
                                 return false;
                               });
+                              
+                              // Use Puppeteer's type method as backup
+                              await page.type('textarea[name="prompt"][data-testid="recraft-textarea"]', 'banana bread in kitchen with sun light', { delay: 100 });
+                              
+                              const promptEntered = true;
 
                               if (promptEntered) {
                                 addDebugStep('Prompt Input', 'success', 'Successfully entered prompt: banana bread in kitchen with sun light');
