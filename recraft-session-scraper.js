@@ -593,15 +593,47 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
         
         // Look for "Copy image link" option in context menu
         const copyImageLinkClicked = await page.evaluate(() => {
-          const contextMenuItems = document.querySelectorAll('[role="menuitem"], [role="option"], .context-menu-item, [class*="context-menu"], [class*="menu-item"], .text-content-1');
-          for (const item of contextMenuItems) {
-            const text = (item.innerText || item.textContent || '').toLowerCase();
-            if (text.includes('copy') && text.includes('image') && text.includes('link')) {
-              item.click();
-              console.log('Clicked "Copy image link" from context menu');
+          // Try multiple approaches to find the context menu
+          const selectors = [
+            '.text-content-1',
+            '[class*="text-content-1"]',
+            '[role="menuitem"]',
+            '[role="option"]',
+            '.context-menu-item',
+            '[class*="context-menu"]',
+            '[class*="menu-item"]',
+            'div[class*="flex"][class*="w-full"]',
+            'div[class*="p-2"]'
+          ];
+          
+          for (const selector of selectors) {
+            const items = document.querySelectorAll(selector);
+            console.log(`Trying selector "${selector}", found ${items.length} items`);
+            
+            for (const item of items) {
+              const text = (item.innerText || item.textContent || '').trim();
+              console.log(`Item text: "${text}"`);
+              
+              if (text.toLowerCase() === 'copy image link' || 
+                  (text.toLowerCase().includes('copy') && text.toLowerCase().includes('image') && text.toLowerCase().includes('link'))) {
+                console.log(`Found match: "${text}"`);
+                item.click();
+                return true;
+              }
+            }
+          }
+          
+          // Fallback: look for any element containing the exact text
+          const allElements = document.querySelectorAll('*');
+          for (const element of allElements) {
+            const text = (element.innerText || element.textContent || '').trim();
+            if (text === 'Copy image link') {
+              console.log(`Found exact match in fallback: "${text}"`);
+              element.click();
               return true;
             }
           }
+          
           return false;
         });
         
