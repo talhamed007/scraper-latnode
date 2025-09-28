@@ -977,6 +977,8 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                                           const copyImageLinkClicked = await page.evaluate(() => {
                                             // Try multiple approaches to find the context menu
                                             const selectors = [
+                                              'div.flex.flex-1.flex-col.justify-center',
+                                              '[class*="flex-1"][class*="flex-col"][class*="justify-center"]',
                                               '.text-content-1',
                                               '[class*="text-content-1"]',
                                               '[role="menuitem"]',
