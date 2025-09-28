@@ -939,9 +939,9 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                                           addDebugStep('Image Link Extraction', 'info', 'Right-clicked on image, context menu should appear');
                                           await sleep(1000);
                                           
-                                          // Look for "Copy image link" or similar option in context menu
+                                          // Look for "Copy image link" option in context menu
                                           const copyImageLinkClicked = await page.evaluate(() => {
-                                            const contextMenuItems = document.querySelectorAll('[role="menuitem"], [role="option"], .context-menu-item, [class*="context-menu"], [class*="menu-item"]');
+                                            const contextMenuItems = document.querySelectorAll('[role="menuitem"], [role="option"], .context-menu-item, [class*="context-menu"], [class*="menu-item"], .text-content-1');
                                             for (const item of contextMenuItems) {
                                               const text = (item.innerText || item.textContent || '').toLowerCase();
                                               if (text.includes('copy') && text.includes('image') && text.includes('link')) {
