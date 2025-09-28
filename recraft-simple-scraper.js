@@ -466,68 +466,83 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
           // First, wait for any popups to appear
           await sleep(2000);
           
-          const privacyAccepted = await page.evaluate(() => {
-            // Get all clickable elements
-            const allElements = document.querySelectorAll('button, a, [role="button"], div, span, [onclick]');
+          // Try multiple times to close the privacy popup
+          let privacyAccepted = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            addDebugStep('Privacy Accept', 'info', `Privacy popup attempt ${attempt + 1}/3...`);
             
-            for (const element of allElements) {
-              if (element.offsetParent === null) continue; // Skip hidden elements
+            privacyAccepted = await page.evaluate(() => {
+              // Get all clickable elements
+              const allElements = document.querySelectorAll('button, a, [role="button"], div, span, [onclick]');
               
-              const text = (element.innerText || element.textContent || '').trim();
-              const lowerText = text.toLowerCase();
-              
-              console.log('Checking privacy element:', text, 'tag:', element.tagName, 'class:', element.className);
-              
-              // Look for "Accept All" button (exact match)
-              if (text === 'Accept All' || lowerText === 'accept all') {
-                element.click();
-                console.log('Clicked Accept All button:', text);
-                return true;
-              }
-              
-              // Look for "Accept" variations
-              if (lowerText.includes('accept') && (lowerText.includes('all') || lowerText.includes('cookies'))) {
-                element.click();
-                console.log('Clicked Accept button (variation):', text);
-                return true;
-              }
-            }
-            
-            return false;
-          });
-          
-          if (privacyAccepted) {
-            addDebugStep('Privacy Accept', 'success', 'Successfully clicked Accept All button');
-            await sleep(3000); // Wait for popup to close
-            await takeScreenshot('After Accepting Privacy', page);
-          } else {
-            addDebugStep('Privacy Accept', 'warning', 'Could not find Accept All button, trying alternative approach...');
-            
-            // Alternative approach: try to close any visible popups
-            const popupClosed = await page.evaluate(() => {
-              // Look for close buttons (X, Close, etc.)
-              const closeButtons = document.querySelectorAll('button, [role="button"], [aria-label*="close"], [aria-label*="Close"]');
-              for (const btn of closeButtons) {
-                if (btn.offsetParent === null) continue;
-                const text = (btn.innerText || btn.textContent || '').trim();
-                const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+              for (const element of allElements) {
+                if (element.offsetParent === null) continue; // Skip hidden elements
                 
-                if (text === '×' || text === '✕' || text === 'Close' || 
-                    text.toLowerCase().includes('close') || 
-                    ariaLabel.includes('close')) {
-                  btn.click();
-                  console.log('Clicked close button:', text);
+                const text = (element.innerText || element.textContent || '').trim();
+                const lowerText = text.toLowerCase();
+                
+                console.log('Checking privacy element:', text, 'tag:', element.tagName, 'class:', element.className);
+                
+                // Look for "Accept All" button (exact match)
+                if (text === 'Accept All' || lowerText === 'accept all') {
+                  element.click();
+                  console.log('Clicked Accept All button:', text);
+                  return true;
+                }
+                
+                // Look for "Accept" variations
+                if (lowerText.includes('accept') && (lowerText.includes('all') || lowerText.includes('cookies'))) {
+                  element.click();
+                  console.log('Clicked Accept button (variation):', text);
                   return true;
                 }
               }
+              
               return false;
             });
             
-            if (popupClosed) {
-              addDebugStep('Privacy Accept', 'success', 'Closed popup with close button');
-              await sleep(2000);
-              await takeScreenshot('After Closing Popup', page);
+            if (privacyAccepted) {
+              addDebugStep('Privacy Accept', 'success', 'Successfully clicked Accept All button');
+              await sleep(3000); // Wait for popup to close
+              await takeScreenshot('After Accepting Privacy', page);
+              break;
+            } else {
+              addDebugStep('Privacy Accept', 'warning', `Attempt ${attempt + 1} failed, trying alternative approach...`);
+              
+              // Alternative approach: try to close any visible popups
+              const popupClosed = await page.evaluate(() => {
+                // Look for close buttons (X, Close, etc.)
+                const closeButtons = document.querySelectorAll('button, [role="button"], [aria-label*="close"], [aria-label*="Close"]');
+                for (const btn of closeButtons) {
+                  if (btn.offsetParent === null) continue;
+                  const text = (btn.innerText || btn.textContent || '').trim();
+                  const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                  
+                  if (text === '×' || text === '✕' || text === 'Close' || 
+                      text.toLowerCase().includes('close') || 
+                      ariaLabel.includes('close')) {
+                    btn.click();
+                    console.log('Clicked close button:', text);
+                    return true;
+                  }
+                }
+                return false;
+              });
+              
+              if (popupClosed) {
+                addDebugStep('Privacy Accept', 'success', 'Closed popup with close button');
+                await sleep(2000);
+                await takeScreenshot('After Closing Popup', page);
+                privacyAccepted = true;
+                break;
+              }
+              
+              await sleep(1000); // Wait before next attempt
             }
+          }
+          
+          if (!privacyAccepted) {
+            addDebugStep('Privacy Accept', 'warning', 'Could not close privacy popup after 3 attempts, continuing...');
           }
           
         } catch (error) {
@@ -704,41 +719,44 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
                               // Get slider dimensions
                               const rect = slider.getBoundingClientRect();
                               
-                              // Click on the LEFT EDGE of the slider (0% position for value 1)
-                              const clickX = rect.left + (rect.width * 0.1); // 10% from left edge
-                              const clickY = rect.top + (rect.height / 2);
+                              // Method 1: Try clicking on the rounded button in the middle and dragging left
+                              const currentPosition = rect.left + (rect.width * 0.75); // Current position (right side for value 2)
+                              const targetPosition = rect.left + (rect.width * 0.25); // Target position (left side for value 1)
+                              const centerY = rect.top + (rect.height / 2);
                               
-                              // Create and dispatch mouse events to simulate clicking
+                              // Simulate mouse down on current position (middle of slider)
                               const mouseDownEvent = new MouseEvent('mousedown', {
                                 bubbles: true,
                                 cancelable: true,
-                                clientX: clickX,
-                                clientY: clickY,
+                                clientX: currentPosition,
+                                clientY: centerY,
                                 button: 0
                               });
                               
+                              // Simulate mouse move to left (drag)
+                              const mouseMoveEvent = new MouseEvent('mousemove', {
+                                bubbles: true,
+                                cancelable: true,
+                                clientX: targetPosition,
+                                clientY: centerY,
+                                button: 0
+                              });
+                              
+                              // Simulate mouse up at target position
                               const mouseUpEvent = new MouseEvent('mouseup', {
                                 bubbles: true,
                                 cancelable: true,
-                                clientX: clickX,
-                                clientY: clickY,
+                                clientX: targetPosition,
+                                clientY: centerY,
                                 button: 0
                               });
                               
-                              const clickEvent = new MouseEvent('click', {
-                                bubbles: true,
-                                cancelable: true,
-                                clientX: clickX,
-                                clientY: clickY,
-                                button: 0
-                              });
-                              
-                              // Dispatch events in sequence
+                              // Dispatch events in sequence to simulate drag
                               slider.dispatchEvent(mouseDownEvent);
+                              slider.dispatchEvent(mouseMoveEvent);
                               slider.dispatchEvent(mouseUpEvent);
-                              slider.dispatchEvent(clickEvent);
                               
-                              // Set the value to 1 after clicking
+                              // Set the value to 1 after dragging
                               slider.value = '1';
                               
                               // Trigger change events
@@ -747,7 +765,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
                               slider.dispatchEvent(changeEvent);
                               slider.dispatchEvent(inputEvent);
                               
-                              console.log('Clicked left edge of slider, new value:', slider.value);
+                              console.log('Dragged slider from right to left, new value:', slider.value);
                               return true;
                             }
                             console.log('Slider not found');
@@ -810,6 +828,52 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
                                 addDebugStep('Prompt Input', 'success', 'Successfully entered prompt: banana pancake');
                                 await sleep(2000);
                                 await takeScreenshot('After Prompt Input', page);
+
+                                // Check if Generate button is now active
+                                const generateButtonActive = await page.evaluate(() => {
+                                  const generateBtn = document.querySelector('button[data-testid="recraft-button"]');
+                                  if (generateBtn) {
+                                    const isDisabled = generateBtn.disabled || generateBtn.classList.contains('disabled') || 
+                                                     generateBtn.style.pointerEvents === 'none' || 
+                                                     generateBtn.style.opacity === '0.5';
+                                    const isClickable = !isDisabled && generateBtn.offsetParent !== null;
+                                    console.log('Generate button state:', {
+                                      disabled: generateBtn.disabled,
+                                      classes: generateBtn.className,
+                                      style: generateBtn.style.cssText,
+                                      clickable: isClickable
+                                    });
+                                    return isClickable;
+                                  }
+                                  return false;
+                                });
+
+                                if (generateButtonActive) {
+                                  addDebugStep('Generate Button Check', 'success', 'Generate button is now active and clickable');
+                                } else {
+                                  addDebugStep('Generate Button Check', 'warning', 'Generate button is still not active - may need to close privacy popup');
+                                  
+                                  // Try to close privacy popup one more time
+                                  const popupClosed = await page.evaluate(() => {
+                                    const allElements = document.querySelectorAll('button, [role="button"]');
+                                    for (const element of allElements) {
+                                      if (element.offsetParent === null) continue;
+                                      const text = (element.innerText || element.textContent || '').trim();
+                                      if (text === 'Accept All' || text.toLowerCase().includes('accept all')) {
+                                        element.click();
+                                        console.log('Clicked Accept All button (retry)');
+                                        return true;
+                                      }
+                                    }
+                                    return false;
+                                  });
+                                  
+                                  if (popupClosed) {
+                                    addDebugStep('Privacy Popup Retry', 'success', 'Closed privacy popup on retry');
+                                    await sleep(2000);
+                                    await takeScreenshot('After Privacy Popup Retry', page);
+                                  }
+                                }
 
                                 // --- NEW STEP 5: Click Generate button ---
                                 addDebugStep('Generate Images', 'info', 'Clicking Generate button...');
