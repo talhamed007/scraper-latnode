@@ -525,7 +525,49 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                 addDebugStep('Privacy Accept', 'error', 'Error clicking Accept All button', null, error.message);
               }
               
-              // CRITICAL: Don't proceed until privacy popup is closed
+              // CRITICAL: Force close any remaining popups before proceeding
+              addDebugStep('Force Popup Close', 'info', 'Force closing any remaining popups...');
+              try {
+                // Try multiple aggressive methods to close popups
+                const popupClosed = await page.evaluate(() => {
+                  // Method 1: Click any visible "Accept All" button
+                  const acceptButtons = document.querySelectorAll('button[class*="accept"], button:contains("Accept All"), button:contains("Accept")');
+                  for (const btn of acceptButtons) {
+                    if (btn.offsetParent !== null) {
+                      btn.click();
+                      console.log('Clicked accept button:', btn);
+                      return true;
+                    }
+                  }
+                  
+                  // Method 2: Click any close buttons (X, Close, etc.)
+                  const closeButtons = document.querySelectorAll('button[class*="close"], button:contains("×"), button:contains("✕"), [aria-label*="close"]');
+                  for (const btn of closeButtons) {
+                    if (btn.offsetParent !== null) {
+                      btn.click();
+                      console.log('Clicked close button:', btn);
+                      return true;
+                    }
+                  }
+                  
+                  // Method 3: Press Escape key
+                  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                  document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
+                  console.log('Pressed Escape key');
+                  
+                  return false;
+                });
+                
+                if (popupClosed) {
+                  addDebugStep('Force Popup Close', 'success', 'Successfully closed popup');
+                  await sleep(2000);
+                  await takeScreenshot('After Force Popup Close', page);
+                }
+              } catch (error) {
+                addDebugStep('Force Popup Close', 'warning', 'Error force closing popup', null, error.message);
+              }
+              
+              // Check if privacy popup is closed
               addDebugStep('Privacy Check', 'info', 'Checking if privacy popup is closed before proceeding...');
               const privacyPopupClosed = await page.evaluate(() => {
                 const privacyText = document.body.innerText.toLowerCase();
@@ -537,15 +579,8 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
               });
               
               if (!privacyPopupClosed) {
-                addDebugStep('Privacy Check', 'error', 'Privacy popup is still visible - STOPPING execution');
-                await takeScreenshot('Privacy Popup Still Visible - Stopping', page);
-                return {
-                  success: false,
-                  message: 'Privacy popup could not be closed - stopping execution',
-                  finalUrl: page.url(),
-                  debugSteps: debugSteps,
-                  screenshots: screenshots
-                };
+                addDebugStep('Privacy Check', 'warning', 'Privacy popup may still be visible - continuing anyway');
+                await takeScreenshot('Privacy Popup May Still Be Visible', page);
               } else {
                 addDebugStep('Privacy Check', 'success', 'Privacy popup is closed - proceeding with next steps');
               }
@@ -807,18 +842,23 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                                   textarea.focus();
                                   textarea.click();
                                   
-                                  // Select all existing text and replace it
-                                  textarea.select();
-                                  textarea.value = 'banana pancake';
+                                  // Clear and set longer prompt to avoid length error
+                                  textarea.value = '';
+                                  textarea.value = 'banana bread in kitchen with sun light';
                                   
                                   // Trigger multiple events to ensure UI updates
-                                  const events = ['input', 'change', 'keyup', 'keydown'];
+                                  const events = ['input', 'change', 'keyup', 'keydown', 'blur', 'focus'];
                                   events.forEach(eventType => {
                                     const event = new Event(eventType, { bubbles: true, cancelable: true });
                                     textarea.dispatchEvent(event);
                                   });
                                   
-                                  console.log('Entered prompt: banana pancake, new value:', textarea.value);
+                                  // Also trigger React events if needed
+                                  const reactEvent = new Event('input', { bubbles: true, cancelable: true });
+                                  Object.defineProperty(reactEvent, 'target', { value: textarea, enumerable: true });
+                                  textarea.dispatchEvent(reactEvent);
+                                  
+                                  console.log('Entered prompt: banana bread in kitchen with sun light, new value:', textarea.value);
                                   return true;
                                 }
                                 console.log('Textarea not found');
