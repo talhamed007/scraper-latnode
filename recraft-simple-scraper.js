@@ -384,6 +384,81 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
         addDebugStep('Create Project', 'success', 'Successfully clicked Create new project button');
         await sleep(2000);
         await takeScreenshot('After Clicking Create Project', page);
+        
+        // Wait for dashboard to fully load
+        addDebugStep('Dashboard Loading', 'info', 'Waiting for dashboard to fully load...');
+        
+        try {
+          // Wait for the dashboard content to load (look for specific elements)
+          await page.waitForFunction(() => {
+            // Check if we're on a project page and content has loaded
+            const hasProjectContent = document.querySelector('[class*="project"], [class*="editor"], [class*="canvas"], [class*="workspace"]');
+            const hasLoadedContent = document.querySelector('[class*="loading"]') === null;
+            const hasMainContent = document.body.innerText.length > 1000; // Substantial content loaded
+            
+            return hasProjectContent || (hasLoadedContent && hasMainContent);
+          }, { timeout: 30000 });
+          
+          addDebugStep('Dashboard Loading', 'success', 'Dashboard content loaded successfully');
+          
+          // Take another screenshot after content loads
+          await sleep(2000);
+          await takeScreenshot('Dashboard Fully Loaded', page);
+          
+        } catch (error) {
+          addDebugStep('Dashboard Loading', 'warning', 'Dashboard loading timeout, continuing...', null, error.message);
+        }
+        
+        // Try to close any remaining popups after dashboard loads
+        addDebugStep('Final Popup Cleanup', 'info', 'Checking for any remaining popups...');
+        
+        try {
+          const remainingPopupsClosed = await page.evaluate(() => {
+            let closedCount = 0;
+            
+            // Get all buttons on the page
+            const allButtons = document.querySelectorAll('button, a, [role="button"]');
+            
+            for (const button of allButtons) {
+              if (button.offsetParent === null) continue; // Skip hidden buttons
+              
+              const text = (button.innerText || button.textContent || '').trim();
+              const lowerText = text.toLowerCase();
+              const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+              
+              // Look for "Accept All" buttons in cookie popups (exact match first)
+              if (text === 'Accept All' || lowerText === 'accept all') {
+                button.click();
+                closedCount++;
+                console.log('Clicked Accept All button (final cleanup):', text);
+                continue;
+              }
+              
+              // Look for close buttons
+              if (text === '×' || text === '✕' || text === 'Close' || lowerText === 'close' || 
+                  ariaLabel.includes('close')) {
+                button.click();
+                closedCount++;
+                console.log('Closed popup (final cleanup):', text);
+                continue;
+              }
+            }
+            
+            return closedCount;
+          });
+          
+          if (remainingPopupsClosed > 0) {
+            addDebugStep('Final Popup Cleanup', 'success', `Closed ${remainingPopupsClosed} remaining popup(s)`);
+            await sleep(1000);
+            await takeScreenshot('After Final Popup Cleanup', page);
+          } else {
+            addDebugStep('Final Popup Cleanup', 'info', 'No remaining popups found');
+          }
+          
+        } catch (error) {
+          addDebugStep('Final Popup Cleanup', 'warning', 'Error in final popup cleanup', null, error.message);
+        }
+        
       } else {
         addDebugStep('Create Project', 'warning', 'Could not find Create new project button');
       }
