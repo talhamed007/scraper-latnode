@@ -241,13 +241,13 @@ async function loginToRecraft(googleEmail, googlePassword, browser, page, isNewS
   if (!isNewSession && activeSessions.recraft.isLoggedIn) {
     addDebugStep('Login Check', 'success', '✅ Already logged in to Recraft.ai');
     
-    // Navigate to dashboard if not already there
+    // Navigate directly to projects page if already logged in
     const currentUrl = await page.url();
-    if (!currentUrl.includes('recraft.ai') || currentUrl.includes('login')) {
-      addDebugStep('Navigation', 'info', 'Navigating to Recraft.ai dashboard...');
-      await page.goto('https://www.recraft.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
+    if (!currentUrl.includes('recraft.ai/projects')) {
+      addDebugStep('Navigation', 'info', 'Navigating directly to Recraft.ai projects page...');
+      await page.goto('https://www.recraft.ai/projects', { waitUntil: 'networkidle2', timeout: 30000 });
       await sleep(3000);
-      await takeScreenshot('Dashboard Navigation');
+      await takeScreenshot('Projects Page Navigation');
     }
     
     // Verify we're actually logged in by checking for user elements
@@ -274,7 +274,7 @@ async function loginToRecraft(googleEmail, googlePassword, browser, page, isNewS
   try {
     // Navigate to Recraft.ai login page
     addDebugStep('Navigation', 'info', 'Navigating to Recraft.ai login page...');
-    await page.goto('https://www.recraft.ai/auth/login', { 
+    await page.goto('https://recraft.ai/auth/login', { 
       waitUntil: 'networkidle2',
       timeout: 30000 
     });
@@ -459,38 +459,76 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
        }
        await sleep(2000);
        
-       // Click Apply for Photorealism
-       addDebugStep('Apply Style', 'info', 'Applying Photorealism style...');
-       try {
-         await page.waitForSelector('button.c-jilBjW:has-text("Apply")', { timeout: 10000 });
-         await page.click('button.c-jilBjW:has-text("Apply")');
-         addDebugStep('Apply Style', 'success', 'Successfully clicked Apply button');
-       } catch (error) {
-         addDebugStep('Apply Style', 'warning', 'Primary selector failed, trying alternatives...');
-         
-         const applyClicked = await page.evaluate(() => {
-           const selectors = [
-             'button.c-jilBjW:has-text("Apply")',
-             'button:has-text("Apply")',
-             'button[class*="jilBjW"]',
-             'button:has-text("Photorealism")'
-           ];
-           
-           for (const selector of selectors) {
-             const button = document.querySelector(selector);
-             if (button && button.offsetParent !== null) {
-               button.click();
-               console.log('Clicked apply button with selector:', selector);
-               return true;
-             }
-           }
-           return false;
-         });
-         
-         if (!applyClicked) {
-           throw new Error('Could not find Apply button');
-         }
-       }
+      // Click Apply for Photorealism
+      addDebugStep('Apply Style', 'info', 'Applying Photorealism style...');
+      try {
+        // First hover over Photorealism style to make Apply button visible
+        addDebugStep('Hover Style', 'info', 'Hovering over Photorealism style...');
+        
+        // Try to find and hover over Photorealism element
+        const photorealismHovered = await page.evaluate(() => {
+          const photorealismElements = [
+            ...document.querySelectorAll('*')
+          ].filter(el => el.textContent && el.textContent.includes('Photorealism'));
+          
+          for (const element of photorealismElements) {
+            if (element.offsetParent !== null) {
+              element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+              element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+              console.log('Hovered over Photorealism element');
+              return true;
+            }
+          }
+          return false;
+        });
+        
+        if (photorealismHovered) {
+          await sleep(1000);
+        }
+        
+        // Wait for Apply button to appear and click it
+        await page.waitForSelector('button.c-jilBjW', { timeout: 10000 });
+        await page.click('button.c-jilBjW');
+        addDebugStep('Apply Style', 'success', 'Successfully clicked Apply button');
+      } catch (error) {
+        addDebugStep('Apply Style', 'warning', 'Primary method failed, trying alternatives...');
+        
+        const applyClicked = await page.evaluate(() => {
+          // Try to find and click Apply button
+          const applyButton = document.querySelector('button.c-jilBjW');
+          if (applyButton && applyButton.offsetParent !== null) {
+            applyButton.click();
+            console.log('Clicked apply button with c-jilBjW class');
+            return true;
+          }
+          
+          // Try alternative selectors
+          const selectors = [
+            'button[class*="jilBjW"]',
+            'button[class*="apply"]',
+            '[role="button"]'
+          ];
+          
+          for (const selector of selectors) {
+            try {
+              const button = document.querySelector(selector);
+              if (button && button.offsetParent !== null && 
+                  (button.textContent.includes('Apply') || button.className.includes('jilBjW'))) {
+                button.click();
+                console.log('Clicked apply button with selector:', selector);
+                return true;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
+        });
+        
+        if (!applyClicked) {
+          throw new Error('Could not find Apply button');
+        }
+      }
        await sleep(3000);
        await takeScreenshot('Style Applied');
     
