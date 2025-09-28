@@ -3603,7 +3603,7 @@ app.post('/api/recraft-ai', async (req, res) => {
     console.log('📧 Google Email:', googleEmail);
     
     // Call the AI-guided scraper
-    const result = await scrapeRecraftWithAI(googleEmail, googlePassword);
+    const result = await scrapeRecraftWithAI(googleEmail, googlePassword, io);
     
     res.json(result);
   } catch (error) {

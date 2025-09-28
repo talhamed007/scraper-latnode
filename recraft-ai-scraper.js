@@ -20,6 +20,11 @@ function addDebugStep(step, status, message, screenshot = null, error = null) {
   debugSteps.push(stepData);
   console.log(`[${status.toUpperCase()}] ${step}: ${message}`);
   
+  // Emit real-time log to connected clients
+  if (global.io) {
+    global.io.emit('scraper-log', stepData);
+  }
+  
   if (error) {
     console.error(`Error: ${error}`);
   }
@@ -59,9 +64,12 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function scrapeRecraftWithAI(googleEmail, googlePassword) {
+async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
   let browser = null;
   let page = null;
+  
+  // Make io available globally in this module
+  global.io = io;
   
   try {
     // Initialize debug steps

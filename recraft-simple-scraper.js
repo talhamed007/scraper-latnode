@@ -20,8 +20,8 @@ function addDebugStep(step, status, message, screenshot = null, error = null) {
   console.log(`[${status.toUpperCase()}] ${step}: ${message}`);
   
   // Emit real-time log to connected clients
-  if (io) {
-    io.emit('scraper-log', stepData);
+  if (global.io) {
+    global.io.emit('scraper-log', stepData);
   }
   
   if (error) {
@@ -66,6 +66,9 @@ async function sleep(ms) {
 async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
   let browser = null;
   let page = null;
+  
+  // Make io available globally in this module
+  global.io = io;
   
   try {
     // Initialize debug steps
