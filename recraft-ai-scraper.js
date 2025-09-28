@@ -850,23 +850,36 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                                   textarea.focus();
                                   textarea.click();
                                   
-                                  // Clear and set longer prompt to avoid length error
-                                  textarea.value = '';
-                                  textarea.value = 'banana bread in kitchen with sun light';
+                                  // Wait a bit for focus
+                                  setTimeout(() => {
+                                    // Select all existing text
+                                    textarea.select();
+                                    
+                                    // Clear the field completely
+                                    textarea.value = '';
+                                    
+                                    // Set new prompt
+                                    textarea.value = 'banana bread in kitchen with sun light';
+                                    
+                                    // Trigger multiple events to ensure UI updates
+                                    const events = ['input', 'change', 'keyup', 'keydown', 'blur', 'focus'];
+                                    events.forEach(eventType => {
+                                      const event = new Event(eventType, { bubbles: true, cancelable: true });
+                                      textarea.dispatchEvent(event);
+                                    });
+                                    
+                                    // Also trigger React events if needed
+                                    const reactEvent = new Event('input', { bubbles: true, cancelable: true });
+                                    Object.defineProperty(reactEvent, 'target', { value: textarea, enumerable: true });
+                                    textarea.dispatchEvent(reactEvent);
+                                    
+                                    // Force a change event
+                                    const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+                                    textarea.dispatchEvent(changeEvent);
+                                    
+                                    console.log('Entered prompt: banana bread in kitchen with sun light, new value:', textarea.value);
+                                  }, 500);
                                   
-                                  // Trigger multiple events to ensure UI updates
-                                  const events = ['input', 'change', 'keyup', 'keydown', 'blur', 'focus'];
-                                  events.forEach(eventType => {
-                                    const event = new Event(eventType, { bubbles: true, cancelable: true });
-                                    textarea.dispatchEvent(event);
-                                  });
-                                  
-                                  // Also trigger React events if needed
-                                  const reactEvent = new Event('input', { bubbles: true, cancelable: true });
-                                  Object.defineProperty(reactEvent, 'target', { value: textarea, enumerable: true });
-                                  textarea.dispatchEvent(reactEvent);
-                                  
-                                  console.log('Entered prompt: banana bread in kitchen with sun light, new value:', textarea.value);
                                   return true;
                                 }
                                 console.log('Textarea not found');
@@ -874,8 +887,28 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                               });
 
                               if (promptEntered) {
-                                addDebugStep('Prompt Input', 'success', 'Successfully entered prompt: banana pancake');
-                                await sleep(2000);
+                                addDebugStep('Prompt Input', 'success', 'Successfully entered prompt: banana bread in kitchen with sun light');
+                                
+                                // Wait for the prompt to be properly registered
+                                await sleep(3000);
+                                
+                                // Verify the prompt was actually entered
+                                const promptVerified = await page.evaluate(() => {
+                                  const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
+                                  if (textarea) {
+                                    const currentValue = textarea.value.trim();
+                                    console.log('Current prompt value:', currentValue);
+                                    return currentValue === 'banana bread in kitchen with sun light';
+                                  }
+                                  return false;
+                                });
+                                
+                                if (promptVerified) {
+                                  addDebugStep('Prompt Verification', 'success', 'Prompt successfully registered in textarea');
+                                } else {
+                                  addDebugStep('Prompt Verification', 'warning', 'Prompt may not have been properly registered');
+                                }
+                                
                                 await takeScreenshot('After Prompt Input', page);
 
                                 // Check if Generate button is now active
