@@ -24,8 +24,14 @@ function addDebugStep(step, status, message, screenshot = null, error = null) {
   }
 }
 
-async function takeScreenshot(description) {
+async function takeScreenshot(description, pageInstance = null) {
   try {
+    const currentPage = pageInstance || page;
+    if (!currentPage) {
+      addDebugStep(description, 'warning', 'No page instance available for screenshot');
+      return null;
+    }
+    
     screenshotCounter++;
     const filename = `recraft-simple-${screenshotCounter}-${description.replace(/[^a-zA-Z0-9]/g, '-')}.png`;
     const filepath = path.join(__dirname, 'screenshots', filename);
@@ -35,7 +41,7 @@ async function takeScreenshot(description) {
       fs.mkdirSync(path.join(__dirname, 'screenshots'), { recursive: true });
     }
     
-    const screenshot = await page.screenshot({ 
+    const screenshot = await currentPage.screenshot({ 
       fullPage: true,
       path: filepath 
     });
@@ -136,7 +142,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
     });
     
     await sleep(3000);
-    await takeScreenshot('Recraft.ai Login Page');
+    await takeScreenshot('Recraft.ai Login Page', page);
     
     addDebugStep('Navigation', 'success', 'Successfully navigated to Recraft.ai login page');
     
@@ -152,7 +158,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
       addDebugStep('Google Button', 'success', 'Clicked Google login button');
       
       await sleep(3000);
-      await takeScreenshot('Google Login Page');
+      await takeScreenshot('Google Login Page', page);
       
     } catch (error) {
       addDebugStep('Google Button', 'error', 'Could not find or click Google button', null, error.message);
@@ -175,7 +181,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
       addDebugStep('Google Email', 'success', 'Email filled successfully');
       
       await sleep(1000);
-      await takeScreenshot('After Filling Email');
+      await takeScreenshot('After Filling Email', page);
       
     } catch (error) {
       addDebugStep('Google Email', 'error', 'Could not fill email', null, error.message);
@@ -190,7 +196,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
       addDebugStep('Email Next', 'success', 'Clicked Next button for email');
       
       await sleep(5000);
-      await takeScreenshot('After Clicking Email Next');
+      await takeScreenshot('After Clicking Email Next', page);
       
     } catch (error) {
       addDebugStep('Email Next', 'error', 'Could not click Next button for email', null, error.message);
@@ -213,7 +219,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
       addDebugStep('Google Password', 'success', 'Password filled successfully');
       
       await sleep(1000);
-      await takeScreenshot('After Filling Password');
+      await takeScreenshot('After Filling Password', page);
       
     } catch (error) {
       addDebugStep('Google Password', 'error', 'Could not fill password', null, error.message);
@@ -228,7 +234,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
       addDebugStep('Password Next', 'success', 'Clicked Next button for password');
       
       await sleep(5000);
-      await takeScreenshot('After Clicking Password Next');
+      await takeScreenshot('After Clicking Password Next', page);
       
     } catch (error) {
       addDebugStep('Password Next', 'error', 'Could not click Next button for password', null, error.message);
@@ -247,7 +253,7 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
       addDebugStep('Redirect', 'success', 'Successfully redirected to Recraft.ai');
       
       await sleep(3000);
-      await takeScreenshot('Recraft.ai Dashboard');
+      await takeScreenshot('Recraft.ai Dashboard', page);
       
     } catch (error) {
       addDebugStep('Redirect', 'warning', 'Redirect timeout, checking current URL', null, error.message);
@@ -260,10 +266,12 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
     addDebugStep('Final Analysis', 'info', `Final URL: ${finalUrl}`);
     addDebugStep('Final Analysis', 'info', `Final Title: ${finalTitle}`);
     
-    // Determine success
+    // Determine success - must be on actual Recraft.ai dashboard, not auth pages
     const isSuccess = finalUrl.includes('recraft.ai') && 
                      (finalUrl.includes('/dashboard') || finalUrl.includes('/workspace') || 
-                      finalTitle.toLowerCase().includes('recraft') && !finalTitle.toLowerCase().includes('login'));
+                      finalUrl.includes('/app') || finalUrl.includes('/home')) &&
+                     !finalUrl.includes('keycloak') && !finalUrl.includes('auth') &&
+                     !finalTitle.toLowerCase().includes('sign in') && !finalTitle.toLowerCase().includes('login');
     
     if (isSuccess) {
       addDebugStep('Result', 'success', 'Simple Recraft.ai login completed successfully!');

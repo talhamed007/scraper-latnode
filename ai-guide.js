@@ -55,7 +55,7 @@ IMPORTANT:
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
+      model: "gpt-4o", // Updated to use the new model
       messages: [
         {
           role: "user",

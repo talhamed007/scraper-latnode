@@ -25,8 +25,14 @@ function addDebugStep(step, status, message, screenshot = null, error = null) {
   }
 }
 
-async function takeScreenshot(description) {
+async function takeScreenshot(description, pageInstance = null) {
   try {
+    const currentPage = pageInstance || page;
+    if (!currentPage) {
+      addDebugStep(description, 'warning', 'No page instance available for screenshot');
+      return null;
+    }
+    
     screenshotCounter++;
     const filename = `recraft-ai-${screenshotCounter}-${description.replace(/[^a-zA-Z0-9]/g, '-')}.png`;
     const filepath = path.join(__dirname, 'screenshots', filename);
@@ -36,7 +42,7 @@ async function takeScreenshot(description) {
       fs.mkdirSync(path.join(__dirname, 'screenshots'), { recursive: true });
     }
     
-    const screenshot = await page.screenshot({ 
+    const screenshot = await currentPage.screenshot({ 
       fullPage: true,
       path: filepath 
     });
@@ -172,7 +178,7 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
     });
     
     await sleep(3000);
-    await takeScreenshot('Recraft.ai Login Page');
+    await takeScreenshot('Recraft.ai Login Page', page);
     
     addDebugStep('Navigation', 'success', 'Successfully navigated to Recraft.ai login page');
     
@@ -219,10 +225,16 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
       // Check if we've reached the Recraft.ai dashboard
       if (pageInfo.url.includes('recraft.ai') && 
           (pageInfo.url.includes('/dashboard') || pageInfo.url.includes('/workspace') || 
-           pageInfo.title.toLowerCase().includes('recraft') && !pageInfo.title.toLowerCase().includes('login'))) {
+           pageInfo.url.includes('/app') || pageInfo.url.includes('/home'))) {
         addDebugStep('Success', 'success', 'Successfully reached Recraft.ai dashboard!');
-        await takeScreenshot('Recraft.ai Dashboard');
+        await takeScreenshot('Recraft.ai Dashboard', page);
         break;
+      }
+      
+      // Check if we're stuck on auth pages
+      if (pageInfo.url.includes('keycloak') || pageInfo.url.includes('auth') || 
+          pageInfo.title.toLowerCase().includes('sign in') || pageInfo.title.toLowerCase().includes('login')) {
+        addDebugStep('Auth Page', 'warning', 'Still on authentication page, continuing...');
       }
       
       // Execute AI action
@@ -254,7 +266,7 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
       await sleep(3000);
       
       // Take screenshot after action
-      await takeScreenshot(`After AI Step ${currentStep}`);
+      await takeScreenshot(`After AI Step ${currentStep}`, page);
     }
     
     if (currentStep >= maxSteps) {
@@ -268,10 +280,12 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
     addDebugStep('Final Analysis', 'info', `Final URL: ${finalUrl}`);
     addDebugStep('Final Analysis', 'info', `Final Title: ${finalTitle}`);
     
-    // Determine success
+    // Determine success - must be on actual Recraft.ai dashboard, not auth pages
     const isSuccess = finalUrl.includes('recraft.ai') && 
                      (finalUrl.includes('/dashboard') || finalUrl.includes('/workspace') || 
-                      finalTitle.toLowerCase().includes('recraft') && !finalTitle.toLowerCase().includes('login'));
+                      finalUrl.includes('/app') || finalUrl.includes('/home')) &&
+                     !finalUrl.includes('keycloak') && !finalUrl.includes('auth') &&
+                     !finalTitle.toLowerCase().includes('sign in') && !finalTitle.toLowerCase().includes('login');
     
     if (isSuccess) {
       addDebugStep('Result', 'success', 'AI-guided Recraft.ai login completed successfully!');
