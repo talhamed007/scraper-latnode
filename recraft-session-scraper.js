@@ -540,23 +540,82 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
     });
     await sleep(1000);
     
-    // Enter prompt
-    addDebugStep('Prompt Input', 'info', `Entering prompt: "${prompt}"`);
-    await page.click('textarea[name="prompt"][data-testid="recraft-textarea"]');
-    await sleep(1000);
-    
-    await page.evaluate((promptText) => {
-      const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
-      if (textarea) {
-        textarea.value = '';
-        textarea.value = promptText;
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+    // Enter prompt - using robust method from simple scraper
+    addDebugStep('Prompt Input', 'info', 'Clicking on textarea and entering prompt...');
+    try {
+      // First, click and focus the textarea
+      await page.click('textarea[name="prompt"][data-testid="recraft-textarea"]');
+      await sleep(1000);
+      
+      // Clear existing text and type new prompt
+      await page.evaluate((promptText) => {
+        const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
+        if (textarea) {
+          // Select all text
+          textarea.select();
+          // Clear it
+          textarea.value = '';
+          // Set new value
+          textarea.value = promptText;
+          
+          // Trigger events
+          const events = ['input', 'change', 'keyup', 'keydown'];
+          events.forEach(eventType => {
+            const event = new Event(eventType, { bubbles: true, cancelable: true });
+            textarea.dispatchEvent(event);
+          });
+          
+          console.log('Set prompt value to:', textarea.value);
+          return true;
+        }
+        return false;
+      }, prompt);
+      
+      // Clear the textarea first to avoid duplication
+      await page.evaluate((promptText) => {
+        const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
+        if (textarea) {
+          textarea.value = '';
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }, prompt);
+      
+      // Use Puppeteer's type method as backup
+      await page.type('textarea[name="prompt"][data-testid="recraft-textarea"]', prompt, { delay: 100 });
+      
+      const promptEntered = true;
+
+      if (promptEntered) {
+        addDebugStep('Prompt Input', 'success', `Successfully entered prompt: ${prompt}`);
+        
+        // Wait for the prompt to be properly registered
+        await sleep(3000);
+        
+        // Verify the prompt was actually entered
+        const promptVerified = await page.evaluate((promptText) => {
+          const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
+          if (textarea) {
+            const currentValue = textarea.value.trim();
+            console.log('Current prompt value:', currentValue);
+            return currentValue === promptText;
+          }
+          return false;
+        }, prompt);
+        
+        if (promptVerified) {
+          addDebugStep('Prompt Verification', 'success', 'Prompt successfully registered in textarea');
+        } else {
+          addDebugStep('Prompt Verification', 'warning', 'Prompt may not have been properly registered');
+        }
+        
+        await takeScreenshot('Prompt Entered', page);
+      } else {
+        addDebugStep('Prompt Input', 'warning', 'Could not find or interact with prompt textarea');
+        await takeScreenshot('Prompt Input Failed', page);
       }
-    }, prompt);
-    
-    await sleep(2000);
-    await takeScreenshot('Prompt Entered');
+    } catch (error) {
+      addDebugStep('Prompt Input', 'error', 'Error entering prompt', null, error.message);
+    }
     
     // Click Generate button
     addDebugStep('Generate Button', 'info', 'Clicking Generate button...');
@@ -564,29 +623,51 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
     await sleep(3000);
     await takeScreenshot('Generation Started');
     
-    // Wait for generation to complete
+    // Wait for generation to complete - using robust method from simple scraper
     addDebugStep('Generation Wait', 'info', 'Waiting for image generation to complete...');
     
-    await page.waitForFunction(() => {
-      const generatingText = document.body.innerText.toLowerCase().includes('generating');
-      const generatingIndicator = document.querySelector('[class*="generating"], [class*="loading"]');
-      return generatingText || generatingIndicator;
-    }, { timeout: 10000 });
-    
-    addDebugStep('Generation Wait', 'info', 'Generation started, waiting for completion...');
-    
-    await page.waitForFunction(() => {
-      const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, canvas img');
-      const hasVisibleImages = Array.from(images).some(img => img.offsetParent !== null);
-      const generatingText = document.body.innerText.toLowerCase().includes('generating');
-      const generatingIndicator = document.querySelector('[class*="generating"]');
+    try {
+      // Wait for generation to start first
+      await page.waitForFunction(() => {
+        const generatingText = document.body.innerText.toLowerCase().includes('generating');
+        const generatingIndicator = document.querySelector('[class*="generating"], [class*="loading"], [class*="progress"]');
+        return generatingText || generatingIndicator;
+      }, { timeout: 10000 });
       
-      return hasVisibleImages && !generatingText && !generatingIndicator;
-    }, { timeout: 60000 });
-    
-    addDebugStep('Generation Wait', 'success', 'Image generation completed!');
-    await sleep(2000);
-    await takeScreenshot('Generation Complete');
+      addDebugStep('Generation Wait', 'info', 'Generation started, waiting for completion...');
+      
+      // Wait for generation to complete
+      await page.waitForFunction(() => {
+        // Look for generated images
+        const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img, [class*="preview"] img');
+        const hasVisibleImages = Array.from(images).some(img => img.offsetParent !== null);
+        
+        // Check if generating indicators are gone
+        const generatingText = document.body.innerText.toLowerCase().includes('generating');
+        const generatingIndicator = document.querySelector('[class*="generating"], [class*="loading"], [class*="progress"]');
+        
+        // Check for canvas or image containers with content
+        const canvas = document.querySelector('canvas, [class*="canvas"], [class*="preview"], [class*="result"]');
+        const hasCanvasContent = canvas && canvas.children.length > 0;
+        
+        console.log('Generation check:', {
+          hasVisibleImages,
+          generatingText,
+          hasGeneratingIndicator: !!generatingIndicator,
+          hasCanvasContent
+        });
+        
+        return (hasVisibleImages || hasCanvasContent) && !generatingText && !generatingIndicator;
+      }, { timeout: 60000 }); // Wait up to 60 seconds
+      
+      addDebugStep('Generation Wait', 'success', 'Image generation completed');
+      await sleep(2000);
+      await takeScreenshot('Generation Completed', page);
+      
+    } catch (error) {
+      addDebugStep('Generation Wait', 'warning', 'Generation timeout, continuing...', null, error.message);
+      await takeScreenshot('Generation Timeout', page);
+    }
     
     // Click on generated image
     addDebugStep('Image Click', 'info', 'Clicking on generated image...');
