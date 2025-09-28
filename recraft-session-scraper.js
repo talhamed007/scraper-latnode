@@ -582,14 +582,51 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
     addDebugStep('Image Link Extraction', 'info', 'Right-clicking on generated image to copy link...');
     let finalImageUrl = null;
     try {
-      // Find the generated image
-      const imageElement = await page.waitForSelector('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img', { timeout: 10000 });
+      // Find the generated image - look for the main/largest image first
+      addDebugStep('Image Link Extraction', 'info', 'Looking for the main generated image...');
+      
+      let imageElement = null;
+      try {
+        // First try to find the largest/most prominent image
+        imageElement = await page.evaluate(() => {
+          const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img, [class*="preview"] img');
+          let largestImage = null;
+          let maxArea = 0;
+          
+          for (const img of images) {
+            if (img.offsetParent !== null) { // Visible image
+              const area = img.offsetWidth * img.offsetHeight;
+              console.log(`Image found: ${img.src}, size: ${img.offsetWidth}x${img.offsetHeight}, area: ${area}`);
+              if (area > maxArea) {
+                maxArea = area;
+                largestImage = img;
+              }
+            }
+          }
+          
+          console.log(`Largest image area: ${maxArea}`);
+          return largestImage;
+        });
+        
+        if (!imageElement) {
+          // Fallback to waitForSelector
+          imageElement = await page.waitForSelector('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img', { timeout: 10000 });
+        }
+        
+        addDebugStep('Image Link Extraction', 'success', `Found generated image: ${imageElement ? 'Yes' : 'No'}`);
+      } catch (error) {
+        addDebugStep('Image Link Extraction', 'error', 'Error finding generated image', null, error.message);
+        throw error;
+      }
       
       if (imageElement) {
         // Right-click on the image to open context menu
         await imageElement.click({ button: 'right' });
         addDebugStep('Image Link Extraction', 'info', 'Right-clicked on image, context menu should appear');
         await sleep(1000);
+        
+        // Take screenshot to see if context menu appeared
+        await takeScreenshot('After Right Click - Context Menu Check', page);
         
         // Look for "Copy image link" option in context menu
         const copyImageLinkClicked = await page.evaluate(() => {

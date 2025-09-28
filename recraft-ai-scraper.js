@@ -934,10 +934,13 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                                         const imageElement = await page.waitForSelector('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img', { timeout: 10000 });
                                         
                                         if (imageElement) {
-                                          // Right-click on the image to open context menu
-                                          await imageElement.click({ button: 'right' });
-                                          addDebugStep('Image Link Extraction', 'info', 'Right-clicked on image, context menu should appear');
-                                          await sleep(1000);
+                                        // Right-click on the image to open context menu
+                                        await imageElement.click({ button: 'right' });
+                                        addDebugStep('Image Link Extraction', 'info', 'Right-clicked on image, context menu should appear');
+                                        await sleep(1000);
+                                        
+                                        // Take screenshot to see if context menu appeared
+                                        await takeScreenshot('After Right Click - Context Menu Check', page);
                                           
                                           // Look for "Copy image link" option in context menu
                                           const copyImageLinkClicked = await page.evaluate(() => {
