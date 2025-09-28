@@ -13,6 +13,7 @@ let debugData = {
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
+app.use('/screenshots', express.static('screenshots'));
 
 // Serve the main page
 app.get('/', (req, res) => {
