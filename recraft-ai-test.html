@@ -392,9 +392,16 @@
                 loading.style.display = 'none';
                 result.style.display = 'block';
                 result.className = 'result error';
+                
+                let errorMessage = `Failed to connect to the AI scraper: ${error.message}`;
+                if (error.message.includes('503')) {
+                    errorMessage = 'AI module is not available. The server may be starting up or there might be a configuration issue.';
+                }
+                
                 result.innerHTML = `
                     <h3>❌ Connection Error</h3>
-                    <p>Failed to connect to the AI scraper: ${error.message}</p>
+                    <p>${errorMessage}</p>
+                    <p><small>Please try again in a few minutes or contact support if the issue persists.</small></p>
                 `;
             } finally {
                 submitBtn.disabled = false;

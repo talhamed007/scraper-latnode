@@ -3485,8 +3485,15 @@ app.get('/recraft-test', (req, res) => {
 // Recraft.ai Live Debug Route (with live browser view)
 const { scrapeRecraftLoginLive } = require('./recraft-live-debug');
 
-// Recraft.ai AI-Guided Route
-const { scrapeRecraftWithAI } = require('./recraft-ai-scraper');
+// Recraft.ai AI-Guided Route (optional import to prevent crashes)
+let scrapeRecraftWithAI = null;
+try {
+  const aiModule = require('./recraft-ai-scraper');
+  scrapeRecraftWithAI = aiModule.scrapeRecraftWithAI;
+  console.log('✅ AI module loaded successfully');
+} catch (error) {
+  console.log('⚠️ AI module not available:', error.message);
+}
 
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -3549,6 +3556,13 @@ app.post('/api/recraft-ai', async (req, res) => {
   }
 
   try {
+    if (!scrapeRecraftWithAI) {
+      return res.status(503).json({
+        ok: false,
+        error: 'AI module not available. Please check server logs.'
+      });
+    }
+    
     console.log('🤖 Starting AI-guided Recraft.ai scraping...');
     console.log('📧 Google Email:', googleEmail);
     
