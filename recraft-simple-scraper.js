@@ -19,6 +19,11 @@ function addDebugStep(step, status, message, screenshot = null, error = null) {
   debugSteps.push(stepData);
   console.log(`[${status.toUpperCase()}] ${step}: ${message}`);
   
+  // Emit real-time log to connected clients
+  if (io) {
+    io.emit('scraper-log', stepData);
+  }
+  
   if (error) {
     console.error(`Error: ${error}`);
   }
@@ -58,7 +63,7 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function scrapeRecraftSimple(googleEmail, googlePassword) {
+async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
   let browser = null;
   let page = null;
   

@@ -1,8 +1,18 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
 const PORT = process.env.PORT || 8080;
 
 // In-memory storage for debug data (in production, use Redis or database)
@@ -12,6 +22,7 @@ let debugData = {
 
 // Middleware
 app.use(express.json());
+app.use(cors());
 app.use(express.static('public'));
 app.use('/screenshots', express.static('screenshots'));
 
@@ -3425,8 +3436,17 @@ app.post('/api/http/kie', async (req, res) => {
   }
 });
 
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
 // Add error handling for server startup
-app.listen(PORT, (err) => {
+server.listen(PORT, (err) => {
   if (err) {
     console.error('❌ Failed to start server:', err);
     process.exit(1);
@@ -3623,7 +3643,7 @@ app.post('/api/recraft-simple', async (req, res) => {
     console.log('📧 Google Email:', googleEmail);
     
     // Call the simple scraper
-    const result = await scrapeRecraftSimple(googleEmail, googlePassword);
+    const result = await scrapeRecraftSimple(googleEmail, googlePassword, io);
     
     res.json(result);
   } catch (error) {
@@ -3638,6 +3658,11 @@ app.post('/api/recraft-simple', async (req, res) => {
 // Serve Recraft.ai simple test page
 app.get('/recraft-simple', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft-simple-test.html'));
+});
+
+// Recraft Simple Real-time Route
+app.get('/recraft-simple-realtime', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recraft-simple-realtime.html'));
 });
 
 // Handle uncaught exceptions
