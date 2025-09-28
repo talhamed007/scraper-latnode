@@ -532,13 +532,120 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                   return false;
                 });
                 
-                if (imageIconClicked) {
-                  addDebugStep('Image Icon', 'success', 'Successfully clicked Image icon');
-                  await sleep(2000);
-                  await takeScreenshot('After Clicking Image Icon', page);
-                } else {
-                  addDebugStep('Image Icon', 'warning', 'Could not find Image icon');
+              if (imageIconClicked) {
+                addDebugStep('Image Icon', 'success', 'Successfully clicked Image icon');
+                await sleep(2000);
+                await takeScreenshot('After Clicking Image Icon', page);
+
+                // --- NEW STEP 1: Click "Recraft V3 Raw" button ---
+                addDebugStep('Recraft V3 Raw Button', 'info', 'Looking for and clicking "Recraft V3 Raw" button...');
+                try {
+                  const recraftV3RawClicked = await page.evaluate(() => {
+                    // First try to find by data-testid
+                    const button = document.querySelector('button[data-testid="recraft-preset"]');
+                    if (button && (button.innerText || button.textContent || '').includes('Recraft V3 Raw')) {
+                      button.click();
+                      console.log('Clicked "Recraft V3 Raw" button by data-testid.');
+                      return true;
+                    }
+                    
+                    // Fallback: search all buttons for "Recraft V3 Raw" text
+                    const allButtons = document.querySelectorAll('button');
+                    for (const btn of allButtons) {
+                      if (btn.offsetParent === null) continue;
+                      const text = (btn.innerText || btn.textContent || '').trim();
+                      if (text.includes('Recraft V3 Raw')) {
+                        btn.click();
+                        console.log('Clicked "Recraft V3 Raw" button by text search:', text);
+                        return true;
+                      }
+                    }
+                    
+                    return false;
+                  });
+
+                  if (recraftV3RawClicked) {
+                    addDebugStep('Recraft V3 Raw Button', 'success', 'Clicked "Recraft V3 Raw" button successfully');
+                    await sleep(3000); // Wait for the styles page to load
+                    await takeScreenshot('After Recraft V3 Raw Click', page);
+
+                    // --- NEW STEP 2: Click "Apply" button for "Photorealism" ---
+                    addDebugStep('Photorealism Apply Button', 'info', 'Looking for and clicking "Apply" button for "Photorealism"...');
+                    try {
+                      // Wait for the styles page to load
+                      await sleep(2000);
+                      
+                      const photorealismApplyClicked = await page.evaluate(() => {
+                        let clicked = false;
+                        
+                        // Method 1: Find by class and text
+                        const applyButtons = document.querySelectorAll('button.c-jilBjW');
+                        for (const btn of applyButtons) {
+                          if (btn.offsetParent === null) continue;
+                          const text = (btn.innerText || btn.textContent || '').trim();
+                          if (text === 'Apply') {
+                            // Check if this Apply button is near a Photorealism element
+                            const parent = btn.closest('div, section, article');
+                            if (parent) {
+                              const parentText = (parent.innerText || parent.textContent || '').toLowerCase();
+                              if (parentText.includes('photorealism')) {
+                                btn.click();
+                                console.log('Clicked Apply button for Photorealism (method 1)');
+                                clicked = true;
+                                break;
+                              }
+                            }
+                          }
+                        }
+                        
+                        if (!clicked) {
+                          // Method 2: Find Photorealism text first, then look for Apply button nearby
+                          const photorealismElements = Array.from(document.querySelectorAll('*')).filter(el => {
+                            if (el.offsetParent === null) return false;
+                            const text = (el.innerText || el.textContent || '').trim();
+                            return text === 'Photorealism';
+                          });
+                          
+                          for (const photorealismEl of photorealismElements) {
+                            // Look for Apply button in the same container or nearby
+                            let container = photorealismEl.closest('div, section, article, [class*="card"], [class*="style"]');
+                            if (!container) container = photorealismEl.parentElement;
+                            
+                            const applyBtn = container.querySelector('button');
+                            if (applyBtn && (applyBtn.innerText || applyBtn.textContent || '').trim() === 'Apply') {
+                              applyBtn.click();
+                              console.log('Clicked Apply button for Photorealism (method 2)');
+                              clicked = true;
+                              break;
+                            }
+                          }
+                        }
+                        
+                        return clicked;
+                      });
+
+                      if (photorealismApplyClicked) {
+                        addDebugStep('Photorealism Apply Button', 'success', 'Clicked "Apply" button for "Photorealism" successfully');
+                        await sleep(5000); // Wait for redirection/dashboard update
+                        await takeScreenshot('After Photorealism Apply Click', page);
+                      } else {
+                        addDebugStep('Photorealism Apply Button', 'warning', 'Could not find or click "Apply" button for "Photorealism"');
+                        await takeScreenshot('Photorealism Apply Failed', page);
+                      }
+                    } catch (error) {
+                      addDebugStep('Photorealism Apply Button', 'error', 'Error clicking "Apply" button for "Photorealism"', null, error.message);
+                    }
+
+                  } else {
+                    addDebugStep('Recraft V3 Raw Button', 'warning', 'Could not find or click "Recraft V3 Raw" button');
+                  }
+                } catch (error) {
+                  addDebugStep('Recraft V3 Raw Button', 'error', 'Error clicking "Recraft V3 Raw" button', null, error.message);
                 }
+
+              } else {
+                addDebugStep('Image Icon', 'warning', 'Could not find Image icon');
+              }
                 
               } catch (error) {
                 addDebugStep('Image Icon', 'error', 'Error clicking Image icon', null, error.message);
