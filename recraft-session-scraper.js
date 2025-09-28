@@ -250,6 +250,21 @@ async function loginToRecraft(googleEmail, googlePassword, browser, page, isNewS
       await takeScreenshot('Dashboard Navigation');
     }
     
+    // Verify we're actually logged in by checking for user elements
+    try {
+      await page.waitForFunction(() => {
+        return document.querySelector('[class*="user"], [class*="profile"], [class*="avatar"]') !== null ||
+               document.body.innerText.includes('Dashboard') ||
+               document.body.innerText.includes('Create') ||
+               document.body.innerText.includes('New');
+      }, { timeout: 5000 });
+      addDebugStep('Login Verification', 'success', '✅ Login verified - user elements found');
+    } catch (error) {
+      addDebugStep('Login Verification', 'warning', 'Login verification failed, may need to re-login');
+      // Mark session as not logged in to force re-login
+      activeSessions.recraft.isLoggedIn = false;
+    }
+    
     return true;
   }
   
@@ -371,22 +386,113 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
     }
     
     // Click Image button
-    addDebugStep('Image Button', 'info', 'Clicking Image button...');
-    await page.click('button[data-testid="new-raster"]');
-    await sleep(3000);
-    await takeScreenshot('Image Selection');
+        addDebugStep('Image Button', 'info', 'Clicking Image button...');
+        try {
+          // Wait for the image button to appear
+          await page.waitForSelector('button[data-testid="new-raster"]', { timeout: 10000 });
+          await page.click('button[data-testid="new-raster"]');
+          addDebugStep('Image Button', 'success', 'Successfully clicked Image button');
+        } catch (error) {
+          addDebugStep('Image Button', 'warning', 'Primary selector failed, trying alternatives...');
+          
+          // Try alternative selectors
+          const imageButtonClicked = await page.evaluate(() => {
+            const selectors = [
+              'button[data-testid="new-raster"]',
+              'button:has-text("Image")',
+              '[class*="new-raster"]',
+              'button[class*="raster"]',
+              'button:has(svg)',
+              'button[aria-label*="Image"]'
+            ];
+            
+            for (const selector of selectors) {
+              const button = document.querySelector(selector);
+              if (button && button.offsetParent !== null) {
+                button.click();
+                console.log('Clicked image button with selector:', selector);
+                return true;
+              }
+            }
+            return false;
+          });
+          
+          if (!imageButtonClicked) {
+            throw new Error('Could not find Image button with any selector');
+          }
+        }
+        
+        await sleep(3000);
+        await takeScreenshot('Image Selection');
     
-    // Click Recraft V3 Raw
-    addDebugStep('Style Selection', 'info', 'Selecting Recraft V3 Raw style...');
-    await page.click('button[data-testid="recraft-preset"]');
-    await sleep(2000);
-    
-    // Click Apply for Photorealism
-    addDebugStep('Apply Style', 'info', 'Applying Photorealism style...');
-    await page.waitForSelector('button.c-jilBjW:has-text("Apply")');
-    await page.click('button.c-jilBjW:has-text("Apply")');
-    await sleep(3000);
-    await takeScreenshot('Style Applied');
+       // Click Recraft V3 Raw
+       addDebugStep('Style Selection', 'info', 'Selecting Recraft V3 Raw style...');
+       try {
+         await page.waitForSelector('button[data-testid="recraft-preset"]', { timeout: 10000 });
+         await page.click('button[data-testid="recraft-preset"]');
+         addDebugStep('Style Selection', 'success', 'Successfully clicked Recraft V3 Raw');
+       } catch (error) {
+         addDebugStep('Style Selection', 'warning', 'Primary selector failed, trying alternatives...');
+         
+         const styleClicked = await page.evaluate(() => {
+           const selectors = [
+             'button[data-testid="recraft-preset"]',
+             'button:has-text("Recraft V3 Raw")',
+             'button[class*="preset"]',
+             'button:has-text("Raw")'
+           ];
+           
+           for (const selector of selectors) {
+             const button = document.querySelector(selector);
+             if (button && button.offsetParent !== null) {
+               button.click();
+               console.log('Clicked style button with selector:', selector);
+               return true;
+             }
+           }
+           return false;
+         });
+         
+         if (!styleClicked) {
+           throw new Error('Could not find Recraft V3 Raw button');
+         }
+       }
+       await sleep(2000);
+       
+       // Click Apply for Photorealism
+       addDebugStep('Apply Style', 'info', 'Applying Photorealism style...');
+       try {
+         await page.waitForSelector('button.c-jilBjW:has-text("Apply")', { timeout: 10000 });
+         await page.click('button.c-jilBjW:has-text("Apply")');
+         addDebugStep('Apply Style', 'success', 'Successfully clicked Apply button');
+       } catch (error) {
+         addDebugStep('Apply Style', 'warning', 'Primary selector failed, trying alternatives...');
+         
+         const applyClicked = await page.evaluate(() => {
+           const selectors = [
+             'button.c-jilBjW:has-text("Apply")',
+             'button:has-text("Apply")',
+             'button[class*="jilBjW"]',
+             'button:has-text("Photorealism")'
+           ];
+           
+           for (const selector of selectors) {
+             const button = document.querySelector(selector);
+             if (button && button.offsetParent !== null) {
+               button.click();
+               console.log('Clicked apply button with selector:', selector);
+               return true;
+             }
+           }
+           return false;
+         });
+         
+         if (!applyClicked) {
+           throw new Error('Could not find Apply button');
+         }
+       }
+       await sleep(3000);
+       await takeScreenshot('Style Applied');
     
     // Adjust slider to 1 image
     addDebugStep('Slider Adjustment', 'info', 'Adjusting image count to 1...');
