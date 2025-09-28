@@ -667,33 +667,53 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                             if (slider) {
                               console.log('Found slider, current value:', slider.value);
                               
-                              // Set the value to 1 (for 1 image)
-                              slider.value = '1';
+                              // Get slider dimensions
+                              const rect = slider.getBoundingClientRect();
                               
-                              // Focus the slider first
-                              slider.focus();
+                              // Click on the LEFT EDGE of the slider (0% position for value 1)
+                              const clickX = rect.left + (rect.width * 0.1); // 10% from left edge
+                              const clickY = rect.top + (rect.height / 2);
                               
-                              // Trigger multiple events to ensure UI updates
-                              const events = ['input', 'change', 'blur', 'focus'];
-                              events.forEach(eventType => {
-                                const event = new Event(eventType, { bubbles: true, cancelable: true });
-                                slider.dispatchEvent(event);
+                              // Create and dispatch mouse events to simulate clicking
+                              const mouseDownEvent = new MouseEvent('mousedown', {
+                                bubbles: true,
+                                cancelable: true,
+                                clientX: clickX,
+                                clientY: clickY,
+                                button: 0
                               });
                               
-                              // Also try clicking on the slider at the 1 position
-                              const rect = slider.getBoundingClientRect();
-                              const clickX = rect.left + (rect.width * 0.25); // 25% from left (1 out of 4 positions)
-                              const clickY = rect.top + (rect.height / 2);
+                              const mouseUpEvent = new MouseEvent('mouseup', {
+                                bubbles: true,
+                                cancelable: true,
+                                clientX: clickX,
+                                clientY: clickY,
+                                button: 0
+                              });
                               
                               const clickEvent = new MouseEvent('click', {
                                 bubbles: true,
                                 cancelable: true,
                                 clientX: clickX,
-                                clientY: clickY
+                                clientY: clickY,
+                                button: 0
                               });
+                              
+                              // Dispatch events in sequence
+                              slider.dispatchEvent(mouseDownEvent);
+                              slider.dispatchEvent(mouseUpEvent);
                               slider.dispatchEvent(clickEvent);
                               
-                              console.log('Adjusted image count slider to 1 image, new value:', slider.value);
+                              // Set the value to 1 after clicking
+                              slider.value = '1';
+                              
+                              // Trigger change events
+                              const changeEvent = new Event('change', { bubbles: true });
+                              const inputEvent = new Event('input', { bubbles: true });
+                              slider.dispatchEvent(changeEvent);
+                              slider.dispatchEvent(inputEvent);
+                              
+                              console.log('Clicked left edge of slider, new value:', slider.value);
                               return true;
                             }
                             console.log('Slider not found');
@@ -734,24 +754,18 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                                   textarea.focus();
                                   textarea.click();
                                   
-                                  // Wait a bit for focus
-                                  setTimeout(() => {
-                                    // Clear existing text
-                                    textarea.value = '';
-                                    
-                                    // Set new value
-                                    textarea.value = 'banana pancake';
-                                    
-                                    // Trigger multiple events to ensure UI updates
-                                    const events = ['input', 'change', 'keyup', 'keydown'];
-                                    events.forEach(eventType => {
-                                      const event = new Event(eventType, { bubbles: true, cancelable: true });
-                                      textarea.dispatchEvent(event);
-                                    });
-                                    
-                                    console.log('Entered prompt: banana pancake, new value:', textarea.value);
-                                  }, 100);
+                                  // Select all existing text and replace it
+                                  textarea.select();
+                                  textarea.value = 'banana pancake';
                                   
+                                  // Trigger multiple events to ensure UI updates
+                                  const events = ['input', 'change', 'keyup', 'keydown'];
+                                  events.forEach(eventType => {
+                                    const event = new Event(eventType, { bubbles: true, cancelable: true });
+                                    textarea.dispatchEvent(event);
+                                  });
+                                  
+                                  console.log('Entered prompt: banana pancake, new value:', textarea.value);
                                   return true;
                                 }
                                 console.log('Textarea not found');
@@ -763,56 +777,99 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                                 await sleep(2000);
                                 await takeScreenshot('After Prompt Input', page);
 
-                                // --- NEW STEP 5: Press Enter to generate ---
-                                addDebugStep('Generate Images', 'info', 'Pressing Enter to generate images...');
+                                // --- NEW STEP 5: Click Generate button ---
+                                addDebugStep('Generate Images', 'info', 'Clicking Generate button...');
                                 try {
-                                  await page.keyboard.press('Enter');
-                                  addDebugStep('Generate Images', 'success', 'Pressed Enter to start generation');
-                                  
-                                  // Wait for generation to start
-                                  await sleep(3000);
-                                  await takeScreenshot('Generation Started', page);
-                                  
-                                  // Wait for generation to complete (look for generated images or completion indicators)
-                                  addDebugStep('Generation Wait', 'info', 'Waiting for image generation to complete...');
-                                  
-                                  try {
-                                    // Wait for either generated images to appear or generation to complete
-                                    await page.waitForFunction(() => {
-                                      // Look for generated images or completion indicators
-                                      const hasImages = document.querySelectorAll('img[src*="recraft"], [class*="generated"], [class*="result"]').length > 0;
-                                      const hasLoading = document.querySelector('[class*="loading"], [class*="generating"]') !== null;
-                                      const hasProgress = document.querySelector('[class*="progress"], [class*="status"]') !== null;
-                                      
-                                      return hasImages || (!hasLoading && !hasProgress);
-                                    }, { timeout: 60000 }); // Wait up to 60 seconds
-                                    
-                                    addDebugStep('Generation Wait', 'success', 'Image generation completed');
-                                    await sleep(2000);
-                                    await takeScreenshot('Generation Completed', page);
-                                    
-                                    // Try to get the generated image link
-                                    const imageLink = await page.evaluate(() => {
-                                      const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img');
-                                      if (images.length > 0) {
-                                        return images[0].src;
-                                      }
-                                      return null;
-                                    });
-                                    
-                                    if (imageLink) {
-                                      addDebugStep('Image Link', 'success', `Generated image link: ${imageLink}`);
-                                    } else {
-                                      addDebugStep('Image Link', 'warning', 'Could not find generated image link');
+                                  const generateClicked = await page.evaluate(() => {
+                                    // Find the Generate button
+                                    const generateBtn = document.querySelector('button[data-testid="recraft-button"]');
+                                    if (generateBtn) {
+                                      console.log('Found Generate button, clicking...');
+                                      generateBtn.click();
+                                      return true;
                                     }
+                                    console.log('Generate button not found');
+                                    return false;
+                                  });
+
+                                  if (generateClicked) {
+                                    addDebugStep('Generate Images', 'success', 'Clicked Generate button');
                                     
-                                  } catch (error) {
-                                    addDebugStep('Generation Wait', 'warning', 'Generation timeout, continuing...', null, error.message);
-                                    await takeScreenshot('Generation Timeout', page);
+                                    // Wait for generation to start
+                                    await sleep(3000);
+                                    await takeScreenshot('Generation Started', page);
+                                    
+                                    // Wait for generation to complete (look for generated images or completion indicators)
+                                    addDebugStep('Generation Wait', 'info', 'Waiting for image generation to complete...');
+                                    
+                                    try {
+                                      // Wait for either generated images to appear or generation to complete
+                                      await page.waitForFunction(() => {
+                                        // Look for generated images or completion indicators
+                                        const hasImages = document.querySelectorAll('img[src*="recraft"], [class*="generated"], [class*="result"]').length > 0;
+                                        const hasLoading = document.querySelector('[class*="loading"], [class*="generating"]') !== null;
+                                        const hasProgress = document.querySelector('[class*="progress"], [class*="status"]') !== null;
+                                        
+                                        return hasImages || (!hasLoading && !hasProgress);
+                                      }, { timeout: 60000 }); // Wait up to 60 seconds
+                                      
+                                      addDebugStep('Generation Wait', 'success', 'Image generation completed');
+                                      await sleep(2000);
+                                      await takeScreenshot('Generation Completed', page);
+                                      
+                                      // --- NEW STEP 6: Click on the generated image ---
+                                      addDebugStep('Click Generated Image', 'info', 'Looking for and clicking on generated image...');
+                                      try {
+                                        const imageClicked = await page.evaluate(() => {
+                                          // Look for generated images in the canvas area
+                                          const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img');
+                                          for (const img of images) {
+                                            if (img.offsetParent !== null) { // Visible image
+                                              console.log('Found generated image, clicking...');
+                                              img.click();
+                                              return true;
+                                            }
+                                          }
+                                          console.log('No generated image found to click');
+                                          return false;
+                                        });
+
+                                        if (imageClicked) {
+                                          addDebugStep('Click Generated Image', 'success', 'Successfully clicked on generated image');
+                                          await sleep(2000);
+                                          await takeScreenshot('After Clicking Image', page);
+                                        } else {
+                                          addDebugStep('Click Generated Image', 'warning', 'Could not find generated image to click');
+                                        }
+                                      } catch (error) {
+                                        addDebugStep('Click Generated Image', 'error', 'Error clicking generated image', null, error.message);
+                                      }
+                                      
+                                      // Try to get the generated image link
+                                      const imageLink = await page.evaluate(() => {
+                                        const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img');
+                                        if (images.length > 0) {
+                                          return images[0].src;
+                                        }
+                                        return null;
+                                      });
+                                      
+                                      if (imageLink) {
+                                        addDebugStep('Image Link', 'success', `Generated image link: ${imageLink}`);
+                                      } else {
+                                        addDebugStep('Image Link', 'warning', 'Could not find generated image link');
+                                      }
+                                      
+                                    } catch (error) {
+                                      addDebugStep('Generation Wait', 'warning', 'Generation timeout, continuing...', null, error.message);
+                                      await takeScreenshot('Generation Timeout', page);
+                                    }
+                                  } else {
+                                    addDebugStep('Generate Images', 'warning', 'Could not find Generate button');
                                   }
                                   
                                 } catch (error) {
-                                  addDebugStep('Generate Images', 'error', 'Error pressing Enter', null, error.message);
+                                  addDebugStep('Generate Images', 'error', 'Error clicking Generate button', null, error.message);
                                 }
 
                               } else {
