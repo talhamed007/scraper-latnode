@@ -3,6 +3,7 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
+const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
