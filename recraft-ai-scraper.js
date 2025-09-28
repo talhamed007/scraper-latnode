@@ -425,6 +425,95 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                 addDebugStep('Final Popup Cleanup', 'warning', 'Error in final popup cleanup', null, error.message);
               }
               
+              // Click on "Accept All" for privacy policy
+              addDebugStep('Privacy Accept', 'info', 'Looking for and clicking Accept All button...');
+              
+              try {
+                const privacyAccepted = await page.evaluate(() => {
+                  // Get all buttons on the page
+                  const allButtons = document.querySelectorAll('button, a, [role="button"]');
+                  
+                  for (const button of allButtons) {
+                    if (button.offsetParent === null) continue; // Skip hidden buttons
+                    
+                    const text = (button.innerText || button.textContent || '').trim();
+                    const lowerText = text.toLowerCase();
+                    
+                    console.log('Checking privacy button:', text);
+                    
+                    // Look for "Accept All" button (exact match)
+                    if (text === 'Accept All' || lowerText === 'accept all') {
+                      button.click();
+                      console.log('Clicked Accept All button:', text);
+                      return true;
+                    }
+                  }
+                  
+                  return false;
+                });
+                
+                if (privacyAccepted) {
+                  addDebugStep('Privacy Accept', 'success', 'Successfully clicked Accept All button');
+                  await sleep(2000);
+                  await takeScreenshot('After Accepting Privacy', page);
+                } else {
+                  addDebugStep('Privacy Accept', 'warning', 'Could not find Accept All button');
+                }
+                
+              } catch (error) {
+                addDebugStep('Privacy Accept', 'error', 'Error clicking Accept All button', null, error.message);
+              }
+              
+              // Click on the "Image" icon
+              addDebugStep('Image Icon', 'info', 'Looking for and clicking Image icon...');
+              
+              try {
+                const imageIconClicked = await page.evaluate(() => {
+                  // Get all clickable elements
+                  const allElements = document.querySelectorAll('button, a, [role="button"], div[onclick], [class*="icon"], [class*="card"]');
+                  
+                  for (const element of allElements) {
+                    if (element.offsetParent === null) continue; // Skip hidden elements
+                    
+                    const text = (element.innerText || element.textContent || '').trim();
+                    const lowerText = text.toLowerCase();
+                    
+                    console.log('Checking image element:', text);
+                    
+                    // Look for "Image" text (exact match)
+                    if (text === 'Image' || lowerText === 'image') {
+                      // Check if it's in the CREATE NEW section or has image-related attributes
+                      const parent = element.closest('[class*="create"], [class*="sidebar"], [class*="menu"]');
+                      if (parent || element.className.includes('icon') || element.className.includes('card')) {
+                        element.click();
+                        console.log('Clicked Image icon:', text);
+                        return true;
+                      }
+                    }
+                    
+                    // Look for elements with image-related classes or attributes
+                    if (element.className.includes('image') || element.getAttribute('data-type') === 'image') {
+                      element.click();
+                      console.log('Clicked Image element by class/attribute:', text);
+                      return true;
+                    }
+                  }
+                  
+                  return false;
+                });
+                
+                if (imageIconClicked) {
+                  addDebugStep('Image Icon', 'success', 'Successfully clicked Image icon');
+                  await sleep(2000);
+                  await takeScreenshot('After Clicking Image Icon', page);
+                } else {
+                  addDebugStep('Image Icon', 'warning', 'Could not find Image icon');
+                }
+                
+              } catch (error) {
+                addDebugStep('Image Icon', 'error', 'Error clicking Image icon', null, error.message);
+              }
+              
             } else {
               addDebugStep('Create Project', 'warning', 'Could not find Create new project button');
             }
