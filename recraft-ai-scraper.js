@@ -659,44 +659,12 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                 await sleep(2000);
                 await takeScreenshot('After Clicking Image Icon', page);
 
-                // --- NEW STEP 1: Click "Recraft V3 Raw" button ---
-                addDebugStep('Recraft V3 Raw Button', 'info', 'Looking for and clicking "Recraft V3 Raw" button...');
-                try {
-                  const recraftV3RawClicked = await page.evaluate(() => {
-                    // First try to find by data-testid
-                    const button = document.querySelector('button[data-testid="recraft-preset"]');
-                    if (button && (button.innerText || button.textContent || '').includes('Recraft V3 Raw')) {
-                      button.click();
-                      console.log('Clicked "Recraft V3 Raw" button by data-testid.');
-                      return true;
-                    }
-                    
-                    // Fallback: search all buttons for "Recraft V3 Raw" text
-                    const allButtons = document.querySelectorAll('button');
-                    for (const btn of allButtons) {
-                      if (btn.offsetParent === null) continue;
-                      const text = (btn.innerText || btn.textContent || '').trim();
-                      if (text.includes('Recraft V3 Raw')) {
-                        btn.click();
-                        console.log('Clicked "Recraft V3 Raw" button by text search:', text);
-                        return true;
-                      }
-                    }
-                    
-                    return false;
-                  });
+                // Skip Recraft V3 Raw - default style is already selected
+                addDebugStep('Style Selection', 'info', 'Skipping Recraft V3 Raw selection - default style is already selected');
+                await sleep(2000); // Wait for page to settle
+                await takeScreenshot('After Image Click', page);
 
-                  if (recraftV3RawClicked) {
-                    addDebugStep('Recraft V3 Raw Button', 'success', 'Clicked "Recraft V3 Raw" button successfully');
-                    await sleep(3000); // Wait for the styles page to load
-                    await takeScreenshot('After Recraft V3 Raw Click', page);
-
-                    // Skip Photorealism Apply - default style is already Photorealism
-                    addDebugStep('Style Selection', 'info', 'Skipping Photorealism selection - default style is already Photorealism');
-                    await sleep(2000); // Wait for page to settle
-                    await takeScreenshot('After Recraft V3 Raw Click', page);
-
-                    // --- STEP 2: Adjust image count slider to 1 image ---
+                // --- STEP 1: Adjust image count slider to 1 image ---
                         addDebugStep('Image Count Slider', 'info', 'Adjusting image count slider to 1 image...');
                         try {
                           const sliderAdjusted = await page.evaluate(() => {
@@ -1030,12 +998,6 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                         }
 
 
-                  } else {
-                    addDebugStep('Recraft V3 Raw Button', 'warning', 'Could not find or click "Recraft V3 Raw" button');
-                  }
-                } catch (error) {
-                  addDebugStep('Recraft V3 Raw Button', 'error', 'Error clicking "Recraft V3 Raw" button', null, error.message);
-                }
 
               } else {
                 addDebugStep('Image Icon', 'warning', 'Could not find Image icon');

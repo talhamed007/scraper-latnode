@@ -425,39 +425,9 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
         await sleep(3000);
         await takeScreenshot('Image Selection');
     
-       // Click Recraft V3 Raw
-       addDebugStep('Style Selection', 'info', 'Selecting Recraft V3 Raw style...');
-       try {
-         await page.waitForSelector('button[data-testid="recraft-preset"]', { timeout: 10000 });
-         await page.click('button[data-testid="recraft-preset"]');
-         addDebugStep('Style Selection', 'success', 'Successfully clicked Recraft V3 Raw');
-       } catch (error) {
-         addDebugStep('Style Selection', 'warning', 'Primary selector failed, trying alternatives...');
-         
-         const styleClicked = await page.evaluate(() => {
-           const selectors = [
-             'button[data-testid="recraft-preset"]',
-             'button:has-text("Recraft V3 Raw")',
-             'button[class*="preset"]',
-             'button:has-text("Raw")'
-           ];
-           
-           for (const selector of selectors) {
-             const button = document.querySelector(selector);
-             if (button && button.offsetParent !== null) {
-               button.click();
-               console.log('Clicked style button with selector:', selector);
-               return true;
-             }
-           }
-           return false;
-         });
-         
-         if (!styleClicked) {
-           throw new Error('Could not find Recraft V3 Raw button');
-         }
-       }
-       await sleep(2000);
+       // Skip Recraft V3 Raw - default style is already selected
+       addDebugStep('Style Selection', 'info', 'Skipping Recraft V3 Raw selection - default style is already selected');
+       await sleep(2000); // Wait for page to settle
        
       // Skip Photorealism Apply - default style is already Photorealism
       addDebugStep('Style Selection', 'info', 'Skipping Photorealism selection - default style is already Photorealism');
