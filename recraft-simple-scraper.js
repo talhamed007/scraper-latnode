@@ -725,67 +725,12 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                 await sleep(3000); // Wait for the styles page to load
                 await takeScreenshot('After Recraft V3 Raw Click', page);
 
-                // --- NEW STEP 2: Click "Apply" button for "Photorealism" ---
-                addDebugStep('Photorealism Apply Button', 'info', 'Looking for and clicking "Apply" button for "Photorealism"...');
-                try {
-                  // Wait for the styles page to load
-                  await sleep(2000);
-                  
-                  const photorealismApplyClicked = await page.evaluate(() => {
-                    let clicked = false;
-                    
-                    // Method 1: Find by class and text
-                    const applyButtons = document.querySelectorAll('button.c-jilBjW');
-                    for (const btn of applyButtons) {
-                      if (btn.offsetParent === null) continue;
-                      const text = (btn.innerText || btn.textContent || '').trim();
-                      if (text === 'Apply') {
-                        // Check if this Apply button is near a Photorealism element
-                        const parent = btn.closest('div, section, article');
-                        if (parent) {
-                          const parentText = (parent.innerText || parent.textContent || '').toLowerCase();
-                          if (parentText.includes('photorealism')) {
-                            btn.click();
-                            console.log('Clicked Apply button for Photorealism (method 1)');
-                            clicked = true;
-                            break;
-                          }
-                        }
-                      }
-                    }
-                    
-                    if (!clicked) {
-                      // Method 2: Find Photorealism text first, then look for Apply button nearby
-                      const photorealismElements = Array.from(document.querySelectorAll('*')).filter(el => {
-                        if (el.offsetParent === null) return false;
-                        const text = (el.innerText || el.textContent || '').trim();
-                        return text === 'Photorealism';
-                      });
-                      
-                      for (const photorealismEl of photorealismElements) {
-                        // Look for Apply button in the same container or nearby
-                        let container = photorealismEl.closest('div, section, article, [class*="card"], [class*="style"]');
-                        if (!container) container = photorealismEl.parentElement;
-                        
-                        const applyBtn = container.querySelector('button');
-                        if (applyBtn && (applyBtn.innerText || applyBtn.textContent || '').trim() === 'Apply') {
-                          applyBtn.click();
-                          console.log('Clicked Apply button for Photorealism (method 2)');
-                          clicked = true;
-                          break;
-                        }
-                      }
-                    }
-                    
-                    return clicked;
-                  });
+                // Skip Photorealism Apply - default style is already Photorealism
+                addDebugStep('Style Selection', 'info', 'Skipping Photorealism selection - default style is already Photorealism');
+                await sleep(2000); // Wait for page to settle
+                await takeScreenshot('After Recraft V3 Raw Click', page);
 
-                      if (photorealismApplyClicked) {
-                        addDebugStep('Photorealism Apply Button', 'success', 'Clicked "Apply" button for "Photorealism" successfully');
-                        await sleep(5000); // Wait for redirection/dashboard update
-                        await takeScreenshot('After Photorealism Apply Click', page);
-
-                        // --- NEW STEP 3: Adjust image count slider to 1 image ---
+                // --- STEP 2: Adjust image count slider to 1 image ---
                         addDebugStep('Image Count Slider', 'info', 'Adjusting image count slider to 1 image...');
                         try {
                           const sliderAdjusted = await page.evaluate(() => {
@@ -1118,13 +1063,6 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                           addDebugStep('Image Count Slider', 'error', 'Error adjusting image count slider', null, error.message);
                         }
 
-                      } else {
-                        addDebugStep('Photorealism Apply Button', 'warning', 'Could not find or click "Apply" button for "Photorealism"');
-                        await takeScreenshot('Photorealism Apply Failed', page);
-                      }
-                } catch (error) {
-                  addDebugStep('Photorealism Apply Button', 'error', 'Error clicking "Apply" button for "Photorealism"', null, error.message);
-                }
 
               } else {
                 addDebugStep('Recraft V3 Raw Button', 'warning', 'Could not find or click "Recraft V3 Raw" button');

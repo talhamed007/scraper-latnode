@@ -459,74 +459,10 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
        }
        await sleep(2000);
        
-      // Click Apply for Photorealism
-      addDebugStep('Photorealism Apply Button', 'info', 'Looking for and clicking "Apply" button for "Photorealism"...');
-      try {
-        // Wait for the styles page to load
-        await sleep(2000);
-        
-        const photorealismApplyClicked = await page.evaluate(() => {
-          let clicked = false;
-          
-          // Method 1: Find by class and text
-          const applyButtons = document.querySelectorAll('button.c-jilBjW');
-          for (const btn of applyButtons) {
-            if (btn.offsetParent === null) continue;
-            const text = (btn.innerText || btn.textContent || '').trim();
-            if (text === 'Apply') {
-              // Check if this Apply button is near a Photorealism element
-              const parent = btn.closest('div, section, article');
-              if (parent) {
-                const parentText = (parent.innerText || parent.textContent || '').toLowerCase();
-                if (parentText.includes('photorealism')) {
-                  btn.click();
-                  console.log('Clicked Apply button for Photorealism (method 1)');
-                  clicked = true;
-                  break;
-                }
-              }
-            }
-          }
-          
-          if (!clicked) {
-            // Method 2: Find Photorealism text first, then look for Apply button nearby
-            const photorealismElements = Array.from(document.querySelectorAll('*')).filter(el => {
-              if (el.offsetParent === null) return false;
-              const text = (el.innerText || el.textContent || '').trim();
-              return text === 'Photorealism';
-            });
-            
-            for (const photorealismEl of photorealismElements) {
-              // Look for Apply button in the same container or nearby
-              let container = photorealismEl.closest('div, section, article, [class*="card"], [class*="style"]');
-              if (!container) container = photorealismEl.parentElement;
-              
-              const applyBtn = container.querySelector('button');
-              if (applyBtn && (applyBtn.innerText || applyBtn.textContent || '').trim() === 'Apply') {
-                applyBtn.click();
-                console.log('Clicked Apply button for Photorealism (method 2)');
-                clicked = true;
-                break;
-              }
-            }
-          }
-          
-          return clicked;
-        });
-
-        if (photorealismApplyClicked) {
-          addDebugStep('Photorealism Apply Button', 'success', 'Clicked "Apply" button for "Photorealism" successfully');
-          await sleep(5000); // Wait for redirection/dashboard update
-          await takeScreenshot('After Photorealism Apply Click', page);
-        } else {
-          addDebugStep('Photorealism Apply Button', 'warning', 'Could not find or click "Apply" button for "Photorealism"');
-          await takeScreenshot('Photorealism Apply Failed', page);
-        }
-      } catch (error) {
-        addDebugStep('Photorealism Apply Button', 'error', 'Error clicking "Apply" button for "Photorealism"', null, error.message);
-      }
-       await sleep(3000);
-       await takeScreenshot('Style Applied');
+      // Skip Photorealism Apply - default style is already Photorealism
+      addDebugStep('Style Selection', 'info', 'Skipping Photorealism selection - default style is already Photorealism');
+      await sleep(2000); // Wait for page to settle
+      await takeScreenshot('Style Applied');
     
     // Adjust slider to 1 image
     addDebugStep('Slider Adjustment', 'info', 'Adjusting image count to 1...');
