@@ -3485,6 +3485,9 @@ app.get('/recraft-test', (req, res) => {
 // Recraft.ai Live Debug Route (with live browser view)
 const { scrapeRecraftLoginLive } = require('./recraft-live-debug');
 
+// Recraft.ai AI-Guided Route
+const { scrapeRecraftWithAI } = require('./recraft-ai-scraper');
+
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -3524,6 +3527,47 @@ app.post('/api/recraft-live', async (req, res) => {
 // Serve Recraft.ai live debug page
 app.get('/recraft-live', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft-live-debug.html'));
+});
+
+// Recraft.ai AI-Guided Route
+app.post('/api/recraft-ai', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { googleEmail, googlePassword } = req.body;
+
+  if (!googleEmail || !googlePassword) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Google email and password are required for AI-guided scraping'
+    });
+  }
+
+  try {
+    console.log('🤖 Starting AI-guided Recraft.ai scraping...');
+    console.log('📧 Google Email:', googleEmail);
+    
+    // Call the AI-guided scraper
+    const result = await scrapeRecraftWithAI(googleEmail, googlePassword);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('❌ AI-guided Recraft.ai error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Serve Recraft.ai AI test page
+app.get('/recraft-ai', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recraft-ai-test.html'));
 });
 
 // Handle uncaught exceptions
