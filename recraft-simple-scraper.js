@@ -259,6 +259,71 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
       addDebugStep('Redirect', 'warning', 'Redirect timeout, checking current URL', null, error.message);
     }
     
+    // Handle popups and cookies
+    addDebugStep('Popup Handling', 'info', 'Checking for and closing popups...');
+    
+    try {
+      // Wait a bit for popups to appear
+      await sleep(2000);
+      
+      // Close any popups that might appear
+      const popupsClosed = await page.evaluate(() => {
+        let closedCount = 0;
+        
+        // Get all buttons on the page
+        const allButtons = document.querySelectorAll('button, a, [role="button"]');
+        
+        for (const button of allButtons) {
+          if (button.offsetParent === null) continue; // Skip hidden buttons
+          
+          const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+          const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+          const className = (button.className || '').toLowerCase();
+          
+          // Look for close buttons (X buttons) in popups
+          if (text === '×' || text === '✕' || text === 'close' || 
+              ariaLabel.includes('close') || className.includes('close')) {
+            button.click();
+            closedCount++;
+            console.log('Closed popup with close button:', text);
+            continue;
+          }
+          
+          // Look for "Accept All" buttons in cookie popups
+          if (text.includes('accept all') || text.includes('accept') || 
+              text.includes('ok') || text.includes('got it') ||
+              text.includes('agree') || text.includes('continue')) {
+            button.click();
+            closedCount++;
+            console.log('Clicked Accept/OK button:', text);
+            continue;
+          }
+          
+          // Look for "Learn more" or similar buttons that might close popups
+          if (text.includes('learn more') || text.includes('dismiss') ||
+              text.includes('skip') || text.includes('not now')) {
+            button.click();
+            closedCount++;
+            console.log('Clicked Learn more/Dismiss button:', text);
+            continue;
+          }
+        }
+        
+        return closedCount;
+      });
+      
+      if (popupsClosed > 0) {
+        addDebugStep('Popup Handling', 'success', `Closed ${popupsClosed} popup(s)`);
+        await sleep(1000);
+        await takeScreenshot('After Closing Popups', page);
+      } else {
+        addDebugStep('Popup Handling', 'info', 'No popups found to close');
+      }
+      
+    } catch (error) {
+      addDebugStep('Popup Handling', 'warning', 'Error handling popups', null, error.message);
+    }
+    
     // Final page analysis
     const finalUrl = page.url();
     const finalTitle = await page.title();
