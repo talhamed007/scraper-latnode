@@ -425,10 +425,13 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                 addDebugStep('Final Popup Cleanup', 'warning', 'Error in final popup cleanup', null, error.message);
               }
               
-              // Click on "Accept All" for privacy policy
+              // Click on "Accept All" for privacy policy - ENHANCED VERSION
               addDebugStep('Privacy Accept', 'info', 'Looking for and clicking Accept All button...');
               
               try {
+                // First, wait for any popups to appear
+                await sleep(2000);
+                
                 const privacyAccepted = await page.evaluate(() => {
                   // Get all clickable elements
                   const allElements = document.querySelectorAll('button, a, [role="button"], div, span, [onclick]');
@@ -461,10 +464,36 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                 
                 if (privacyAccepted) {
                   addDebugStep('Privacy Accept', 'success', 'Successfully clicked Accept All button');
-                  await sleep(2000);
+                  await sleep(3000); // Wait for popup to close
                   await takeScreenshot('After Accepting Privacy', page);
                 } else {
-                  addDebugStep('Privacy Accept', 'warning', 'Could not find Accept All button');
+                  addDebugStep('Privacy Accept', 'warning', 'Could not find Accept All button, trying alternative approach...');
+                  
+                  // Alternative approach: try to close any visible popups
+                  const popupClosed = await page.evaluate(() => {
+                    // Look for close buttons (X, Close, etc.)
+                    const closeButtons = document.querySelectorAll('button, [role="button"], [aria-label*="close"], [aria-label*="Close"]');
+                    for (const btn of closeButtons) {
+                      if (btn.offsetParent === null) continue;
+                      const text = (btn.innerText || btn.textContent || '').trim();
+                      const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                      
+                      if (text === '×' || text === '✕' || text === 'Close' || 
+                          text.toLowerCase().includes('close') || 
+                          ariaLabel.includes('close')) {
+                        btn.click();
+                        console.log('Clicked close button:', text);
+                        return true;
+                      }
+                    }
+                    return false;
+                  });
+                  
+                  if (popupClosed) {
+                    addDebugStep('Privacy Accept', 'success', 'Closed popup with close button');
+                    await sleep(2000);
+                    await takeScreenshot('After Closing Popup', page);
+                  }
                 }
                 
               } catch (error) {
@@ -636,20 +665,38 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                             // Find the range input for numberOfImages
                             const slider = document.querySelector('input[name="numberOfImages"][type="range"]');
                             if (slider) {
+                              console.log('Found slider, current value:', slider.value);
+                              
                               // Set the value to 1 (for 1 image)
                               slider.value = '1';
                               
-                              // Trigger change event to update the UI
-                              const changeEvent = new Event('change', { bubbles: true });
-                              slider.dispatchEvent(changeEvent);
+                              // Focus the slider first
+                              slider.focus();
                               
-                              // Trigger input event as well
-                              const inputEvent = new Event('input', { bubbles: true });
-                              slider.dispatchEvent(inputEvent);
+                              // Trigger multiple events to ensure UI updates
+                              const events = ['input', 'change', 'blur', 'focus'];
+                              events.forEach(eventType => {
+                                const event = new Event(eventType, { bubbles: true, cancelable: true });
+                                slider.dispatchEvent(event);
+                              });
                               
-                              console.log('Adjusted image count slider to 1 image');
+                              // Also try clicking on the slider at the 1 position
+                              const rect = slider.getBoundingClientRect();
+                              const clickX = rect.left + (rect.width * 0.25); // 25% from left (1 out of 4 positions)
+                              const clickY = rect.top + (rect.height / 2);
+                              
+                              const clickEvent = new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                clientX: clickX,
+                                clientY: clickY
+                              });
+                              slider.dispatchEvent(clickEvent);
+                              
+                              console.log('Adjusted image count slider to 1 image, new value:', slider.value);
                               return true;
                             }
+                            console.log('Slider not found');
                             return false;
                           });
 
@@ -678,24 +725,36 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
                                 // Find the textarea
                                 const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
                                 if (textarea) {
+                                  console.log('Found textarea, current value:', textarea.value);
+                                  
+                                  // Scroll to textarea to ensure it's visible
+                                  textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  
                                   // Click on the textarea to focus it
+                                  textarea.focus();
                                   textarea.click();
                                   
-                                  // Clear existing text and enter new prompt
-                                  textarea.value = '';
-                                  textarea.value = 'banana pancake';
+                                  // Wait a bit for focus
+                                  setTimeout(() => {
+                                    // Clear existing text
+                                    textarea.value = '';
+                                    
+                                    // Set new value
+                                    textarea.value = 'banana pancake';
+                                    
+                                    // Trigger multiple events to ensure UI updates
+                                    const events = ['input', 'change', 'keyup', 'keydown'];
+                                    events.forEach(eventType => {
+                                      const event = new Event(eventType, { bubbles: true, cancelable: true });
+                                      textarea.dispatchEvent(event);
+                                    });
+                                    
+                                    console.log('Entered prompt: banana pancake, new value:', textarea.value);
+                                  }, 100);
                                   
-                                  // Trigger input event
-                                  const inputEvent = new Event('input', { bubbles: true });
-                                  textarea.dispatchEvent(inputEvent);
-                                  
-                                  // Trigger change event
-                                  const changeEvent = new Event('change', { bubbles: true });
-                                  textarea.dispatchEvent(changeEvent);
-                                  
-                                  console.log('Entered prompt: banana pancake');
                                   return true;
                                 }
+                                console.log('Textarea not found');
                                 return false;
                               });
 
