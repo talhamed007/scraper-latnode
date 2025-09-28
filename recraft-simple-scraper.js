@@ -658,14 +658,51 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
                     return clicked;
                   });
 
-                  if (photorealismApplyClicked) {
-                    addDebugStep('Photorealism Apply Button', 'success', 'Clicked "Apply" button for "Photorealism" successfully');
-                    await sleep(5000); // Wait for redirection/dashboard update
-                    await takeScreenshot('After Photorealism Apply Click', page);
-                  } else {
-                    addDebugStep('Photorealism Apply Button', 'warning', 'Could not find or click "Apply" button for "Photorealism"');
-                    await takeScreenshot('Photorealism Apply Failed', page);
-                  }
+                      if (photorealismApplyClicked) {
+                        addDebugStep('Photorealism Apply Button', 'success', 'Clicked "Apply" button for "Photorealism" successfully');
+                        await sleep(5000); // Wait for redirection/dashboard update
+                        await takeScreenshot('After Photorealism Apply Click', page);
+
+                        // --- NEW STEP 3: Adjust image count slider to 1 image ---
+                        addDebugStep('Image Count Slider', 'info', 'Adjusting image count slider to 1 image...');
+                        try {
+                          const sliderAdjusted = await page.evaluate(() => {
+                            // Find the range input for numberOfImages
+                            const slider = document.querySelector('input[name="numberOfImages"][type="range"]');
+                            if (slider) {
+                              // Set the value to 1 (for 1 image)
+                              slider.value = '1';
+                              
+                              // Trigger change event to update the UI
+                              const changeEvent = new Event('change', { bubbles: true });
+                              slider.dispatchEvent(changeEvent);
+                              
+                              // Trigger input event as well
+                              const inputEvent = new Event('input', { bubbles: true });
+                              slider.dispatchEvent(inputEvent);
+                              
+                              console.log('Adjusted image count slider to 1 image');
+                              return true;
+                            }
+                            return false;
+                          });
+
+                          if (sliderAdjusted) {
+                            addDebugStep('Image Count Slider', 'success', 'Successfully adjusted slider to 1 image');
+                            await sleep(2000);
+                            await takeScreenshot('After Slider Adjustment', page);
+                          } else {
+                            addDebugStep('Image Count Slider', 'warning', 'Could not find or adjust image count slider');
+                            await takeScreenshot('Slider Adjustment Failed', page);
+                          }
+                        } catch (error) {
+                          addDebugStep('Image Count Slider', 'error', 'Error adjusting image count slider', null, error.message);
+                        }
+
+                      } else {
+                        addDebugStep('Photorealism Apply Button', 'warning', 'Could not find or click "Apply" button for "Photorealism"');
+                        await takeScreenshot('Photorealism Apply Failed', page);
+                      }
                 } catch (error) {
                   addDebugStep('Photorealism Apply Button', 'error', 'Error clicking "Apply" button for "Photorealism"', null, error.message);
                 }
