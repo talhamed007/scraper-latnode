@@ -387,12 +387,11 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
       addDebugStep('Navigation', 'info', 'Already in project editor, skipping navigation');
     }
       
-      await takeScreenshot('New Project');
-    }
+    await takeScreenshot('New Project');
     
     // Click Image button
-        addDebugStep('Image Button', 'info', 'Clicking Image button...');
-        try {
+    addDebugStep('Image Button', 'info', 'Clicking Image button...');
+    try {
           // Wait for the image button to appear
           await page.waitForSelector('button[data-testid="new-raster"]', { timeout: 10000 });
           await page.click('button[data-testid="new-raster"]');
