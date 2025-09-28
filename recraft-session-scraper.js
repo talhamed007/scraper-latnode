@@ -460,74 +460,70 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
        await sleep(2000);
        
       // Click Apply for Photorealism
-      addDebugStep('Apply Style', 'info', 'Applying Photorealism style...');
+      addDebugStep('Photorealism Apply Button', 'info', 'Looking for and clicking "Apply" button for "Photorealism"...');
       try {
-        // First hover over Photorealism style to make Apply button visible
-        addDebugStep('Hover Style', 'info', 'Hovering over Photorealism style...');
+        // Wait for the styles page to load
+        await sleep(2000);
         
-        // Try to find and hover over Photorealism element
-        const photorealismHovered = await page.evaluate(() => {
-          const photorealismElements = [
-            ...document.querySelectorAll('*')
-          ].filter(el => el.textContent && el.textContent.includes('Photorealism'));
+        const photorealismApplyClicked = await page.evaluate(() => {
+          let clicked = false;
           
-          for (const element of photorealismElements) {
-            if (element.offsetParent !== null) {
-              element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-              element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-              console.log('Hovered over Photorealism element');
-              return true;
-            }
-          }
-          return false;
-        });
-        
-        if (photorealismHovered) {
-          await sleep(1000);
-        }
-        
-        // Wait for Apply button to appear and click it
-        await page.waitForSelector('button.c-jilBjW', { timeout: 10000 });
-        await page.click('button.c-jilBjW');
-        addDebugStep('Apply Style', 'success', 'Successfully clicked Apply button');
-      } catch (error) {
-        addDebugStep('Apply Style', 'warning', 'Primary method failed, trying alternatives...');
-        
-        const applyClicked = await page.evaluate(() => {
-          // Try to find and click Apply button
-          const applyButton = document.querySelector('button.c-jilBjW');
-          if (applyButton && applyButton.offsetParent !== null) {
-            applyButton.click();
-            console.log('Clicked apply button with c-jilBjW class');
-            return true;
-          }
-          
-          // Try alternative selectors
-          const selectors = [
-            'button[class*="jilBjW"]',
-            'button[class*="apply"]',
-            '[role="button"]'
-          ];
-          
-          for (const selector of selectors) {
-            try {
-              const button = document.querySelector(selector);
-              if (button && button.offsetParent !== null && 
-                  (button.textContent.includes('Apply') || button.className.includes('jilBjW'))) {
-                button.click();
-                console.log('Clicked apply button with selector:', selector);
-                return true;
+          // Method 1: Find by class and text
+          const applyButtons = document.querySelectorAll('button.c-jilBjW');
+          for (const btn of applyButtons) {
+            if (btn.offsetParent === null) continue;
+            const text = (btn.innerText || btn.textContent || '').trim();
+            if (text === 'Apply') {
+              // Check if this Apply button is near a Photorealism element
+              const parent = btn.closest('div, section, article');
+              if (parent) {
+                const parentText = (parent.innerText || parent.textContent || '').toLowerCase();
+                if (parentText.includes('photorealism')) {
+                  btn.click();
+                  console.log('Clicked Apply button for Photorealism (method 1)');
+                  clicked = true;
+                  break;
+                }
               }
-            } catch (e) {
-              continue;
             }
           }
-          return false;
+          
+          if (!clicked) {
+            // Method 2: Find Photorealism text first, then look for Apply button nearby
+            const photorealismElements = Array.from(document.querySelectorAll('*')).filter(el => {
+              if (el.offsetParent === null) return false;
+              const text = (el.innerText || el.textContent || '').trim();
+              return text === 'Photorealism';
+            });
+            
+            for (const photorealismEl of photorealismElements) {
+              // Look for Apply button in the same container or nearby
+              let container = photorealismEl.closest('div, section, article, [class*="card"], [class*="style"]');
+              if (!container) container = photorealismEl.parentElement;
+              
+              const applyBtn = container.querySelector('button');
+              if (applyBtn && (applyBtn.innerText || applyBtn.textContent || '').trim() === 'Apply') {
+                applyBtn.click();
+                console.log('Clicked Apply button for Photorealism (method 2)');
+                clicked = true;
+                break;
+              }
+            }
+          }
+          
+          return clicked;
         });
-        
-        if (!applyClicked) {
-          throw new Error('Could not find Apply button');
+
+        if (photorealismApplyClicked) {
+          addDebugStep('Photorealism Apply Button', 'success', 'Clicked "Apply" button for "Photorealism" successfully');
+          await sleep(5000); // Wait for redirection/dashboard update
+          await takeScreenshot('After Photorealism Apply Click', page);
+        } else {
+          addDebugStep('Photorealism Apply Button', 'warning', 'Could not find or click "Apply" button for "Photorealism"');
+          await takeScreenshot('Photorealism Apply Failed', page);
         }
+      } catch (error) {
+        addDebugStep('Photorealism Apply Button', 'error', 'Error clicking "Apply" button for "Photorealism"', null, error.message);
       }
        await sleep(3000);
        await takeScreenshot('Style Applied');
