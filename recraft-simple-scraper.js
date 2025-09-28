@@ -510,8 +510,16 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
         
         try {
           const imageIconClicked = await page.evaluate(() => {
-            // Get all clickable elements
-            const allElements = document.querySelectorAll('*');
+            // First try to find by data-testid (most reliable)
+            const imageButton = document.querySelector('button[data-testid="new-raster"]');
+            if (imageButton && imageButton.offsetParent !== null) {
+              imageButton.click();
+              console.log('Clicked Image button by data-testid');
+              return true;
+            }
+            
+            // Fallback: Get all clickable elements
+            const allElements = document.querySelectorAll('button, a, [role="button"], div[onclick]');
             
             for (const element of allElements) {
               if (element.offsetParent === null) continue; // Skip hidden elements
@@ -520,8 +528,9 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
               const lowerText = text.toLowerCase();
               const className = element.className || '';
               const tagName = element.tagName.toLowerCase();
+              const testId = element.getAttribute('data-testid');
               
-              console.log('Checking image element:', text, 'tag:', tagName, 'class:', className);
+              console.log('Checking image element:', text, 'tag:', tagName, 'class:', className, 'testid:', testId);
               
               // Look for "Image" text (exact match)
               if (text === 'Image' || lowerText === 'image') {
@@ -539,9 +548,9 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
               
               // Look for elements with image-related classes or attributes
               if (className.includes('image') || element.getAttribute('data-type') === 'image' ||
-                  element.getAttribute('data-name') === 'image') {
+                  element.getAttribute('data-name') === 'image' || testId === 'new-raster') {
                 element.click();
-                console.log('Clicked Image element by class/attribute:', text);
+                console.log('Clicked Image element by class/attribute/testid:', text);
                 return true;
               }
               
