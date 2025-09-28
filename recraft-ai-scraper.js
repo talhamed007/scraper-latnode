@@ -655,8 +655,115 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword) {
 
                           if (sliderAdjusted) {
                             addDebugStep('Image Count Slider', 'success', 'Successfully adjusted slider to 1 image');
-                            await sleep(2000);
+                            
+                            // Wait for UI to update visually
+                            await sleep(3000);
+                            
+                            // Wait for the slider value to be visually updated
+                            try {
+                              await page.waitForFunction(() => {
+                                const slider = document.querySelector('input[name="numberOfImages"][type="range"]');
+                                return slider && slider.value === '1';
+                              }, { timeout: 5000 });
+                            } catch (error) {
+                              console.log('Slider value verification timeout, continuing...');
+                            }
+                            
                             await takeScreenshot('After Slider Adjustment', page);
+
+                            // --- NEW STEP 4: Input prompt text ---
+                            addDebugStep('Prompt Input', 'info', 'Clicking on textarea and entering prompt...');
+                            try {
+                              const promptEntered = await page.evaluate(() => {
+                                // Find the textarea
+                                const textarea = document.querySelector('textarea[name="prompt"][data-testid="recraft-textarea"]');
+                                if (textarea) {
+                                  // Click on the textarea to focus it
+                                  textarea.click();
+                                  
+                                  // Clear existing text and enter new prompt
+                                  textarea.value = '';
+                                  textarea.value = 'banana pancake';
+                                  
+                                  // Trigger input event
+                                  const inputEvent = new Event('input', { bubbles: true });
+                                  textarea.dispatchEvent(inputEvent);
+                                  
+                                  // Trigger change event
+                                  const changeEvent = new Event('change', { bubbles: true });
+                                  textarea.dispatchEvent(changeEvent);
+                                  
+                                  console.log('Entered prompt: banana pancake');
+                                  return true;
+                                }
+                                return false;
+                              });
+
+                              if (promptEntered) {
+                                addDebugStep('Prompt Input', 'success', 'Successfully entered prompt: banana pancake');
+                                await sleep(2000);
+                                await takeScreenshot('After Prompt Input', page);
+
+                                // --- NEW STEP 5: Press Enter to generate ---
+                                addDebugStep('Generate Images', 'info', 'Pressing Enter to generate images...');
+                                try {
+                                  await page.keyboard.press('Enter');
+                                  addDebugStep('Generate Images', 'success', 'Pressed Enter to start generation');
+                                  
+                                  // Wait for generation to start
+                                  await sleep(3000);
+                                  await takeScreenshot('Generation Started', page);
+                                  
+                                  // Wait for generation to complete (look for generated images or completion indicators)
+                                  addDebugStep('Generation Wait', 'info', 'Waiting for image generation to complete...');
+                                  
+                                  try {
+                                    // Wait for either generated images to appear or generation to complete
+                                    await page.waitForFunction(() => {
+                                      // Look for generated images or completion indicators
+                                      const hasImages = document.querySelectorAll('img[src*="recraft"], [class*="generated"], [class*="result"]').length > 0;
+                                      const hasLoading = document.querySelector('[class*="loading"], [class*="generating"]') !== null;
+                                      const hasProgress = document.querySelector('[class*="progress"], [class*="status"]') !== null;
+                                      
+                                      return hasImages || (!hasLoading && !hasProgress);
+                                    }, { timeout: 60000 }); // Wait up to 60 seconds
+                                    
+                                    addDebugStep('Generation Wait', 'success', 'Image generation completed');
+                                    await sleep(2000);
+                                    await takeScreenshot('Generation Completed', page);
+                                    
+                                    // Try to get the generated image link
+                                    const imageLink = await page.evaluate(() => {
+                                      const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img');
+                                      if (images.length > 0) {
+                                        return images[0].src;
+                                      }
+                                      return null;
+                                    });
+                                    
+                                    if (imageLink) {
+                                      addDebugStep('Image Link', 'success', `Generated image link: ${imageLink}`);
+                                    } else {
+                                      addDebugStep('Image Link', 'warning', 'Could not find generated image link');
+                                    }
+                                    
+                                  } catch (error) {
+                                    addDebugStep('Generation Wait', 'warning', 'Generation timeout, continuing...', null, error.message);
+                                    await takeScreenshot('Generation Timeout', page);
+                                  }
+                                  
+                                } catch (error) {
+                                  addDebugStep('Generate Images', 'error', 'Error pressing Enter', null, error.message);
+                                }
+
+                              } else {
+                                addDebugStep('Prompt Input', 'warning', 'Could not find or interact with prompt textarea');
+                                await takeScreenshot('Prompt Input Failed', page);
+                              }
+                            } catch (error) {
+                              addDebugStep('Prompt Input', 'error', 'Error entering prompt', null, error.message);
+                            }
+
                           } else {
                             addDebugStep('Image Count Slider', 'warning', 'Could not find or adjust image count slider');
                             await takeScreenshot('Slider Adjustment Failed', page);
