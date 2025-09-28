@@ -459,8 +459,8 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
           addDebugStep('Final Popup Cleanup', 'warning', 'Error in final popup cleanup', null, error.message);
         }
         
-        // Click on "Accept All" for privacy policy - FOCUSED VERSION
-        addDebugStep('Privacy Accept', 'info', 'FOCUSING ON PRIVACY POPUP - Looking for Accept All button...');
+        // Click on "Accept All" for privacy policy - TARGET SPECIFIC BUTTON
+        addDebugStep('Privacy Accept', 'info', 'TARGETING SPECIFIC BUTTON: button.dg-button.accept_all');
         
         try {
           // Wait for privacy popup to appear
@@ -469,57 +469,56 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
           // Take screenshot to see current state
           await takeScreenshot('Before Privacy Popup Handling', page);
           
-          // Try multiple approaches to find and click Accept All
           let privacyAccepted = false;
           
-          // Approach 1: Look for exact "Accept All" text
-          addDebugStep('Privacy Accept', 'info', 'Approach 1: Looking for exact "Accept All" text...');
-          privacyAccepted = await page.evaluate(() => {
-            const allElements = document.querySelectorAll('*');
-            console.log('Total elements found:', allElements.length);
-            
-            for (const element of allElements) {
-              if (element.offsetParent === null) continue; // Skip hidden elements
-              
-              const text = (element.innerText || element.textContent || '').trim();
-              const tagName = element.tagName.toLowerCase();
-              
-              console.log('Checking element:', {
-                tag: tagName,
-                text: text,
-                classes: element.className,
-                id: element.id
-              });
-              
-              // Look for exact "Accept All" match
-              if (text === 'Accept All') {
-                console.log('Found exact Accept All match:', element);
-                element.click();
+          // Method 1: Direct click on specific button using Puppeteer
+          addDebugStep('Privacy Accept', 'info', 'Method 1: Direct click on button.dg-button.accept_all...');
+          try {
+            await page.waitForSelector('button.dg-button.accept_all', { visible: true, timeout: 5000 });
+            await page.click('button.dg-button.accept_all');
+            privacyAccepted = true;
+            addDebugStep('Privacy Accept', 'success', 'Successfully clicked specific Accept All button via Puppeteer');
+            await sleep(3000);
+            await takeScreenshot('After Direct Accept All Click', page);
+          } catch (error) {
+            addDebugStep('Privacy Accept', 'warning', `Direct click failed: ${error.message}`);
+          }
+          
+          // Method 2: If direct click failed, try page.evaluate with specific selector
+          if (!privacyAccepted) {
+            addDebugStep('Privacy Accept', 'info', 'Method 2: Using page.evaluate with specific selector...');
+            privacyAccepted = await page.evaluate(() => {
+              const specificButton = document.querySelector('button.dg-button.accept_all');
+              if (specificButton && specificButton.offsetParent !== null) {
+                console.log('Found specific button:', specificButton);
+                specificButton.click();
                 return true;
               }
+              console.log('Specific button not found or not visible');
+              return false;
+            });
+            
+            if (privacyAccepted) {
+              addDebugStep('Privacy Accept', 'success', 'Successfully clicked specific Accept All button via page.evaluate');
+              await sleep(3000);
+              await takeScreenshot('After Evaluate Accept All Click', page);
             }
-            return false;
-          });
+          }
           
-          if (privacyAccepted) {
-            addDebugStep('Privacy Accept', 'success', 'Successfully clicked Accept All (exact match)');
-            await sleep(3000);
-            await takeScreenshot('After Accept All Click', page);
-          } else {
-            // Approach 2: Look for buttons with "Accept" in text
-            addDebugStep('Privacy Accept', 'info', 'Approach 2: Looking for buttons with "Accept" text...');
+          // Method 3: Fallback - look for any button with "Accept All" text
+          if (!privacyAccepted) {
+            addDebugStep('Privacy Accept', 'info', 'Method 3: Fallback - looking for any Accept All button...');
             privacyAccepted = await page.evaluate(() => {
-              const buttons = document.querySelectorAll('button, [role="button"], a, div[onclick]');
-              console.log('Buttons found:', buttons.length);
+              const allButtons = document.querySelectorAll('button');
+              console.log('All buttons found:', allButtons.length);
               
-              for (const button of buttons) {
+              for (const button of allButtons) {
                 if (button.offsetParent === null) continue;
-                
                 const text = (button.innerText || button.textContent || '').trim();
-                console.log('Button text:', text);
+                console.log('Button text:', text, 'classes:', button.className);
                 
-                if (text.toLowerCase().includes('accept')) {
-                  console.log('Found Accept button:', button);
+                if (text === 'Accept All') {
+                  console.log('Found Accept All button:', button);
                   button.click();
                   return true;
                 }
@@ -528,50 +527,25 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
             });
             
             if (privacyAccepted) {
-              addDebugStep('Privacy Accept', 'success', 'Successfully clicked Accept button');
+              addDebugStep('Privacy Accept', 'success', 'Successfully clicked Accept All button (fallback)');
               await sleep(3000);
-              await takeScreenshot('After Accept Button Click', page);
+              await takeScreenshot('After Fallback Accept All Click', page);
             } else {
-              // Approach 3: Look for any clickable element in privacy popup
-              addDebugStep('Privacy Accept', 'info', 'Approach 3: Looking for any clickable element in privacy popup...');
-              privacyAccepted = await page.evaluate(() => {
-                // Look for elements that might be in a privacy popup
-                const privacyElements = document.querySelectorAll('[class*="privacy"], [class*="cookie"], [class*="popup"], [class*="modal"]');
-                console.log('Privacy-related elements found:', privacyElements.length);
-                
-                for (const element of privacyElements) {
-                  const buttons = element.querySelectorAll('button, [role="button"], a');
-                  for (const button of buttons) {
-                    if (button.offsetParent === null) continue;
-                    const text = (button.innerText || button.textContent || '').trim();
-                    console.log('Privacy popup button:', text);
-                    
-                    if (text.toLowerCase().includes('accept') || text.toLowerCase().includes('agree')) {
-                      console.log('Found privacy popup button:', button);
-                      button.click();
-                      return true;
-                    }
-                  }
-                }
-                return false;
-              });
-              
-              if (privacyAccepted) {
-                addDebugStep('Privacy Accept', 'success', 'Successfully clicked privacy popup button');
-                await sleep(3000);
-                await takeScreenshot('After Privacy Popup Button Click', page);
-              } else {
-                addDebugStep('Privacy Accept', 'error', 'Could not find or click any Accept button');
-                await takeScreenshot('Privacy Popup Not Found', page);
-              }
+              addDebugStep('Privacy Accept', 'error', 'Could not find or click any Accept All button');
+              await takeScreenshot('Accept All Button Not Found', page);
             }
           }
           
           // Verify privacy popup is closed
           if (privacyAccepted) {
             const popupStillVisible = await page.evaluate(() => {
+              // Check if the specific button is still visible
+              const specificButton = document.querySelector('button.dg-button.accept_all');
               const privacyText = document.body.innerText.toLowerCase();
-              return privacyText.includes('privacy settings') || privacyText.includes('accept all') || privacyText.includes('cookies');
+              return (specificButton && specificButton.offsetParent !== null) || 
+                     privacyText.includes('privacy settings') || 
+                     privacyText.includes('accept all') || 
+                     privacyText.includes('cookies');
             });
             
             if (popupStillVisible) {
