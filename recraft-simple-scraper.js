@@ -464,21 +464,28 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
         
         try {
           const privacyAccepted = await page.evaluate(() => {
-            // Get all buttons on the page
-            const allButtons = document.querySelectorAll('button, a, [role="button"]');
+            // Get all clickable elements
+            const allElements = document.querySelectorAll('button, a, [role="button"], div, span, [onclick]');
             
-            for (const button of allButtons) {
-              if (button.offsetParent === null) continue; // Skip hidden buttons
+            for (const element of allElements) {
+              if (element.offsetParent === null) continue; // Skip hidden elements
               
-              const text = (button.innerText || button.textContent || '').trim();
+              const text = (element.innerText || element.textContent || '').trim();
               const lowerText = text.toLowerCase();
               
-              console.log('Checking privacy button:', text);
+              console.log('Checking privacy element:', text, 'tag:', element.tagName, 'class:', element.className);
               
               // Look for "Accept All" button (exact match)
               if (text === 'Accept All' || lowerText === 'accept all') {
-                button.click();
+                element.click();
                 console.log('Clicked Accept All button:', text);
+                return true;
+              }
+              
+              // Look for "Accept" variations
+              if (lowerText.includes('accept') && (lowerText.includes('all') || lowerText.includes('cookies'))) {
+                element.click();
+                console.log('Clicked Accept button (variation):', text);
                 return true;
               }
             }
@@ -504,21 +511,26 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
         try {
           const imageIconClicked = await page.evaluate(() => {
             // Get all clickable elements
-            const allElements = document.querySelectorAll('button, a, [role="button"], div[onclick], [class*="icon"], [class*="card"]');
+            const allElements = document.querySelectorAll('*');
             
             for (const element of allElements) {
               if (element.offsetParent === null) continue; // Skip hidden elements
               
               const text = (element.innerText || element.textContent || '').trim();
               const lowerText = text.toLowerCase();
+              const className = element.className || '';
+              const tagName = element.tagName.toLowerCase();
               
-              console.log('Checking image element:', text);
+              console.log('Checking image element:', text, 'tag:', tagName, 'class:', className);
               
               // Look for "Image" text (exact match)
               if (text === 'Image' || lowerText === 'image') {
-                // Check if it's in the CREATE NEW section or has image-related attributes
-                const parent = element.closest('[class*="create"], [class*="sidebar"], [class*="menu"]');
-                if (parent || element.className.includes('icon') || element.className.includes('card')) {
+                // Check if it's clickable or in a clickable container
+                const isClickable = element.onclick || element.getAttribute('role') === 'button' || 
+                                  tagName === 'button' || tagName === 'a' || 
+                                  element.closest('button, a, [role="button"], [onclick]');
+                
+                if (isClickable) {
                   element.click();
                   console.log('Clicked Image icon:', text);
                   return true;
@@ -526,9 +538,18 @@ async function scrapeRecraftSimple(googleEmail, googlePassword) {
               }
               
               // Look for elements with image-related classes or attributes
-              if (element.className.includes('image') || element.getAttribute('data-type') === 'image') {
+              if (className.includes('image') || element.getAttribute('data-type') === 'image' ||
+                  element.getAttribute('data-name') === 'image') {
                 element.click();
                 console.log('Clicked Image element by class/attribute:', text);
+                return true;
+              }
+              
+              // Look for elements containing image icons (SVG, img tags)
+              const hasImageIcon = element.querySelector('svg, img') && text.toLowerCase().includes('image');
+              if (hasImageIcon) {
+                element.click();
+                console.log('Clicked Image element with icon:', text);
                 return true;
               }
             }
