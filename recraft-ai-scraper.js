@@ -942,51 +942,96 @@ async function scrapeRecraftWithAI(googleEmail, googlePassword, io = null) {
                                         // Take screenshot to see if context menu appeared
                                         await takeScreenshot('After Right Click - Context Menu Check', page);
                                           
-                                          // Look for "Copy image link" option in context menu
+                                          // Look for "Copy image link" option in context menu - SMART DETECTION
                                           const copyImageLinkClicked = await page.evaluate(() => {
-                                            // Try multiple approaches to find the context menu
-                                            const selectors = [
-                                              'div.flex.flex-1.flex-col.justify-center',
-                                              '[class*="flex-1"][class*="flex-col"][class*="justify-center"]',
-                                              '.text-content-1',
-                                              '[class*="text-content-1"]',
-                                              '[role="menuitem"]',
-                                              '[role="option"]',
-                                              '.context-menu-item',
-                                              '[class*="context-menu"]',
-                                              '[class*="menu-item"]',
-                                              'div[class*="flex"][class*="w-full"]',
-                                              'div[class*="p-2"]'
-                                            ];
+                                            console.log('=== SMART CONTEXT MENU DETECTION ===');
                                             
-                                            for (const selector of selectors) {
-                                              const items = document.querySelectorAll(selector);
-                                              console.log(`Trying selector "${selector}", found ${items.length} items`);
+                                            // Method 1: Find ALL visible elements and check their text
+                                            const allElements = document.querySelectorAll('*');
+                                            console.log(`Scanning ${allElements.length} elements for "Copy image link"`);
+                                            
+                                            const candidates = [];
+                                            for (const element of allElements) {
+                                              if (element.offsetParent === null) continue; // Skip hidden elements
                                               
-                                              for (const item of items) {
-                                                const text = (item.innerText || item.textContent || '').trim();
-                                                console.log(`Item text: "${text}"`);
+                                              const text = (element.innerText || element.textContent || '').trim();
+                                              const parentText = (element.parentElement?.innerText || element.parentElement?.textContent || '').trim();
+                                              
+                                              // Check for exact match or partial match
+                                              if (text === 'Copy image link' || 
+                                                  text.toLowerCase().includes('copy image link') ||
+                                                  parentText === 'Copy image link' ||
+                                                  parentText.toLowerCase().includes('copy image link')) {
                                                 
-                                                if (text.toLowerCase() === 'copy image link' || 
-                                                    (text.toLowerCase().includes('copy') && text.toLowerCase().includes('image') && text.toLowerCase().includes('link'))) {
-                                                  console.log(`Found match: "${text}"`);
-                                                  item.click();
-                                                  return true;
+                                                candidates.push({
+                                                  element: element,
+                                                  text: text,
+                                                  parentText: parentText,
+                                                  tagName: element.tagName,
+                                                  className: element.className,
+                                                  rect: element.getBoundingClientRect()
+                                                });
+                                                
+                                                console.log(`CANDIDATE FOUND: "${text}" (parent: "${parentText}") - ${element.tagName}.${element.className}`);
+                                              }
+                                            }
+                                            
+                                            console.log(`Found ${candidates.length} candidates for "Copy image link"`);
+                                            
+                                            // Method 2: Try to click each candidate
+                                            for (let i = 0; i < candidates.length; i++) {
+                                              const candidate = candidates[i];
+                                              try {
+                                                console.log(`Attempting to click candidate ${i + 1}: "${candidate.text}"`);
+                                                
+                                                // Scroll element into view first
+                                                candidate.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                await new Promise(resolve => setTimeout(resolve, 100));
+                                                
+                                                // Try different click methods
+                                                candidate.element.click();
+                                                console.log(`✅ Successfully clicked candidate ${i + 1}!`);
+                                                return true;
+                                                
+                                              } catch (error) {
+                                                console.log(`❌ Failed to click candidate ${i + 1}: ${error.message}`);
+                                                
+                                                // Try parent element if this one failed
+                                                if (candidate.element.parentElement) {
+                                                  try {
+                                                    console.log(`Trying parent element...`);
+                                                    candidate.element.parentElement.click();
+                                                    console.log(`✅ Successfully clicked parent element!`);
+                                                    return true;
+                                                  } catch (parentError) {
+                                                    console.log(`❌ Parent click also failed: ${parentError.message}`);
+                                                  }
                                                 }
                                               }
                                             }
                                             
-                                            // Fallback: look for any element containing the exact text
-                                            const allElements = document.querySelectorAll('*');
-                                            for (const element of allElements) {
-                                              const text = (element.innerText || element.textContent || '').trim();
-                                              if (text === 'Copy image link') {
-                                                console.log(`Found exact match in fallback: "${text}"`);
-                                                element.click();
+                                            // Method 3: XPath search as last resort
+                                            console.log('Trying XPath search...');
+                                            try {
+                                              const xpathResult = document.evaluate(
+                                                "//*[contains(text(), 'Copy image link')]",
+                                                document,
+                                                null,
+                                                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                                                null
+                                              );
+                                              
+                                              if (xpathResult.singleNodeValue) {
+                                                console.log('Found via XPath, attempting click...');
+                                                xpathResult.singleNodeValue.click();
+                                                console.log('✅ XPath click successful!');
                                                 return true;
                                               }
+                                            } catch (xpathError) {
+                                              console.log(`❌ XPath search failed: ${xpathError.message}`);
                                             }
                                             
+                                            console.log('❌ All methods failed to find/click "Copy image link"');
                                             return false;
                                           });
                                           
