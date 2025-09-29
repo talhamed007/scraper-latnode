@@ -3748,7 +3748,8 @@ app.post('/api/latenode-account', async (req, res) => {
     // Set the global io instance for the scraper
     global.io = io;
     
-    const result = await createLatenodeAccount();
+    // Pass io instance to the scraper function
+    const result = await createLatenodeAccount(io);
     
     res.json({
       ok: true,
