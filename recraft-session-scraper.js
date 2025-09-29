@@ -582,88 +582,110 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
     addDebugStep('Image Link Extraction', 'info', 'Right-clicking on generated image to copy link...');
     let finalImageUrl = null;
     try {
-      // Find the generated image - look for the main/largest image first
-      addDebugStep('Image Link Extraction', 'info', 'Looking for the main generated image...');
+      // Find the editor's image-like element using ChatGPT's heuristic approach
+      addDebugStep('Image Link Extraction', 'info', 'Looking for the editor canvas/image element...');
       
       let imageElement = null;
       try {
-        // First try to find the largest/most prominent image
-        imageElement = await page.evaluate(() => {
-          const images = document.querySelectorAll('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img, [class*="preview"] img');
-          let largestImage = null;
-          let maxArea = 0;
-          
-          for (const img of images) {
-            if (img.offsetParent !== null) { // Visible image
-              const area = img.offsetWidth * img.offsetHeight;
-              console.log(`Image found: ${img.src}, size: ${img.offsetWidth}x${img.offsetHeight}, area: ${area}`);
-              if (area > maxArea) {
-                maxArea = area;
-                largestImage = img;
-              }
-            }
+        // Use ChatGPT's heuristic to find the largest image-like element
+        imageElement = await page.evaluateHandle(() => {
+          // Helper functions
+          const isVisible = (el) => {
+            const rect = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            return rect.width > 50 && rect.height > 50 &&
+                   style.visibility !== 'hidden' &&
+                   style.display !== 'none' &&
+                   rect.bottom > 0 && rect.right > 0 &&
+                   rect.top < (window.innerHeight || 1e6) &&
+                   rect.left < (window.innerWidth || 1e6);
+          };
+
+          // Candidates: elements with background-image, <canvas>, large <img>, role="img"
+          const all = [
+            ...document.querySelectorAll('[style*="background-image"], [style*="background:"]'),
+            ...document.querySelectorAll('canvas, img, [role="img"]'),
+            ...document.querySelectorAll('[class*="canvas"], [class*="editor"], [class*="image"]')
+          ];
+
+          console.log(`Found ${all.length} potential image-like elements`);
+
+          // Score by area; prefer ones with data:image or large background images
+          const scored = [];
+          for (const el of all) {
+            if (!isVisible(el)) continue;
+            const rect = el.getBoundingClientRect();
+            const area = rect.width * rect.height;
+
+            const style = getComputedStyle(el);
+            const bg = style.backgroundImage || style.background || '';
+            const hasDataUrl = /data:image\/|image\/svg\+xml/i.test(bg);
+            const isHuge = area > 200 * 200;
+
+            // Give extra weight if it looks like the editor canvas
+            let score = area;
+            if (hasDataUrl) score *= 2;
+            if (style.cursor === 'url' || style.cursor === 'crosshair') score *= 1.2;
+
+            console.log(`Element: ${el.tagName}.${el.className}, area: ${area}, score: ${score}, hasDataUrl: ${hasDataUrl}`);
+
+            if (isHuge) scored.push({ el, score });
+          }
+
+          if (!scored.length) {
+            console.log('No large image-like elements found');
+            return null;
           }
           
-          console.log(`Largest image area: ${maxArea}`);
-          return largestImage;
+          scored.sort((a, b) => b.score - a.score);
+          console.log(`Selected element with score: ${scored[0].score}`);
+          return scored[0].el;
         });
         
-        if (!imageElement) {
-          // Fallback to waitForSelector
-          imageElement = await page.waitForSelector('img[src*="recraft"], [class*="generated"] img, [class*="result"] img, canvas img', { timeout: 10000 });
+        if (imageElement && imageElement.asElement) {
+          imageElement = imageElement.asElement();
         }
         
-        addDebugStep('Image Link Extraction', 'success', `Found generated image: ${imageElement ? 'Yes' : 'No'}`);
+        addDebugStep('Image Link Extraction', 'success', `Found editor canvas/image element: ${imageElement ? 'Yes' : 'No'}`);
       } catch (error) {
-        addDebugStep('Image Link Extraction', 'error', 'Error finding generated image', null, error.message);
+        addDebugStep('Image Link Extraction', 'error', 'Error finding editor canvas element', null, error.message);
         throw error;
       }
       
       if (imageElement) {
-        // Right-click on the image to open context menu
-        await imageElement.click({ button: 'right' });
-        addDebugStep('Image Link Extraction', 'info', 'Right-clicked on image, context menu should appear');
-        await sleep(2000); // Wait longer for menu to appear
+        // Try a normal element right-click first
+        try {
+          await imageElement.click({ button: 'right' });
+          addDebugStep('Image Link Extraction', 'info', 'Right-clicked on canvas element');
+        } catch (error) {
+          // If a normal click fails (overlay/transform), right-click by coordinates
+          addDebugStep('Image Link Extraction', 'warning', 'Normal click failed, trying coordinate-based click...');
+          const box = await imageElement.boundingBox();
+          if (!box) {
+            addDebugStep('Image Link Extraction', 'error', 'Element has no bounding box');
+            throw new Error('Element has no bounding box.');
+          }
+          const x = Math.round(box.x + box.width / 2);
+          const y = Math.round(box.y + box.height / 2);
+          await page.mouse.move(x, y);
+          await page.mouse.click(x, y, { button: 'right' });
+          addDebugStep('Image Link Extraction', 'info', `Right-clicked at coordinates (${x}, ${y})`);
+        }
+        
+        await sleep(2000); // Wait for menu to appear
         
         // Take screenshot to see if context menu appeared
         await takeScreenshot('After Right Click - Context Menu Check', page);
         
-        // STOP HERE FOR TESTING - Check if menu actually opened
-        addDebugStep('Image Link Extraction', 'info', 'STOPPING HERE FOR TESTING - Checking if context menu opened...');
-        
-        // Check if any context menu exists at all
-        const menuExists = await page.evaluate(() => {
-          const menus = document.querySelectorAll('[role="menu"], [data-radix-popper-content-wrapper], .context-menu, [class*="menu"]');
-          console.log(`Found ${menus.length} potential menu elements`);
-          for (let i = 0; i < menus.length; i++) {
-            const menu = menus[i];
-            console.log(`Menu ${i + 1}:`, {
-              tagName: menu.tagName,
-              className: menu.className,
-              role: menu.getAttribute('role'),
-              dataState: menu.getAttribute('data-state'),
-              visible: menu.offsetParent !== null,
-              text: menu.innerText?.substring(0, 100) || 'No text'
-            });
-          }
-          return menus.length > 0;
-        });
-        
-        if (menuExists) {
-          addDebugStep('Image Link Extraction', 'success', 'Context menu elements found!');
-        } else {
-          addDebugStep('Image Link Extraction', 'error', 'NO context menu elements found at all!');
+        // Wait for the Radix menu (it's portaled into <body>)
+        try {
+          await page.waitForSelector('[role="menu"][data-state="open"]', { visible: true, timeout: 3000 });
+          addDebugStep('Image Link Extraction', 'success', 'Radix context menu opened successfully');
+        } catch (error) {
+          addDebugStep('Image Link Extraction', 'warning', 'Radix menu not found, trying alternative approach...');
         }
         
-        // Return early for testing - don't proceed with menu interaction
-        return {
-          success: false,
-          message: 'Stopped for testing - context menu detection',
-          finalImageUrl: null,
-          screenshots: []
-        };
-        
-        // Use XPath to find the menu item by text content within the open menu
+        // Click the menu item by its visible label (scope to the OPEN menu)
         const copyImageLinkClicked = await page.evaluate(() => {
           console.log('=== RADIX UI CONTEXT MENU DETECTION ===');
           
