@@ -232,14 +232,28 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     await page.evaluate((email) => {
       const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
       if (emailInput) {
+        // Clear and set the value
         emailInput.focus();
         emailInput.value = '';
         emailInput.value = email;
         
-        // Trigger events to ensure the input is registered
+        // Trigger multiple events to ensure validation
         emailInput.dispatchEvent(new Event('input', { bubbles: true }));
         emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+        emailInput.dispatchEvent(new Event('keyup', { bubbles: true }));
+        emailInput.dispatchEvent(new Event('keydown', { bubbles: true }));
         emailInput.dispatchEvent(new Event('blur', { bubbles: true }));
+        emailInput.dispatchEvent(new Event('focus', { bubbles: true }));
+        
+        // Trigger React-specific events if it's a React app
+        if (emailInput._valueTracker) {
+          emailInput._valueTracker.setValue('');
+        }
+        
+        // Force validation
+        if (emailInput.checkValidity) {
+          emailInput.checkValidity();
+        }
       }
     }, tempEmail);
     
@@ -290,11 +304,52 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       for (const selector of nextButtonSelectors) {
         try {
           await page.waitForSelector(selector, { timeout: 3000 });
+          
+          // Check if button is enabled before clicking
+          const isEnabled = await page.evaluate((sel) => {
+            const button = document.querySelector(sel);
+            return button && !button.disabled && !button.classList.contains('disabled');
+          }, selector);
+          
+          if (!isEnabled) {
+            addDebugStep('Next Button', 'info', `Button found but disabled, waiting for it to become enabled...`);
+            
+            // Wait for button to become enabled
+            await page.waitForFunction((sel) => {
+              const button = document.querySelector(sel);
+              return button && !button.disabled && !button.classList.contains('disabled');
+            }, { timeout: 10000 }, selector);
+            
+            addDebugStep('Next Button', 'success', `Button is now enabled`);
+          }
+          
+          // Trigger events to ensure the button is properly activated
+          await page.evaluate((sel) => {
+            const button = document.querySelector(sel);
+            if (button) {
+              // Focus the email field first to trigger validation
+              const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
+              if (emailInput) {
+                emailInput.focus();
+                emailInput.blur();
+                emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+                emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+              
+              // Then focus the button
+              button.focus();
+            }
+          }, selector);
+          
+          await sleep(1000); // Wait a bit for any validation to complete
+          
+          // Now click the button
           await page.click(selector);
           addDebugStep('Next Button', 'success', `Clicked Next button using selector: ${selector}`);
           nextButtonFound = true;
           break;
         } catch (e) {
+          addDebugStep('Next Button', 'warning', `Selector ${selector} failed: ${e.message}`);
           // Try next selector
           continue;
         }
