@@ -263,7 +263,11 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Next Button', 'info', 'Looking for Next button...');
     
     try {
-      // First, try to click in empty space to make sure the page is interactive
+      // First, click on the email field to make sure it's focused and button becomes visible
+      await page.click('input[data-test-id="authEmailInput"]');
+      await sleep(1000);
+      
+      // Also click in empty space to make sure the page is interactive
       await page.mouse.click(100, 100);
       await sleep(1000);
       
@@ -315,20 +319,22 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         }
       }
       
-      if (nextButtonFound) {
-        // Wait for page to update to confirmation code page
-        await page.waitForFunction(() => {
-          return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]') !== null;
-        }, { timeout: 15000 });
-        
-        addDebugStep('Next Button', 'success', 'Page updated to confirmation code step');
-        await takeScreenshot('Confirmation-Code-Page', page);
-      } else {
-        addDebugStep('Next Button', 'warning', 'Could not find Next button, proceeding anyway...');
+      if (!nextButtonFound) {
+        addDebugStep('Next Button', 'error', '❌ CRITICAL: Could not find Next button - stopping process');
+        throw new Error('Next button not found - this step is obligatory');
       }
       
+      // Wait for page to update to confirmation code page
+      await page.waitForFunction(() => {
+        return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]') !== null;
+      }, { timeout: 15000 });
+      
+      addDebugStep('Next Button', 'success', 'Page updated to confirmation code step');
+      await takeScreenshot('Confirmation-Code-Page', page);
+      
     } catch (error) {
-      addDebugStep('Next Button', 'warning', 'Could not find Next button or page did not update', null, error.message);
+      addDebugStep('Next Button', 'error', '❌ CRITICAL: Next button step failed - stopping process', null, error.message);
+      throw new Error(`Next button step failed: ${error.message}`);
     }
     
     // Step 6: Switch back to TempMail100 tab to get confirmation code
@@ -433,7 +439,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       }
       
       if (!emailFound) {
-        throw new Error('Could not find Latenode confirmation email after multiple attempts');
+        addDebugStep('Email Check', 'error', '❌ CRITICAL: Could not find Latenode confirmation email after multiple attempts - stopping process');
+        throw new Error('Latenode confirmation email not found - this step is obligatory');
       }
       
       await sleep(3000);
@@ -467,7 +474,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       if (confirmationCode) {
         addDebugStep('Code Extraction', 'success', `Confirmation code extracted: ${confirmationCode}`);
       } else {
-        throw new Error('Could not extract confirmation code from email');
+        addDebugStep('Code Extraction', 'error', '❌ CRITICAL: Could not extract confirmation code from email - stopping process');
+        throw new Error('Confirmation code extraction failed - this step is obligatory');
       }
       
     } catch (error) {
@@ -519,7 +527,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await takeScreenshot('Password-Creation-Page', page);
       
     } catch (error) {
-      addDebugStep('Code Entry', 'warning', 'Could not find Verify button or page did not update', null, error.message);
+      addDebugStep('Code Entry', 'error', '❌ CRITICAL: Could not find Verify button or page did not update - stopping process', null, error.message);
+      throw new Error(`Code verification failed: ${error.message}`);
     }
     
     // Step 8: Fill in password fields
@@ -569,7 +578,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await takeScreenshot('Registration-Success', page);
       
     } catch (error) {
-      addDebugStep('Registration', 'warning', 'Could not find Register button or registration may have failed', null, error.message);
+      addDebugStep('Registration', 'error', '❌ CRITICAL: Could not find Register button or registration failed - stopping process', null, error.message);
+      throw new Error(`Registration failed: ${error.message}`);
     }
     
     addDebugStep('Account Creation', 'success', '✅ Latenode account creation process completed successfully!');
