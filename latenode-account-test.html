@@ -276,9 +276,24 @@
                     <br>• Navigate to TempMail100.com to get a temporary email
                     <br>• Copy the temporary email address
                     <br>• Navigate to Latenode.com account creation page
-                    <br>• Fill in the email field with the temporary email
+                    <br>• Fill in the email field and proceed to confirmation
+                    <br>• Switch back to TempMail100 to get confirmation code
+                    <br>• Enter confirmation code and create password
+                    <br>• Complete account registration
                     <br>• Provide real-time logging of the entire process
                 </p>
+                
+                <div style="margin: 20px 0;">
+                    <label for="passwordInput" style="display: block; margin-bottom: 10px; font-weight: bold; color: #333;">
+                        🔑 Password (optional - will generate one if not provided):
+                    </label>
+                    <input 
+                        type="password" 
+                        id="passwordInput" 
+                        placeholder="Enter password or leave empty for auto-generation"
+                        style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; margin-bottom: 15px;"
+                    >
+                </div>
                 
                 <button class="btn" onclick="startAccountCreation()" id="startBtn">
                     🚀 Start Account Creation
@@ -356,6 +371,7 @@
             const status = document.getElementById('status');
             const result = document.getElementById('result');
             const logs = document.getElementById('logs');
+            const passwordInput = document.getElementById('passwordInput');
             
             // Clear previous results
             status.innerHTML = '';
@@ -367,11 +383,14 @@
             loading.style.display = 'block';
             
             try {
+                const password = passwordInput.value.trim() || null;
+                
                 const response = await fetch('/api/latenode-account', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    body: JSON.stringify({ password: password })
                 });
                 
                 const data = await response.json();
@@ -387,12 +406,27 @@
                                 <span class="result-value">Success</span>
                             </div>
                             <div class="result-item">
-                                <span class="result-label">Temporary Email:</span>
-                                <span class="result-value">${data.tempEmail}</span>
+                                <span class="result-label">📧 Email:</span>
+                                <span class="result-value" style="font-family: monospace; background: #f0f0f0; padding: 4px 8px; border-radius: 4px;">${data.tempEmail}</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">🔑 Password:</span>
+                                <span class="result-value" style="font-family: monospace; background: #f0f0f0; padding: 4px 8px; border-radius: 4px;">${data.password}</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">🔢 Confirmation Code:</span>
+                                <span class="result-value" style="font-family: monospace; background: #f0f0f0; padding: 4px 8px; border-radius: 4px;">${data.confirmationCode}</span>
                             </div>
                             <div class="result-item">
                                 <span class="result-label">Message:</span>
                                 <span class="result-value">${data.message}</span>
+                            </div>
+                            <div style="margin-top: 15px; padding: 15px; background: #e8f5e8; border-radius: 8px; border-left: 4px solid #28a745;">
+                                <strong>💡 Copy these credentials:</strong><br>
+                                <div style="margin-top: 10px;">
+                                    <strong>Email:</strong> <code style="background: white; padding: 2px 6px; border-radius: 3px;">${data.tempEmail}</code><br>
+                                    <strong>Password:</strong> <code style="background: white; padding: 2px 6px; border-radius: 3px;">${data.password}</code>
+                                </div>
                             </div>
                         </div>
                     `;

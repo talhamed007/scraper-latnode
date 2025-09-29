@@ -64,10 +64,12 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function createLatenodeAccount(ioInstance = null) {
+async function createLatenodeAccount(ioInstance = null, password = null) {
   let browser = null;
   let page = null;
   let tempEmail = null;
+  let confirmationCode = null;
+  let generatedPassword = password || `TempPass${Math.random().toString(36).substring(2, 8)}!123`;
   
   try {
     addDebugStep('Initialization', 'info', '🚀 Starting Latenode account creation process...');
@@ -257,12 +259,210 @@ async function createLatenodeAccount(ioInstance = null) {
     
     await takeScreenshot('Email-Entered', page);
     
+    // Step 5: Click Next button to proceed
+    addDebugStep('Next Button', 'info', 'Looking for Next button...');
+    
+    try {
+      // Wait for and click the Next button
+      await page.waitForSelector('button[type="submit"], button:has-text("Next"), button:has-text("Suivant")', { timeout: 10000 });
+      await page.click('button[type="submit"], button:has-text("Next"), button:has-text("Suivant")');
+      addDebugStep('Next Button', 'success', 'Clicked Next button');
+      
+      // Wait for page to update to confirmation code page
+      await page.waitForFunction(() => {
+        return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]') !== null;
+      }, { timeout: 15000 });
+      
+      addDebugStep('Next Button', 'success', 'Page updated to confirmation code step');
+      await takeScreenshot('Confirmation-Code-Page', page);
+      
+    } catch (error) {
+      addDebugStep('Next Button', 'warning', 'Could not find Next button or page did not update', null, error.message);
+    }
+    
+    // Step 6: Switch back to TempMail100 tab to get confirmation code
+    addDebugStep('Email Check', 'info', 'Switching to TempMail100 tab to check for confirmation email...');
+    
+    // Get all pages and find the TempMail100 tab
+    const pages = await browser.pages();
+    let tempMailPage = null;
+    
+    for (const p of pages) {
+      const url = p.url();
+      if (url.includes('tempmail100.com')) {
+        tempMailPage = p;
+        break;
+      }
+    }
+    
+    if (!tempMailPage) {
+      // If no TempMail100 tab found, create a new one
+      tempMailPage = await browser.newPage();
+      await tempMailPage.goto('https://tempmail100.com/', { waitUntil: 'networkidle2', timeout: 30000 });
+    }
+    
+    // Switch to TempMail100 tab
+    await tempMailPage.bringToFront();
+    await sleep(2000);
+    await takeScreenshot('TempMail100-Inbox', tempMailPage);
+    
+    // Look for the Latenode confirmation email
+    addDebugStep('Email Check', 'info', 'Looking for Latenode confirmation email...');
+    
+    try {
+      // Wait for the email to appear
+      await tempMailPage.waitForSelector('a.email-item:has-text("Latenode"), a.email-item:has-text("Confirm your email")', { timeout: 30000 });
+      
+      // Click on the Latenode email
+      await tempMailPage.click('a.email-item:has-text("Latenode"), a.email-item:has-text("Confirm your email")');
+      addDebugStep('Email Check', 'success', 'Clicked on Latenode confirmation email');
+      
+      await sleep(3000);
+      await takeScreenshot('Email-Opened', tempMailPage);
+      
+      // Extract the confirmation code
+      addDebugStep('Code Extraction', 'info', 'Extracting confirmation code from email...');
+      
+      confirmationCode = await tempMailPage.evaluate(() => {
+        // Look for confirmation code in various formats
+        const bodyText = document.body.innerText;
+        const codeMatch = bodyText.match(/confirmation code[:\s]*(\d{4})/i) || 
+                         bodyText.match(/code[:\s]*(\d{4})/i) ||
+                         bodyText.match(/(\d{4})/);
+        
+        if (codeMatch) {
+          console.log('Found confirmation code:', codeMatch[1]);
+          return codeMatch[1];
+        }
+        
+        // Look for any 4-digit number
+        const allNumbers = bodyText.match(/\b\d{4}\b/g);
+        if (allNumbers && allNumbers.length > 0) {
+          console.log('Found 4-digit number:', allNumbers[0]);
+          return allNumbers[0];
+        }
+        
+        return null;
+      });
+      
+      if (confirmationCode) {
+        addDebugStep('Code Extraction', 'success', `Confirmation code extracted: ${confirmationCode}`);
+      } else {
+        throw new Error('Could not extract confirmation code from email');
+      }
+      
+    } catch (error) {
+      addDebugStep('Email Check', 'error', 'Could not find or open Latenode email', null, error.message);
+      throw new Error(`Email check failed: ${error.message}`);
+    }
+    
+    // Step 7: Switch back to Latenode tab and enter confirmation code
+    addDebugStep('Code Entry', 'info', 'Switching back to Latenode tab to enter confirmation code...');
+    
+    // Switch back to the original Latenode page
+    await page.bringToFront();
+    await sleep(2000);
+    
+    // Find and fill the confirmation code field
+    addDebugStep('Code Entry', 'info', `Entering confirmation code: ${confirmationCode}`);
+    
+    await page.evaluate((code) => {
+      const codeInput = document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]');
+      if (codeInput) {
+        codeInput.focus();
+        codeInput.value = '';
+        codeInput.value = code;
+        
+        // Trigger events
+        codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+        codeInput.dispatchEvent(new Event('change', { bubbles: true }));
+        codeInput.dispatchEvent(new Event('blur', { bubbles: true }));
+      }
+    }, confirmationCode);
+    
+    await sleep(1000);
+    await takeScreenshot('Code-Entered', page);
+    
+    // Click Verify button
+    addDebugStep('Code Entry', 'info', 'Looking for Verify button...');
+    
+    try {
+      await page.waitForSelector('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]', { timeout: 10000 });
+      await page.click('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]');
+      addDebugStep('Code Entry', 'success', 'Clicked Verify button');
+      
+      // Wait for page to update to password creation
+      await page.waitForFunction(() => {
+        return document.querySelector('input[type="password"], input[name="password"]') !== null;
+      }, { timeout: 15000 });
+      
+      addDebugStep('Code Entry', 'success', 'Page updated to password creation step');
+      await takeScreenshot('Password-Creation-Page', page);
+      
+    } catch (error) {
+      addDebugStep('Code Entry', 'warning', 'Could not find Verify button or page did not update', null, error.message);
+    }
+    
+    // Step 8: Fill in password fields
+    addDebugStep('Password Entry', 'info', 'Filling in password fields...');
+    
+    await page.evaluate((password) => {
+      // Fill first password field
+      const passwordInput = document.querySelector('input[name="password"], input[data-test-id="passwordInput"]');
+      if (passwordInput) {
+        passwordInput.focus();
+        passwordInput.value = '';
+        passwordInput.value = password;
+        passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+        passwordInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      
+      // Fill second password field
+      const confirmPasswordInput = document.querySelector('input[name="newPassword"], input[data-test-id="newPasswordInput"]');
+      if (confirmPasswordInput) {
+        confirmPasswordInput.focus();
+        confirmPasswordInput.value = '';
+        confirmPasswordInput.value = password;
+        confirmPasswordInput.dispatchEvent(new Event('input', { bubbles: true }));
+        confirmPasswordInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }, generatedPassword);
+    
+    await sleep(1000);
+    await takeScreenshot('Password-Entered', page);
+    
+    // Step 9: Click Register/Sign Up button
+    addDebugStep('Registration', 'info', 'Looking for Register/Sign Up button...');
+    
+    try {
+      await page.waitForSelector('button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]', { timeout: 10000 });
+      await page.click('button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]');
+      addDebugStep('Registration', 'success', 'Clicked Register button');
+      
+      // Wait for successful registration or dashboard
+      await page.waitForFunction(() => {
+        const url = window.location.href;
+        return url.includes('dashboard') || url.includes('home') || url.includes('projects') || 
+               document.querySelector('[class*="dashboard"], [class*="welcome"], [class*="success"]') !== null;
+      }, { timeout: 30000 });
+      
+      addDebugStep('Registration', 'success', 'Successfully registered and reached dashboard');
+      await takeScreenshot('Registration-Success', page);
+      
+    } catch (error) {
+      addDebugStep('Registration', 'warning', 'Could not find Register button or registration may have failed', null, error.message);
+    }
+    
     addDebugStep('Account Creation', 'success', '✅ Latenode account creation process completed successfully!');
-    addDebugStep('Account Creation', 'info', `Temporary email used: ${tempEmail}`);
+    addDebugStep('Account Creation', 'info', `📧 Email: ${tempEmail}`);
+    addDebugStep('Account Creation', 'info', `🔑 Password: ${generatedPassword}`);
+    addDebugStep('Account Creation', 'info', `🔢 Confirmation Code: ${confirmationCode}`);
     
     return {
       success: true,
       tempEmail: tempEmail,
+      password: generatedPassword,
+      confirmationCode: confirmationCode,
       message: 'Latenode account creation process completed successfully!'
     };
     

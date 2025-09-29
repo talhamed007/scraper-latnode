@@ -3748,13 +3748,18 @@ app.post('/api/latenode-account', async (req, res) => {
     // Set the global io instance for the scraper
     global.io = io;
     
-    // Pass io instance to the scraper function
-    const result = await createLatenodeAccount(io);
+    // Get password from request body or generate one
+    const password = req.body.password || null;
+    
+    // Pass io instance and password to the scraper function
+    const result = await createLatenodeAccount(io, password);
     
     res.json({
       ok: true,
       success: result.success,
       tempEmail: result.tempEmail,
+      password: result.password,
+      confirmationCode: result.confirmationCode,
       message: result.message
     });
     
