@@ -281,23 +281,44 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await page.click('input[data-test-id="authEmailInput"]');
       await sleep(1000);
       
-      // Also click in empty space to make sure the page is interactive
-      await page.mouse.click(100, 100);
-      await sleep(1000);
+      // Click under the email field to make the Next button visible
+      addDebugStep('Next Button', 'info', 'Clicking under email field to make Next button visible...');
+      const emailFieldBox = await page.evaluate(() => {
+        const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
+        if (emailInput) {
+          const rect = emailInput.getBoundingClientRect();
+          return {
+            x: rect.left + rect.width / 2,
+            y: rect.bottom + 50 // Click 50px below the email field
+          };
+        }
+        return null;
+      });
       
-      // Try multiple selectors for the Next button
+      if (emailFieldBox) {
+        await page.mouse.click(emailFieldBox.x, emailFieldBox.y);
+        addDebugStep('Next Button', 'success', 'Clicked under email field');
+      } else {
+        // Fallback: click in empty space
+        await page.mouse.click(100, 100);
+        addDebugStep('Next Button', 'info', 'Clicked in empty space as fallback');
+      }
+      
+      await sleep(2000); // Wait longer for button to become visible
+      
+      // Try multiple selectors for the Next button (avoiding Google button)
       const nextButtonSelectors = [
         'button[data-test-id="authEmailButton"]', // Specific selector from user
-        'button[type="submit"]',
-        'button:has-text("Next")',
-        'button:has-text("Suivant")',
-        'button:has-text("Continue")',
-        'button:has-text("Continuer")',
-        'input[type="submit"]',
-        '[data-test-id*="next"]',
-        '[data-test-id*="submit"]',
-        'button[class*="submit"]',
-        'button[class*="next"]'
+        'button[type="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        'button:has-text("Next"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        'button:has-text("Suivant"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        'button:has-text("Continue"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        'button:has-text("Continuer"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        'input[type="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        '[data-test-id*="next"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        '[data-test-id*="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        'button[class*="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
+        'button[class*="next"]:not([class*="google"]):not([class*="Google"])' // Exclude Google buttons
       ];
       
       let nextButtonFound = false;
@@ -305,11 +326,43 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         try {
           await page.waitForSelector(selector, { timeout: 3000 });
           
-          // Check if button is enabled before clicking
-          const isEnabled = await page.evaluate((sel) => {
+          // Check if button is enabled and is the correct Next button (not Google button)
+          const buttonInfo = await page.evaluate((sel) => {
             const button = document.querySelector(sel);
-            return button && !button.disabled && !button.classList.contains('disabled');
+            if (!button) return { found: false };
+            
+            const text = (button.innerText || button.textContent || '').toLowerCase();
+            const isGoogleButton = text.includes('google') || 
+                                 button.classList.contains('google') || 
+                                 button.classList.contains('Google') ||
+                                 button.getAttribute('class')?.includes('google') ||
+                                 button.getAttribute('class')?.includes('Google');
+            
+            return {
+              found: true,
+              enabled: !button.disabled && !button.classList.contains('disabled'),
+              isGoogleButton: isGoogleButton,
+              text: text,
+              isNextButton: text.includes('next') || text.includes('suivant') || text.includes('continue') || text.includes('continuer')
+            };
           }, selector);
+          
+          if (!buttonInfo.found) {
+            addDebugStep('Next Button', 'warning', `Button not found with selector: ${selector}`);
+            continue;
+          }
+          
+          if (buttonInfo.isGoogleButton) {
+            addDebugStep('Next Button', 'warning', `Skipping Google button with selector: ${selector}`);
+            continue;
+          }
+          
+          if (!buttonInfo.isNextButton) {
+            addDebugStep('Next Button', 'warning', `Button text "${buttonInfo.text}" doesn't match Next button with selector: ${selector}`);
+            continue;
+          }
+          
+          const isEnabled = buttonInfo.enabled;
           
           if (!isEnabled) {
             addDebugStep('Next Button', 'info', `Button found but disabled, waiting for it to become enabled...`);
