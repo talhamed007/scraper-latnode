@@ -273,6 +273,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
       // Try multiple selectors for the Next button
       const nextButtonSelectors = [
+        'button[data-test-id="authEmailButton"]', // Specific selector from user
         'button[type="submit"]',
         'button:has-text("Next")',
         'button:has-text("Suivant")',
@@ -325,9 +326,55 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       }
       
       // Wait for page to update to confirmation code page
-      await page.waitForFunction(() => {
-        return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]') !== null;
-      }, { timeout: 15000 });
+      addDebugStep('Next Button', 'info', 'Waiting for page to transition to confirmation code step...');
+      
+      try {
+        // Wait for either confirmation code input OR a redirect to a different page
+        await page.waitForFunction(() => {
+          // Check for confirmation code input
+          const codeInput = document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i], input[type="text"][maxlength="4"]');
+          if (codeInput) return true;
+          
+          // Check if URL changed (might be redirecting)
+          const url = window.location.href;
+          if (url.includes('confirm') || url.includes('verification') || url.includes('code')) {
+            return true;
+          }
+          
+          // Check for any text mentioning confirmation or code
+          const bodyText = document.body.innerText.toLowerCase();
+          if (bodyText.includes('confirmation code') || bodyText.includes('verification code') || bodyText.includes('enter code')) {
+            return true;
+          }
+          
+          return false;
+        }, { timeout: 20000 });
+        
+        addDebugStep('Next Button', 'success', 'Page transition detected');
+        
+      } catch (error) {
+        addDebugStep('Next Button', 'warning', 'Page transition timeout, checking current state...');
+        
+        // Take a screenshot to see what's on the page
+        await takeScreenshot('After-Next-Click', page);
+        
+        // Check if we're on a different page or if there's any confirmation-related content
+        const currentUrl = await page.url();
+        const pageContent = await page.evaluate(() => document.body.innerText);
+        
+        addDebugStep('Next Button', 'info', `Current URL: ${currentUrl}`);
+        addDebugStep('Next Button', 'info', `Page contains confirmation text: ${pageContent.toLowerCase().includes('confirmation') || pageContent.toLowerCase().includes('code')}`);
+        
+        // If we can't find confirmation code input, this might be a different flow
+        const hasCodeInput = await page.evaluate(() => {
+          return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i], input[type="text"][maxlength="4"]') !== null;
+        });
+        
+        if (!hasCodeInput) {
+          addDebugStep('Next Button', 'error', '❌ CRITICAL: No confirmation code input found after Next button click - stopping process');
+          throw new Error('Confirmation code page not loaded - this step is obligatory');
+        }
+      }
       
       addDebugStep('Next Button', 'success', 'Page updated to confirmation code step');
       await takeScreenshot('Confirmation-Code-Page', page);
