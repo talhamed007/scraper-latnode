@@ -263,18 +263,69 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Next Button', 'info', 'Looking for Next button...');
     
     try {
-      // Wait for and click the Next button
-      await page.waitForSelector('button[type="submit"], button:has-text("Next"), button:has-text("Suivant")', { timeout: 10000 });
-      await page.click('button[type="submit"], button:has-text("Next"), button:has-text("Suivant")');
-      addDebugStep('Next Button', 'success', 'Clicked Next button');
+      // First, try to click in empty space to make sure the page is interactive
+      await page.mouse.click(100, 100);
+      await sleep(1000);
       
-      // Wait for page to update to confirmation code page
-      await page.waitForFunction(() => {
-        return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]') !== null;
-      }, { timeout: 15000 });
+      // Try multiple selectors for the Next button
+      const nextButtonSelectors = [
+        'button[type="submit"]',
+        'button:has-text("Next")',
+        'button:has-text("Suivant")',
+        'button:has-text("Continue")',
+        'button:has-text("Continuer")',
+        'input[type="submit"]',
+        '[data-test-id*="next"]',
+        '[data-test-id*="submit"]',
+        'button[class*="submit"]',
+        'button[class*="next"]'
+      ];
       
-      addDebugStep('Next Button', 'success', 'Page updated to confirmation code step');
-      await takeScreenshot('Confirmation-Code-Page', page);
+      let nextButtonFound = false;
+      for (const selector of nextButtonSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.click(selector);
+          addDebugStep('Next Button', 'success', `Clicked Next button using selector: ${selector}`);
+          nextButtonFound = true;
+          break;
+        } catch (e) {
+          // Try next selector
+          continue;
+        }
+      }
+      
+      if (!nextButtonFound) {
+        // Last resort: try to find any clickable button
+        const anyButton = await page.evaluate(() => {
+          const buttons = document.querySelectorAll('button, input[type="submit"], [role="button"]');
+          for (const btn of buttons) {
+            const text = (btn.innerText || btn.value || '').toLowerCase();
+            if (text.includes('next') || text.includes('suivant') || text.includes('continue') || text.includes('submit')) {
+              btn.click();
+              return true;
+            }
+          }
+          return false;
+        });
+        
+        if (anyButton) {
+          addDebugStep('Next Button', 'success', 'Clicked Next button using JavaScript evaluation');
+          nextButtonFound = true;
+        }
+      }
+      
+      if (nextButtonFound) {
+        // Wait for page to update to confirmation code page
+        await page.waitForFunction(() => {
+          return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]') !== null;
+        }, { timeout: 15000 });
+        
+        addDebugStep('Next Button', 'success', 'Page updated to confirmation code step');
+        await takeScreenshot('Confirmation-Code-Page', page);
+      } else {
+        addDebugStep('Next Button', 'warning', 'Could not find Next button, proceeding anyway...');
+      }
       
     } catch (error) {
       addDebugStep('Next Button', 'warning', 'Could not find Next button or page did not update', null, error.message);
@@ -282,6 +333,10 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     
     // Step 6: Switch back to TempMail100 tab to get confirmation code
     addDebugStep('Email Check', 'info', 'Switching to TempMail100 tab to check for confirmation email...');
+    
+    // Wait a bit for the email to be sent (if Next button was clicked)
+    addDebugStep('Email Check', 'info', 'Waiting for email to be sent...');
+    await sleep(10000); // Wait 10 seconds for email to arrive
     
     // Get all pages and find the TempMail100 tab
     const pages = await browser.pages();
@@ -310,12 +365,76 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Email Check', 'info', 'Looking for Latenode confirmation email...');
     
     try {
-      // Wait for the email to appear
-      await tempMailPage.waitForSelector('a.email-item:has-text("Latenode"), a.email-item:has-text("Confirm your email")', { timeout: 30000 });
+      // Wait for the email to appear with multiple attempts
+      let emailFound = false;
+      const maxAttempts = 10;
       
-      // Click on the Latenode email
-      await tempMailPage.click('a.email-item:has-text("Latenode"), a.email-item:has-text("Confirm your email")');
-      addDebugStep('Email Check', 'success', 'Clicked on Latenode confirmation email');
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        addDebugStep('Email Check', 'info', `Attempt ${attempt}/${maxAttempts} - Looking for Latenode email...`);
+        
+        // Refresh the inbox
+        try {
+          await tempMailPage.click('button:has-text("Refresh"), [class*="refresh"]');
+          await sleep(2000);
+        } catch (e) {
+          // Refresh button not found, continue
+        }
+        
+        // Try multiple selectors for the email
+        const emailSelectors = [
+          'a.email-item:has-text("Latenode")',
+          'a.email-item:has-text("Confirm your email")',
+          'a.email-item:has-text("latenode")',
+          'a.email-item:has-text("confirm")',
+          'a[href*="detail"]:has-text("Latenode")',
+          'a[href*="detail"]:has-text("Confirm")'
+        ];
+        
+        for (const selector of emailSelectors) {
+          try {
+            await tempMailPage.waitForSelector(selector, { timeout: 3000 });
+            await tempMailPage.click(selector);
+            addDebugStep('Email Check', 'success', `Clicked on Latenode email using selector: ${selector}`);
+            emailFound = true;
+            break;
+          } catch (e) {
+            // Try next selector
+            continue;
+          }
+        }
+        
+        if (emailFound) break;
+        
+        // If not found, wait a bit and try again
+        if (attempt < maxAttempts) {
+          addDebugStep('Email Check', 'info', `Email not found yet, waiting 5 seconds before retry...`);
+          await sleep(5000);
+        }
+      }
+      
+      if (!emailFound) {
+        // Last resort: try JavaScript evaluation
+        const emailClicked = await tempMailPage.evaluate(() => {
+          const emailItems = document.querySelectorAll('a.email-item, a[href*="detail"]');
+          for (const item of emailItems) {
+            const text = (item.innerText || item.textContent || '').toLowerCase();
+            if (text.includes('latenode') || text.includes('confirm')) {
+              item.click();
+              return true;
+            }
+          }
+          return false;
+        });
+        
+        if (emailClicked) {
+          addDebugStep('Email Check', 'success', 'Clicked on Latenode email using JavaScript evaluation');
+          emailFound = true;
+        }
+      }
+      
+      if (!emailFound) {
+        throw new Error('Could not find Latenode confirmation email after multiple attempts');
+      }
       
       await sleep(3000);
       await takeScreenshot('Email-Opened', tempMailPage);
