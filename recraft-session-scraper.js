@@ -670,9 +670,10 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
             try {
               console.log(`Attempting to click candidate ${i + 1}: "${candidate.text}"`);
               
-              // Scroll element into view first
-              candidate.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              await new Promise(resolve => setTimeout(resolve, 100));
+                                                // Scroll element into view first
+                                                candidate.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                // Small delay without await
+                                                setTimeout(() => {}, 100);
               
               // Try different click methods
               candidate.element.click();
