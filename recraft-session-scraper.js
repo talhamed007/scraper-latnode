@@ -759,11 +759,25 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
           await sleep(1000);
           
           // Get the copied link from clipboard
-          const copiedLink = await page.evaluate(() => {
-            return navigator.clipboard.readText();
-          });
+          addDebugStep('Image Link Extraction', 'info', 'Reading from clipboard...');
+          let copiedLink = null;
+          try {
+            copiedLink = await page.evaluate(async () => {
+              try {
+                const text = await navigator.clipboard.readText();
+                console.log('Clipboard content:', text);
+                return text;
+              } catch (error) {
+                console.log('Clipboard read error:', error.message);
+                return null;
+              }
+            });
+            addDebugStep('Image Link Extraction', 'info', `Clipboard read result: ${copiedLink ? 'Success' : 'Failed'}`);
+          } catch (error) {
+            addDebugStep('Image Link Extraction', 'error', 'Error reading from clipboard', null, error.message);
+          }
           
-          if (copiedLink) {
+          if (copiedLink && copiedLink.trim()) {
             addDebugStep('Image Link Extraction', 'success', `Copied image link: ${copiedLink}`);
             
             // Open the copied link in a new tab
@@ -814,6 +828,37 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
             await newPage.close();
           } else {
             addDebugStep('Image Link Extraction', 'warning', 'Could not get copied link from clipboard');
+            
+            // Fallback: Try to get the image URL directly from the page
+            addDebugStep('Image Link Extraction', 'info', 'Trying fallback method to get image URL...');
+            try {
+              const fallbackUrl = await page.evaluate(() => {
+                // Look for any image elements that might contain the generated image URL
+                const images = document.querySelectorAll('img[src*="recraft"], [style*="background-image"]');
+                for (const img of images) {
+                  if (img.src && img.src.includes('recraft')) {
+                    console.log('Found image URL:', img.src);
+                    return img.src;
+                  }
+                  const style = getComputedStyle(img);
+                  if (style.backgroundImage && style.backgroundImage.includes('recraft')) {
+                    const url = style.backgroundImage.replace(/url\(['"]?(.*?)['"]?\)/, '$1');
+                    console.log('Found background image URL:', url);
+                    return url;
+                  }
+                }
+                return null;
+              });
+              
+              if (fallbackUrl) {
+                addDebugStep('Image Link Extraction', 'success', `Fallback URL found: ${fallbackUrl}`);
+                finalImageUrl = fallbackUrl;
+              } else {
+                addDebugStep('Image Link Extraction', 'warning', 'No fallback URL found');
+              }
+            } catch (error) {
+              addDebugStep('Image Link Extraction', 'error', 'Fallback method failed', null, error.message);
+            }
           }
         } else {
           addDebugStep('Image Link Extraction', 'warning', 'Could not find "Copy image link" option in context menu');
