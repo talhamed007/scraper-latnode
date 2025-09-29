@@ -971,21 +971,45 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                                         // Right-click on the image to open context menu
                                         await imageElement.click({ button: 'right' });
                                         addDebugStep('Image Link Extraction', 'info', 'Right-clicked on image, context menu should appear');
-                                        await sleep(1000);
+                                        await sleep(2000); // Wait longer for menu to appear
                                         
                                         // Take screenshot to see if context menu appeared
                                         await takeScreenshot('After Right Click - Context Menu Check', page);
-                                          
-                                          // Look for "Copy image link" option using ChatGPT's Radix UI approach
-                                          addDebugStep('Image Link Extraction', 'info', 'Using Radix UI context menu detection...');
-                                          
-                                          // Wait for the Radix menu to appear with data-state="open"
-                                          try {
-                                            await page.waitForSelector('[role="menu"][data-state="open"]', { visible: true, timeout: 3000 });
-                                            addDebugStep('Image Link Extraction', 'success', 'Radix context menu opened successfully');
-                                          } catch (error) {
-                                            addDebugStep('Image Link Extraction', 'warning', 'Radix menu not found, trying alternative approach...');
+                                        
+                                        // STOP HERE FOR TESTING - Check if menu actually opened
+                                        addDebugStep('Image Link Extraction', 'info', 'STOPPING HERE FOR TESTING - Checking if context menu opened...');
+                                        
+                                        // Check if any context menu exists at all
+                                        const menuExists = await page.evaluate(() => {
+                                          const menus = document.querySelectorAll('[role="menu"], [data-radix-popper-content-wrapper], .context-menu, [class*="menu"]');
+                                          console.log(`Found ${menus.length} potential menu elements`);
+                                          for (let i = 0; i < menus.length; i++) {
+                                            const menu = menus[i];
+                                            console.log(`Menu ${i + 1}:`, {
+                                              tagName: menu.tagName,
+                                              className: menu.className,
+                                              role: menu.getAttribute('role'),
+                                              dataState: menu.getAttribute('data-state'),
+                                              visible: menu.offsetParent !== null,
+                                              text: menu.innerText?.substring(0, 100) || 'No text'
+                                            });
                                           }
+                                          return menus.length > 0;
+                                        });
+                                        
+                                        if (menuExists) {
+                                          addDebugStep('Image Link Extraction', 'success', 'Context menu elements found!');
+                                        } else {
+                                          addDebugStep('Image Link Extraction', 'error', 'NO context menu elements found at all!');
+                                        }
+                                        
+                                        // Return early for testing - don't proceed with menu interaction
+                                        return {
+                                          success: false,
+                                          message: 'Stopped for testing - context menu detection',
+                                          finalImageUrl: null,
+                                          screenshots: []
+                                        };
                                           
                                           // Use XPath to find the menu item by text content within the open menu
                                           const copyImageLinkClicked = await page.evaluate(() => {
