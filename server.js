@@ -3531,6 +3531,7 @@ try {
 // Recraft.ai Simple Route (fallback for Railway)
 const { scrapeRecraftSimple } = require('./recraft-simple-scraper');
 const { scrapeRecraftWithSession, getSessionStatus, cleanupSession } = require('./recraft-session-scraper');
+const { createLatenodeAccount } = require('./latenode-account-scraper');
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -3723,6 +3724,46 @@ app.post('/api/recraft-session-cleanup', async (req, res) => {
 // Serve Recraft.ai session test page
 app.get('/recraft-session', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft-session-test.html'));
+});
+
+// Serve Latenode account creation page
+app.get('/latenode-account', (req, res) => {
+  res.sendFile(path.join(__dirname, 'latenode-account-test.html'));
+});
+
+// Latenode Account Creation API
+app.post('/api/latenode-account', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    console.log('🚀 Starting Latenode account creation...');
+    
+    // Set the global io instance for the scraper
+    global.io = io;
+    
+    const result = await createLatenodeAccount();
+    
+    res.json({
+      ok: true,
+      success: result.success,
+      tempEmail: result.tempEmail,
+      message: result.message
+    });
+    
+  } catch (error) {
+    console.error('❌ Latenode account creation error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
 });
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
