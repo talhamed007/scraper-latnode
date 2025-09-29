@@ -628,94 +628,91 @@ async function generateImageWithSession(prompt = 'banana bread in kitchen with s
         // Take screenshot to see if context menu appeared
         await takeScreenshot('After Right Click - Context Menu Check', page);
         
-        // Look for "Copy image link" option in context menu - SMART DETECTION
+        // Look for "Copy image link" option in context menu - TARGETED DETECTION
         const copyImageLinkClicked = await page.evaluate(() => {
-          console.log('=== SMART CONTEXT MENU DETECTION ===');
+          console.log('=== TARGETED CONTEXT MENU DETECTION ===');
           
-          // Method 1: Find ALL visible elements and check their text
-          const allElements = document.querySelectorAll('*');
-          console.log(`Scanning ${allElements.length} elements for "Copy image link"`);
+          // Method 1: Target the exact structure from the HTML you provided
+          const specificSelectors = [
+            'div[role="menuitem"]:has(div.flex.flex-1.flex-col.justify-center:contains("Copy image link"))',
+            'div[data-radix-collection-item]:has(div.flex.flex-1.flex-col.justify-center:contains("Copy image link"))',
+            'div[role="menuitem"] div.flex.flex-1.flex-col.justify-center',
+            'div[data-radix-collection-item] div.flex.flex-1.flex-col.justify-center'
+          ];
           
-          const candidates = [];
-          for (const element of allElements) {
-            if (element.offsetParent === null) continue; // Skip hidden elements
-            
-            const text = (element.innerText || element.textContent || '').trim();
-            const parentText = (element.parentElement?.innerText || element.parentElement?.textContent || '').trim();
-            
-            // Check for exact match or partial match
-            if (text === 'Copy image link' || 
-                text.toLowerCase().includes('copy image link') ||
-                parentText === 'Copy image link' ||
-                parentText.toLowerCase().includes('copy image link')) {
-              
-              candidates.push({
-                element: element,
-                text: text,
-                parentText: parentText,
-                tagName: element.tagName,
-                className: element.className,
-                rect: element.getBoundingClientRect()
-              });
-              
-              console.log(`CANDIDATE FOUND: "${text}" (parent: "${parentText}") - ${element.tagName}.${element.className}`);
-            }
-          }
-          
-          console.log(`Found ${candidates.length} candidates for "Copy image link"`);
-          
-          // Method 2: Try to click each candidate
-          for (let i = 0; i < candidates.length; i++) {
-            const candidate = candidates[i];
+          for (const selector of specificSelectors) {
             try {
-              console.log(`Attempting to click candidate ${i + 1}: "${candidate.text}"`);
+              const elements = document.querySelectorAll(selector);
+              console.log(`Trying selector: ${selector}, found ${elements.length} elements`);
               
-                                                // Scroll element into view first
-                                                candidate.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                // Small delay without await
-                                                setTimeout(() => {}, 100);
-              
-              // Try different click methods
-              candidate.element.click();
-              console.log(`✅ Successfully clicked candidate ${i + 1}!`);
-              return true;
-              
-            } catch (error) {
-              console.log(`❌ Failed to click candidate ${i + 1}: ${error.message}`);
-              
-              // Try parent element if this one failed
-              if (candidate.element.parentElement) {
-                try {
-                  console.log(`Trying parent element...`);
-                  candidate.element.parentElement.click();
-                  console.log(`✅ Successfully clicked parent element!`);
-                  return true;
-                } catch (parentError) {
-                  console.log(`❌ Parent click also failed: ${parentError.message}`);
+              for (const element of elements) {
+                const text = (element.innerText || element.textContent || '').trim();
+                console.log(`Element text: "${text}"`);
+                
+                if (text === 'Copy image link') {
+                  console.log(`Found exact match with selector: ${selector}`);
+                  // Click the parent menuitem
+                  const menuItem = element.closest('div[role="menuitem"]') || element.closest('div[data-radix-collection-item]');
+                  if (menuItem) {
+                    console.log('Clicking parent menu item...');
+                    menuItem.click();
+                    return true;
+                  } else {
+                    console.log('Clicking element directly...');
+                    element.click();
+                    return true;
+                  }
                 }
               }
+            } catch (error) {
+              console.log(`Selector ${selector} failed: ${error.message}`);
             }
           }
           
-          // Method 3: XPath search as last resort
-          console.log('Trying XPath search...');
-          try {
-            const xpathResult = document.evaluate(
-              "//*[contains(text(), 'Copy image link')]",
-              document,
-              null,
-              XPathResult.FIRST_ORDERED_NODE_TYPE,
-              null
-            );
+          // Method 2: Find by role="menuitem" and check text content
+          console.log('Trying role="menuitem" approach...');
+          const menuItems = document.querySelectorAll('div[role="menuitem"]');
+          console.log(`Found ${menuItems.length} menu items`);
+          
+          for (const menuItem of menuItems) {
+            const text = (menuItem.innerText || menuItem.textContent || '').trim();
+            console.log(`Menu item text: "${text}"`);
             
-            if (xpathResult.singleNodeValue) {
-              console.log('Found via XPath, attempting click...');
-              xpathResult.singleNodeValue.click();
-              console.log('✅ XPath click successful!');
+            if (text.includes('Copy image link')) {
+              console.log('Found "Copy image link" in menu item, clicking...');
+              menuItem.click();
               return true;
             }
-          } catch (xpathError) {
-            console.log(`❌ XPath search failed: ${xpathError.message}`);
+          }
+          
+          // Method 3: Find by data-radix-collection-item
+          console.log('Trying data-radix-collection-item approach...');
+          const collectionItems = document.querySelectorAll('div[data-radix-collection-item]');
+          console.log(`Found ${collectionItems.length} collection items`);
+          
+          for (const item of collectionItems) {
+            const text = (item.innerText || item.textContent || '').trim();
+            console.log(`Collection item text: "${text}"`);
+            
+            if (text.includes('Copy image link')) {
+              console.log('Found "Copy image link" in collection item, clicking...');
+              item.click();
+              return true;
+            }
+          }
+          
+          // Method 4: Fallback - search all elements
+          console.log('Trying fallback search...');
+          const allElements = document.querySelectorAll('*');
+          for (const element of allElements) {
+            if (element.offsetParent === null) continue;
+            
+            const text = (element.innerText || element.textContent || '').trim();
+            if (text === 'Copy image link') {
+              console.log('Found "Copy image link" in fallback search, clicking...');
+              element.click();
+              return true;
+            }
           }
           
           console.log('❌ All methods failed to find/click "Copy image link"');
