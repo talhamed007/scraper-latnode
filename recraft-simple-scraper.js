@@ -976,50 +976,69 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                                         // Take screenshot to see if context menu appeared
                                         await takeScreenshot('After Right Click - Context Menu Check', page);
                                           
-                                          // Look for "Copy image link" option in context menu - TARGETED DETECTION
+                                          // Look for "Copy image link" option using ChatGPT's Radix UI approach
+                                          addDebugStep('Image Link Extraction', 'info', 'Using Radix UI context menu detection...');
+                                          
+                                          // Wait for the Radix menu to appear with data-state="open"
+                                          try {
+                                            await page.waitForSelector('[role="menu"][data-state="open"]', { visible: true, timeout: 3000 });
+                                            addDebugStep('Image Link Extraction', 'success', 'Radix context menu opened successfully');
+                                          } catch (error) {
+                                            addDebugStep('Image Link Extraction', 'warning', 'Radix menu not found, trying alternative approach...');
+                                          }
+                                          
+                                          // Use XPath to find the menu item by text content within the open menu
                                           const copyImageLinkClicked = await page.evaluate(() => {
-                                            console.log('=== TARGETED CONTEXT MENU DETECTION ===');
+                                            console.log('=== RADIX UI CONTEXT MENU DETECTION ===');
                                             
-                                            // Method 1: Target the exact structure from the HTML you provided
-                                            const specificSelectors = [
-                                              'div[role="menuitem"]:has(div.flex.flex-1.flex-col.justify-center:contains("Copy image link"))',
-                                              'div[data-radix-collection-item]:has(div.flex.flex-1.flex-col.justify-center:contains("Copy image link"))',
-                                              'div[role="menuitem"] div.flex.flex-1.flex-col.justify-center',
-                                              'div[data-radix-collection-item] div.flex.flex-1.flex-col.justify-center'
-                                            ];
-                                            
-                                            for (const selector of specificSelectors) {
-                                              try {
-                                                const elements = document.querySelectorAll(selector);
-                                                console.log(`Trying selector: ${selector}, found ${elements.length} elements`);
-                                                
-                                                for (const element of elements) {
-                                                  const text = (element.innerText || element.textContent || '').trim();
-                                                  console.log(`Element text: "${text}"`);
-                                                  
-                                                  if (text === 'Copy image link') {
-                                                    console.log(`Found exact match with selector: ${selector}`);
-                                                    // Click the parent menuitem
-                                                    const menuItem = element.closest('div[role="menuitem"]') || element.closest('div[data-radix-collection-item]');
-                                                    if (menuItem) {
-                                                      console.log('Clicking parent menu item...');
-                                                      menuItem.click();
-                                                      return true;
-                                                    } else {
-                                                      console.log('Clicking element directly...');
-                                                      element.click();
-                                                      return true;
-                                                    }
-                                                  }
-                                                }
-                                              } catch (error) {
-                                                console.log(`Selector ${selector} failed: ${error.message}`);
+                                            // First, try to find the open menu
+                                            const openMenu = document.querySelector('[role="menu"][data-state="open"]');
+                                            if (!openMenu) {
+                                              console.log('No open menu found, trying to find any menu...');
+                                              const anyMenu = document.querySelector('[role="menu"]');
+                                              if (!anyMenu) {
+                                                console.log('No menu found at all');
+                                                return false;
                                               }
+                                              console.log('Found menu without data-state="open"');
+                                            } else {
+                                              console.log('Found open menu with data-state="open"');
                                             }
                                             
-                                            // Method 2: Find by role="menuitem" and check text content
-                                            console.log('Trying role="menuitem" approach...');
-                                            const menuItems = document.querySelectorAll('div[role="menuitem"]');
+                                            // Use XPath to find the menu item with exact text match
+                                            const xpathResult = document.evaluate(
+                                              "//div[@role='menu']//div[@role='menuitem']//div[normalize-space()='Copy image link']",
+                                              document,
+                                              null,
+                                              XPathResult.FIRST_ORDERED_NODE_TYPE,
+                                              null
+                                            );
+                                            
+                                            if (xpathResult.singleNodeValue) {
+                                              console.log('Found "Copy image link" via XPath exact match');
+                                              xpathResult.singleNodeValue.click();
+                                              return true;
+                                            }
+                                            
+                                            // Fallback: partial text match
+                                            console.log('Trying partial text match...');
+                                            const partialXpathResult = document.evaluate(
+                                              "//div[@role='menu']//div[@role='menuitem']//div[contains(normalize-space(), 'Copy image link')]",
+                                              document,
+                                              null,
+                                              XPathResult.FIRST_ORDERED_NODE_TYPE,
+                                              null
+                                            );
+                                            
+                                            if (partialXpathResult.singleNodeValue) {
+                                              console.log('Found "Copy image link" via XPath partial match');
+                                              partialXpathResult.singleNodeValue.click();
+                                              return true;
+                                            }
+                                            
+                                            // Last resort: search all menuitems
+                                            console.log('Trying to find any menuitem with "Copy image link"...');
+                                            const menuItems = document.querySelectorAll('[role="menuitem"]');
                                             console.log(`Found ${menuItems.length} menu items`);
                                             
                                             for (const menuItem of menuItems) {
@@ -1029,36 +1048,6 @@ async function scrapeRecraftSimple(googleEmail, googlePassword, io = null) {
                                               if (text.includes('Copy image link')) {
                                                 console.log('Found "Copy image link" in menu item, clicking...');
                                                 menuItem.click();
-                                                return true;
-                                              }
-                                            }
-                                            
-                                            // Method 3: Find by data-radix-collection-item
-                                            console.log('Trying data-radix-collection-item approach...');
-                                            const collectionItems = document.querySelectorAll('div[data-radix-collection-item]');
-                                            console.log(`Found ${collectionItems.length} collection items`);
-                                            
-                                            for (const item of collectionItems) {
-                                              const text = (item.innerText || item.textContent || '').trim();
-                                              console.log(`Collection item text: "${text}"`);
-                                              
-                                              if (text.includes('Copy image link')) {
-                                                console.log('Found "Copy image link" in collection item, clicking...');
-                                                item.click();
-                                                return true;
-                                              }
-                                            }
-                                            
-                                            // Method 4: Fallback - search all elements
-                                            console.log('Trying fallback search...');
-                                            const allElements = document.querySelectorAll('*');
-                                            for (const element of allElements) {
-                                              if (element.offsetParent === null) continue;
-                                              
-                                              const text = (element.innerText || element.textContent || '').trim();
-                                              if (text === 'Copy image link') {
-                                                console.log('Found "Copy image link" in fallback search, clicking...');
-                                                element.click();
                                                 return true;
                                               }
                                             }
