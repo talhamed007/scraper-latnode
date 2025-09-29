@@ -78,7 +78,7 @@ async function createLatenodeAccount() {
     // Launch browser
     addDebugStep('Browser Launch', 'info', 'Launching browser...');
     browser = await puppeteer.launch({
-      headless: false,
+      headless: true, // Changed to true for Railway compatibility
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -86,7 +86,13 @@ async function createLatenodeAccount() {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--single-process',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
       ]
     });
     
@@ -153,8 +159,34 @@ async function createLatenodeAccount() {
       // Fallback: try to get email from the input field
       addDebugStep('Email Copy', 'warning', 'Could not read from clipboard, trying to get email from input field...');
       tempEmail = await page.evaluate(() => {
-        const emailInput = document.querySelector('input[type="text"], input[type="email"]');
-        return emailInput ? emailInput.value : null;
+        // Try multiple selectors for the email input
+        const selectors = [
+          'input[type="text"]',
+          'input[type="email"]',
+          'input[placeholder*="email" i]',
+          'input[placeholder*="mail" i]',
+          '.email-input input',
+          'input[name*="email" i]'
+        ];
+        
+        for (const selector of selectors) {
+          const input = document.querySelector(selector);
+          if (input && input.value && input.value.includes('@')) {
+            console.log('Found email in input:', input.value);
+            return input.value;
+          }
+        }
+        
+        // Last resort: look for any text that looks like an email
+        const allInputs = document.querySelectorAll('input');
+        for (const input of allInputs) {
+          if (input.value && input.value.includes('@') && input.value.includes('.')) {
+            console.log('Found email-like text:', input.value);
+            return input.value;
+          }
+        }
+        
+        return null;
       });
       
       if (tempEmail) {
@@ -229,11 +261,23 @@ async function createLatenodeAccount() {
     
   } catch (error) {
     addDebugStep('Account Creation', 'error', '❌ Latenode account creation failed', null, error.message);
-    throw new Error(`Latenode account creation failed: ${error.message}`);
+    
+    // Return a more user-friendly error message for Railway
+    if (error.message.includes('Failed to launch the browser process')) {
+      throw new Error('Browser launch failed. This may be due to server environment limitations. Please try again or contact support.');
+    } else if (error.message.includes('Missing X server')) {
+      throw new Error('Display server not available. This is a server environment limitation.');
+    } else {
+      throw new Error(`Latenode account creation failed: ${error.message}`);
+    }
   } finally {
     if (browser) {
-      await browser.close();
-      addDebugStep('Cleanup', 'info', 'Browser closed');
+      try {
+        await browser.close();
+        addDebugStep('Cleanup', 'info', 'Browser closed');
+      } catch (closeError) {
+        addDebugStep('Cleanup', 'warning', 'Error closing browser', null, closeError.message);
+      }
     }
   }
 }
