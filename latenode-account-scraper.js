@@ -455,11 +455,20 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         'button:has-text("Allow")',
         'button:has-text("OK")',
         'button:has-text("Continue")',
+        'button:has-text("I consent")',
+        'button:has-text("Accept cookies")',
+        'button:has-text("Accept all cookies")',
         '[class*="consent"] button',
         '[class*="cookie"] button',
         '[class*="gdpr"] button',
         'button[class*="accept"]',
-        'button[class*="consent"]'
+        'button[class*="consent"]',
+        // More specific selectors for the actual consent button
+        'button[type="button"]:has-text("Consent")',
+        'button[class*="primary"]:has-text("Consent")',
+        'button[class*="btn"]:has-text("Consent")',
+        // Avoid clicking "Learn more" or "Manage options" buttons
+        'button:not(:has-text("Learn more")):not(:has-text("Manage options")):has-text("Consent")'
       ];
       
       let consentClicked = false;
@@ -472,19 +481,28 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
             const button = document.querySelector(sel);
             if (!button) return { found: false };
             
+            const text = (button.innerText || button.textContent || '').trim();
+            
+            // Avoid clicking "Learn more", "Manage options", or other non-consent buttons
+            const avoidTexts = ['Learn more', 'Manage options', 'Settings', 'Preferences', 'Details', 'More info'];
+            const shouldAvoid = avoidTexts.some(avoidText => text.toLowerCase().includes(avoidText.toLowerCase()));
+            
             return {
               found: true,
               visible: button.offsetParent !== null,
               enabled: !button.disabled && !button.classList.contains('disabled'),
-              text: button.innerText || button.textContent || ''
+              text: text,
+              shouldAvoid: shouldAvoid
             };
           }, selector);
           
-          if (buttonInfo.found && buttonInfo.visible && buttonInfo.enabled) {
+          if (buttonInfo.found && buttonInfo.visible && buttonInfo.enabled && !buttonInfo.shouldAvoid) {
             await tempMailPage.click(selector);
             addDebugStep('Consent Dialog', 'success', `Clicked consent button: "${buttonInfo.text}"`);
             consentClicked = true;
             break;
+          } else if (buttonInfo.shouldAvoid) {
+            addDebugStep('Consent Dialog', 'warning', `Skipping button "${buttonInfo.text}" - not a consent button`);
           }
         } catch (e) {
           // Try next selector
