@@ -708,6 +708,53 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       confirmationCode = await tempMailPage.evaluate(() => {
         console.log('=== SMART CODE EXTRACTION START ===');
         
+        // FIRST: Look for the specific pattern you mentioned
+        console.log('Looking for specific confirmation code pattern...');
+        
+        // Look for divs containing "Confirmation code:" text
+        const confirmationDivs = document.querySelectorAll('div');
+        for (const div of confirmationDivs) {
+          const text = div.textContent || div.innerText || '';
+          if (text.toLowerCase().includes('confirmation code')) {
+            console.log('Found div with "confirmation code" text:', text.substring(0, 100));
+            
+            // Look for spans with font-size:48px inside this div
+            const spans = div.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
+            for (const span of spans) {
+              const spanText = span.textContent || span.innerText || '';
+              const codeMatch = spanText.match(/\d{4}/);
+              if (codeMatch) {
+                console.log('Found code in confirmation div span:', codeMatch[0]);
+                return codeMatch[0];
+              }
+            }
+            
+            // Also look for any 4-digit number in this div
+            const numbers = text.match(/\b\d{4}\b/g);
+            if (numbers && numbers.length > 0) {
+              console.log('Found numbers in confirmation div:', numbers);
+              return numbers[0];
+            }
+          }
+        }
+        
+        // SECOND: Look for spans with font-size:48px anywhere
+        console.log('Looking for spans with font-size:48px...');
+        const largeFontSpans = document.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
+        console.log('Found large font spans:', largeFontSpans.length);
+        
+        for (const span of largeFontSpans) {
+          const text = span.textContent || span.innerText || '';
+          const codeMatch = text.match(/\d{4}/);
+          if (codeMatch) {
+            console.log('Found code in large font span:', codeMatch[0]);
+            return codeMatch[0];
+          }
+        }
+        
+        // THIRD: Use the comprehensive scoring system as fallback
+        console.log('Using comprehensive scoring system as fallback...');
+        
         // Get all elements that might contain the code
         const allElements = document.querySelectorAll('*');
         const candidates = [];
