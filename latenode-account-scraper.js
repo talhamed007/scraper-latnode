@@ -671,26 +671,88 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await sleep(3000);
       await takeScreenshot('Email-Opened', tempMailPage);
       
-      // Extract the confirmation code
+      // Extract the confirmation code with scrolling
       addDebugStep('Code Extraction', 'info', 'Extracting confirmation code from email...');
       
+      // First, scroll down in the email to make sure we see all content
+      addDebugStep('Code Extraction', 'info', 'Scrolling down in email to find confirmation code...');
+      
+      // Use Puppeteer's scrolling method for more reliable scrolling
+      await tempMailPage.evaluate(() => {
+        window.scrollTo(0, 0); // Start at top
+      });
+      
+      // Scroll down gradually using Puppeteer
+      for (let i = 0; i < 10; i++) {
+        await tempMailPage.mouse.wheel({ deltaY: 200 });
+        await sleep(200);
+      }
+      
+      // Also try scrolling to bottom to ensure we see all content
+      await tempMailPage.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      
+      await sleep(1000);
+      
+      // Scroll back up a bit to see the content better
+      await tempMailPage.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight - 500);
+      });
+      
+      await sleep(2000); // Wait for scrolling to complete
+      
+      // Take a screenshot after scrolling to see the full email content
+      await takeScreenshot('Email-After-Scroll', tempMailPage);
+      
       confirmationCode = await tempMailPage.evaluate(() => {
-        // Look for confirmation code in various formats
+        // Get the full page text after scrolling
         const bodyText = document.body.innerText;
-        const codeMatch = bodyText.match(/confirmation code[:\s]*(\d{4})/i) || 
-                         bodyText.match(/code[:\s]*(\d{4})/i) ||
-                         bodyText.match(/(\d{4})/);
+        console.log('Full email text length:', bodyText.length);
+        console.log('Email text preview:', bodyText.substring(0, 500));
         
-        if (codeMatch) {
-          console.log('Found confirmation code:', codeMatch[1]);
-          return codeMatch[1];
+        // Look for confirmation code in various formats with more specific patterns
+        const patterns = [
+          /confirmation code[:\s]*(\d{4})/i,
+          /verification code[:\s]*(\d{4})/i,
+          /your code[:\s]*(\d{4})/i,
+          /code[:\s]*(\d{4})/i,
+          /enter code[:\s]*(\d{4})/i,
+          /use code[:\s]*(\d{4})/i,
+          /code is[:\s]*(\d{4})/i,
+          /code:[\s]*(\d{4})/i,
+          /code[\s]*(\d{4})/i
+        ];
+        
+        for (const pattern of patterns) {
+          const match = bodyText.match(pattern);
+          if (match) {
+            console.log('Found confirmation code with pattern:', pattern, 'Code:', match[1]);
+            return match[1];
+          }
         }
         
-        // Look for any 4-digit number
+        // Look for any 4-digit number, but prioritize those that appear after "code" or "confirmation"
         const allNumbers = bodyText.match(/\b\d{4}\b/g);
         if (allNumbers && allNumbers.length > 0) {
-          console.log('Found 4-digit number:', allNumbers[0]);
-          return allNumbers[0];
+          console.log('Found 4-digit numbers:', allNumbers);
+          
+          // Look for numbers that appear near "code" or "confirmation" keywords
+          for (const number of allNumbers) {
+            const numberIndex = bodyText.indexOf(number);
+            const beforeText = bodyText.substring(Math.max(0, numberIndex - 50), numberIndex).toLowerCase();
+            const afterText = bodyText.substring(numberIndex, Math.min(bodyText.length, numberIndex + 50)).toLowerCase();
+            
+            if (beforeText.includes('code') || beforeText.includes('confirmation') || 
+                afterText.includes('code') || afterText.includes('confirmation')) {
+              console.log('Found confirmation code near keyword:', number);
+              return number;
+            }
+          }
+          
+          // If no number near keywords, return the last one (likely at the bottom)
+          console.log('Using last 4-digit number found:', allNumbers[allNumbers.length - 1]);
+          return allNumbers[allNumbers.length - 1];
         }
         
         return null;
