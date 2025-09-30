@@ -715,33 +715,157 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     await page.bringToFront();
     await sleep(2000);
     
-    // Find and fill the confirmation code field
+    // Find and fill the confirmation code field with smart validation
     addDebugStep('Code Entry', 'info', `Entering confirmation code: ${confirmationCode}`);
     
-    await page.evaluate((code) => {
-      const codeInput = document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i]');
+    // First, clear the field completely
+    await page.evaluate(() => {
+      const codeInput = document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i], input[type="text"][maxlength="4"]');
       if (codeInput) {
         codeInput.focus();
+        codeInput.select();
         codeInput.value = '';
-        codeInput.value = code;
-        
-        // Trigger events
+        // Trigger events to clear any validation state
         codeInput.dispatchEvent(new Event('input', { bubbles: true }));
         codeInput.dispatchEvent(new Event('change', { bubbles: true }));
         codeInput.dispatchEvent(new Event('blur', { bubbles: true }));
       }
-    }, confirmationCode);
+    });
+    
+    await sleep(500);
+    
+    // Now type the code character by character to ensure proper validation
+    addDebugStep('Code Entry', 'info', 'Typing confirmation code character by character...');
+    
+    // Find the code input field first
+    const codeInputSelector = await page.evaluate(() => {
+      const selectors = [
+        'input[placeholder*="code" i]',
+        'input[placeholder*="confirmation" i]',
+        'input[data-test-id*="code" i]',
+        'input[type="text"][maxlength="4"]',
+        'input[type="text"]'
+      ];
+      
+      for (const selector of selectors) {
+        const input = document.querySelector(selector);
+        if (input) {
+          return selector;
+        }
+      }
+      return null;
+    });
+    
+    if (!codeInputSelector) {
+      addDebugStep('Code Entry', 'error', '❌ CRITICAL: Could not find confirmation code input field - stopping process');
+      throw new Error('Confirmation code input field not found - this step is obligatory');
+    }
+    
+    addDebugStep('Code Entry', 'info', `Found code input with selector: ${codeInputSelector}`);
+    
+    // Type the code character by character
+    await page.type(codeInputSelector, confirmationCode, { delay: 200 });
     
     await sleep(1000);
+    
+    // Verify the code was entered and check if Verify button is now visible
+    const codeValidation = await page.evaluate((expectedCode) => {
+      const codeInput = document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i], input[type="text"][maxlength="4"]');
+      const enteredCode = codeInput ? codeInput.value : null;
+      
+      // Check if Verify button is visible and enabled
+      const verifyButton = document.querySelector('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]');
+      const isVerifyButtonVisible = verifyButton && verifyButton.offsetParent !== null;
+      const isVerifyButtonEnabled = verifyButton && !verifyButton.disabled && !verifyButton.classList.contains('disabled');
+      
+      // Check for any validation errors
+      const hasValidationError = document.querySelector('.error, .invalid, [class*="error"], [class*="invalid"]') !== null;
+      
+      return {
+        enteredCode: enteredCode,
+        isCorrect: enteredCode === expectedCode,
+        isVerifyButtonVisible: isVerifyButtonVisible,
+        isVerifyButtonEnabled: isVerifyButtonEnabled,
+        hasValidationError: hasValidationError,
+        verifyButtonText: verifyButton ? verifyButton.innerText : null
+      };
+    }, confirmationCode);
+    
+    addDebugStep('Code Entry', 'info', `Code validation results:`, null, JSON.stringify(codeValidation, null, 2));
+    
+    if (codeValidation.isCorrect) {
+      addDebugStep('Code Entry', 'success', `Confirmation code successfully entered: ${codeValidation.enteredCode}`);
+    } else {
+      addDebugStep('Code Entry', 'error', `❌ CRITICAL: Code verification failed. Expected: ${confirmationCode}, Got: ${codeValidation.enteredCode} - stopping process`);
+      throw new Error('Confirmation code input failed - this step is obligatory');
+    }
+    
+    if (codeValidation.hasValidationError) {
+      addDebugStep('Code Entry', 'warning', 'Validation error detected on page');
+    }
+    
+    if (codeValidation.isVerifyButtonVisible && codeValidation.isVerifyButtonEnabled) {
+      addDebugStep('Code Entry', 'success', 'Verify button is visible and enabled - code validation successful!');
+    } else {
+      addDebugStep('Code Entry', 'warning', `Verify button status - Visible: ${codeValidation.isVerifyButtonVisible}, Enabled: ${codeValidation.isVerifyButtonEnabled}`);
+      
+      // Try alternative code input method if Verify button is not visible
+      addDebugStep('Code Entry', 'info', 'Trying alternative code input method...');
+      
+      await page.evaluate((code) => {
+        const codeInput = document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i], input[type="text"][maxlength="4"]');
+        if (codeInput) {
+          // Clear and set value using different approach
+          codeInput.focus();
+          codeInput.value = '';
+          
+          // Simulate typing
+          for (let i = 0; i < code.length; i++) {
+            codeInput.value = code.substring(0, i + 1);
+            codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+            codeInput.dispatchEvent(new Event('keyup', { bubbles: true }));
+          }
+          
+          // Final validation events
+          codeInput.dispatchEvent(new Event('change', { bubbles: true }));
+          codeInput.dispatchEvent(new Event('blur', { bubbles: true }));
+          codeInput.dispatchEvent(new Event('focus', { bubbles: true }));
+          
+          // Force validation
+          if (codeInput.checkValidity) {
+            codeInput.checkValidity();
+          }
+        }
+      }, confirmationCode);
+      
+      await sleep(2000);
+      
+      // Check again after alternative method
+      const revalidation = await page.evaluate(() => {
+        const verifyButton = document.querySelector('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]');
+        return {
+          isVerifyButtonVisible: verifyButton && verifyButton.offsetParent !== null,
+          isVerifyButtonEnabled: verifyButton && !verifyButton.disabled && !verifyButton.classList.contains('disabled')
+        };
+      });
+      
+      if (revalidation.isVerifyButtonVisible && revalidation.isVerifyButtonEnabled) {
+        addDebugStep('Code Entry', 'success', 'Verify button is now visible after alternative input method!');
+      } else {
+        addDebugStep('Code Entry', 'error', '❌ CRITICAL: Verify button still not visible after alternative input method - stopping process');
+        throw new Error('Confirmation code validation failed - Verify button not becoming visible - this step is obligatory');
+      }
+    }
+    
     await takeScreenshot('Code-Entered', page);
     
-    // Click Verify button
-    addDebugStep('Code Entry', 'info', 'Looking for Verify button...');
+    // Click Verify button (we already verified it's visible and enabled)
+    addDebugStep('Code Entry', 'info', 'Clicking Verify button...');
     
     try {
-      await page.waitForSelector('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]', { timeout: 10000 });
+      // Since we already verified the Verify button is visible and enabled, just click it
       await page.click('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]');
-      addDebugStep('Code Entry', 'success', 'Clicked Verify button');
+      addDebugStep('Code Entry', 'success', 'Clicked Verify button successfully');
       
       // Wait for page to update to password creation
       await page.waitForFunction(() => {
