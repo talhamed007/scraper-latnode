@@ -706,231 +706,128 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await takeScreenshot('Email-After-Scroll', tempMailPage);
       
       confirmationCode = await tempMailPage.evaluate(() => {
-        console.log('=== SMART CODE EXTRACTION START ===');
+        console.log('=== COMPLETE CODE EXTRACTION DEBUG ===');
         
-        // FIRST: Look for the specific pattern you mentioned
-        console.log('Looking for specific confirmation code pattern...');
+        // Get the full page HTML for debugging
+        const fullHTML = document.documentElement.outerHTML;
+        console.log('Full page HTML length:', fullHTML.length);
         
-        // Look for divs containing "Confirmation code:" text (case insensitive)
-        const allDivs = document.querySelectorAll('div');
-        console.log('Total divs found:', allDivs.length);
+        // Look for ALL 4-digit numbers on the page
+        const allNumbers = fullHTML.match(/\b\d{4}\b/g);
+        console.log('All 4-digit numbers found in HTML:', allNumbers);
         
-        for (let i = 0; i < allDivs.length; i++) {
-          const div = allDivs[i];
-          const text = div.textContent || div.innerText || '';
-          const innerHTML = div.innerHTML || '';
+        // Look for spans with font-size:48px specifically
+        const spans48px = document.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
+        console.log('Spans with font-size:48px found:', spans48px.length);
+        
+        for (let i = 0; i < spans48px.length; i++) {
+          const span = spans48px[i];
+          const text = span.textContent || span.innerText || '';
+          const style = span.getAttribute('style') || '';
+          console.log(`Span ${i}: text="${text}", style="${style}"`);
           
-          console.log(`Div ${i}: text length: ${text.length}, innerHTML length: ${innerHTML.length}`);
+          const codeMatch = text.match(/\d{4}/);
+          if (codeMatch) {
+            console.log('Found code in 48px span:', codeMatch[0]);
+            return codeMatch[0];
+          }
+        }
+        
+        // Look for any element containing "confirmation code" text
+        const allElements = document.querySelectorAll('*');
+        console.log('Total elements on page:', allElements.length);
+        
+        for (let i = 0; i < allElements.length; i++) {
+          const element = allElements[i];
+          const text = element.textContent || element.innerText || '';
+          const innerHTML = element.innerHTML || '';
           
           if (text.toLowerCase().includes('confirmation code') || innerHTML.toLowerCase().includes('confirmation code')) {
-            console.log('Found div with "confirmation code" text!');
-            console.log('Div text:', text.substring(0, 200));
-            console.log('Div innerHTML:', innerHTML.substring(0, 200));
+            console.log(`Found element ${i} with "confirmation code":`, element.tagName);
+            console.log('Element text:', text.substring(0, 200));
+            console.log('Element innerHTML:', innerHTML.substring(0, 200));
             
-            // Look for spans with font-size:48px inside this div
-            const spans = div.querySelectorAll('span');
-            console.log('Spans found in confirmation div:', spans.length);
-            
-            for (let j = 0; j < spans.length; j++) {
-              const span = spans[j];
-              const spanStyle = span.getAttribute('style') || '';
-              const spanText = span.textContent || span.innerText || '';
-              
-              console.log(`Span ${j}: style="${spanStyle}", text="${spanText}"`);
-              
-              if (spanStyle.includes('font-size:48px') || spanStyle.includes('font-size: 48px')) {
-                console.log('Found span with font-size:48px!');
-                const codeMatch = spanText.match(/\d{4}/);
-                if (codeMatch) {
-                  console.log('Found code in confirmation div span:', codeMatch[0]);
-                  return codeMatch[0];
-                }
-              }
-            }
-            
-            // Also look for any 4-digit number in this div
+            // Look for 4-digit numbers in this element
             const numbers = text.match(/\b\d{4}\b/g);
             if (numbers && numbers.length > 0) {
-              console.log('Found numbers in confirmation div:', numbers);
+              console.log('Numbers found in confirmation element:', numbers);
+              
+              // Look for spans with large font size in this element
+              const spans = element.querySelectorAll('span');
+              for (const span of spans) {
+                const spanStyle = span.getAttribute('style') || '';
+                const spanText = span.textContent || span.innerText || '';
+                
+                if (spanStyle.includes('font-size:48px') || spanStyle.includes('font-size: 48px')) {
+                  console.log('Found 48px span in confirmation element:', spanText);
+                  const codeMatch = spanText.match(/\d{4}/);
+                  if (codeMatch) {
+                    console.log('Found code in 48px span within confirmation element:', codeMatch[0]);
+                    return codeMatch[0];
+                  }
+                }
+              }
+              
+              // Return the first number found in this element
+              console.log('Returning first number from confirmation element:', numbers[0]);
               return numbers[0];
             }
           }
         }
         
-        console.log('No div with "confirmation code" text found');
+        // Look for the most prominent 4-digit number by visual characteristics
+        console.log('Looking for most prominent 4-digit number...');
         
-        // SECOND: Look for the exact HTML structure you mentioned
-        console.log('Looking for exact HTML structure...');
-        
-        // Search for divs with the specific style attributes
-        const specificDivs = document.querySelectorAll('div[style*="margin: 0 auto"], div[style*="font-family: Helvetica"]');
-        console.log('Found divs with specific styles:', specificDivs.length);
-        
-        for (let i = 0; i < specificDivs.length; i++) {
-          const div = specificDivs[i];
-          const text = div.textContent || div.innerText || '';
-          const innerHTML = div.innerHTML || '';
-          
-          console.log(`Specific div ${i}: text="${text.substring(0, 100)}"`);
-          
-          if (text.toLowerCase().includes('confirmation code') || innerHTML.toLowerCase().includes('confirmation code')) {
-            console.log('Found div with exact structure!');
-            
-            // Look for spans with font-size:48px
-            const spans = div.querySelectorAll('span');
-            for (const span of spans) {
-              const spanStyle = span.getAttribute('style') || '';
-              const spanText = span.textContent || span.innerText || '';
-              
-              if (spanStyle.includes('font-size:48px')) {
-                console.log('Found span with font-size:48px in specific div:', spanText);
-                const codeMatch = spanText.match(/\d{4}/);
-                if (codeMatch) {
-                  console.log('Found code in specific div span:', codeMatch[0]);
-                  return codeMatch[0];
-                }
-              }
-            }
-          }
-        }
-        
-        // THIRD: Look for spans with font-size:48px anywhere
-        console.log('Looking for spans with font-size:48px...');
-        const largeFontSpans = document.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
-        console.log('Found large font spans:', largeFontSpans.length);
-        
-        for (const span of largeFontSpans) {
-          const text = span.textContent || span.innerText || '';
-          const codeMatch = text.match(/\d{4}/);
-          if (codeMatch) {
-            console.log('Found code in large font span:', codeMatch[0]);
-            return codeMatch[0];
-          }
-        }
-        
-        // THIRD: Use the comprehensive scoring system as fallback
-        console.log('Using comprehensive scoring system as fallback...');
-        
-        // Get all elements that might contain the code
-        const allElements = document.querySelectorAll('*');
         const candidates = [];
-        
-        // Find all elements containing 4-digit numbers
         for (const element of allElements) {
           const text = element.textContent || element.innerText || '';
           const numbers = text.match(/\b\d{4}\b/g);
           
           if (numbers && numbers.length > 0) {
-            // Get element properties for scoring
+            const rect = element.getBoundingClientRect();
             const computedStyle = window.getComputedStyle(element);
             const fontSize = parseInt(computedStyle.fontSize) || 0;
             const fontWeight = computedStyle.fontWeight;
             const isBold = fontWeight === 'bold' || fontWeight === '700' || parseInt(fontWeight) >= 700;
-            const display = computedStyle.display;
-            const visibility = computedStyle.visibility;
-            const opacity = parseFloat(computedStyle.opacity) || 1;
-            const rect = element.getBoundingClientRect();
-            const area = rect.width * rect.height;
-            const isVisible = rect.width > 0 && rect.height > 0 && visibility !== 'hidden' && opacity > 0;
-            
-            // Check if element has inline styles
-            const inlineStyle = element.getAttribute('style') || '';
-            const inlineFontSize = inlineStyle.match(/font-size:\s*(\d+)px/);
-            const inlineFontSizeValue = inlineFontSize ? parseInt(inlineFontSize[1]) : 0;
+            const isVisible = rect.width > 0 && rect.height > 0;
             
             for (const number of numbers) {
-              const score = {
+              candidates.push({
                 number: number,
-                element: element.tagName,
-                fontSize: Math.max(fontSize, inlineFontSizeValue),
+                fontSize: fontSize,
                 isBold: isBold,
-                area: area,
+                area: rect.width * rect.height,
                 isVisible: isVisible,
-                display: display,
-                hasInlineStyle: inlineStyle.length > 0,
-                textLength: text.length,
-                position: {
-                  x: rect.x,
-                  y: rect.y,
-                  width: rect.width,
-                  height: rect.height
-                }
-              };
-              
-              candidates.push(score);
-              console.log('Found candidate:', score);
+                element: element.tagName,
+                textLength: text.length
+              });
             }
           }
         }
         
-        console.log('Total candidates found:', candidates.length);
-        
-        if (candidates.length === 0) {
-          console.log('No 4-digit numbers found');
-          return null;
-        }
-        
-        // Filter out invisible or very small elements
-        const visibleCandidates = candidates.filter(c => 
-          c.isVisible && 
-          c.area > 100 && 
-          c.fontSize > 10 &&
-          c.textLength < 100 // Avoid very long text elements
-        );
-        
-        console.log('Visible candidates:', visibleCandidates.length);
-        
-        if (visibleCandidates.length === 0) {
-          console.log('No visible candidates, using all candidates');
-          return candidates[0].number;
-        }
-        
-        // Score candidates based on multiple factors
-        const scoredCandidates = visibleCandidates.map(candidate => {
-          let score = 0;
-          
-          // Font size score (higher is better)
-          score += candidate.fontSize * 2;
-          
-          // Bold text score
-          if (candidate.isBold) score += 50;
-          
-          // Area score (larger is better, but not too large)
-          score += Math.min(candidate.area / 100, 100);
-          
-          // Inline style score (elements with inline styles are often important)
-          if (candidate.hasInlineStyle) score += 30;
-          
-          // Position score (elements in the center are often more important)
-          const centerX = window.innerWidth / 2;
-          const centerY = window.innerHeight / 2;
-          const distanceFromCenter = Math.sqrt(
-            Math.pow(candidate.position.x + candidate.position.width/2 - centerX, 2) +
-            Math.pow(candidate.position.y + candidate.position.height/2 - centerY, 2)
-          );
-          score += Math.max(0, 100 - distanceFromCenter / 10);
-          
-          // Element type score (span elements are often used for codes)
-          if (candidate.element === 'SPAN') score += 20;
-          
-          // Text length score (shorter text is more likely to be a code)
-          score += Math.max(0, 50 - candidate.textLength);
-          
-          return { ...candidate, finalScore: score };
+        console.log('All candidates found:', candidates.length);
+        candidates.forEach((c, i) => {
+          console.log(`Candidate ${i}: ${c.number}, fontSize: ${c.fontSize}, bold: ${c.isBold}, area: ${c.area}, visible: ${c.isVisible}`);
         });
         
-        // Sort by score (highest first)
-        scoredCandidates.sort((a, b) => b.finalScore - a.finalScore);
+        // Filter and score candidates
+        const visibleCandidates = candidates.filter(c => c.isVisible && c.area > 100 && c.fontSize > 10);
         
-        console.log('Scored candidates (top 5):');
-        scoredCandidates.slice(0, 5).forEach((c, i) => {
-          console.log(`${i + 1}. Number: ${c.number}, Score: ${c.finalScore}, FontSize: ${c.fontSize}, Bold: ${c.isBold}, Area: ${c.area}`);
-        });
+        if (visibleCandidates.length > 0) {
+          // Sort by font size (largest first)
+          visibleCandidates.sort((a, b) => b.fontSize - a.fontSize);
+          console.log('Selected largest font size candidate:', visibleCandidates[0].number);
+          return visibleCandidates[0].number;
+        }
         
-        const bestCandidate = scoredCandidates[0];
-        console.log('Selected code:', bestCandidate.number, 'with score:', bestCandidate.finalScore);
+        // Last resort: return the first 4-digit number found
+        if (allNumbers && allNumbers.length > 0) {
+          console.log('Last resort: returning first number found:', allNumbers[0]);
+          return allNumbers[0];
+        }
         
-        return bestCandidate.number;
+        console.log('No 4-digit numbers found at all');
+        return null;
       });
       
       if (confirmationCode) {
