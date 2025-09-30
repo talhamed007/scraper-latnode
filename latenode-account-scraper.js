@@ -774,7 +774,25 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       const enteredCode = codeInput ? codeInput.value : null;
       
       // Check if Verify button is visible and enabled
-      const verifyButton = document.querySelector('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]');
+      const verifyButtonSelectors = [
+        'button[type="submit"]',
+        'button',
+        'input[type="submit"]',
+        '[role="button"]'
+      ];
+      
+      let verifyButton = null;
+      for (const selector of verifyButtonSelectors) {
+        const button = document.querySelector(selector);
+        if (button) {
+          const text = (button.innerText || button.textContent || '').toLowerCase();
+          if (text.includes('verify') || text.includes('vérifier') || text.includes('submit') || text.includes('continue')) {
+            verifyButton = button;
+            break;
+          }
+        }
+      }
+      
       const isVerifyButtonVisible = verifyButton && verifyButton.offsetParent !== null;
       const isVerifyButtonEnabled = verifyButton && !verifyButton.disabled && !verifyButton.classList.contains('disabled');
       
@@ -842,7 +860,25 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
       // Check again after alternative method
       const revalidation = await page.evaluate(() => {
-        const verifyButton = document.querySelector('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]');
+        const verifyButtonSelectors = [
+          'button[type="submit"]',
+          'button',
+          'input[type="submit"]',
+          '[role="button"]'
+        ];
+        
+        let verifyButton = null;
+        for (const selector of verifyButtonSelectors) {
+          const button = document.querySelector(selector);
+          if (button) {
+            const text = (button.innerText || button.textContent || '').toLowerCase();
+            if (text.includes('verify') || text.includes('vérifier') || text.includes('submit') || text.includes('continue')) {
+              verifyButton = button;
+              break;
+            }
+          }
+        }
+        
         return {
           isVerifyButtonVisible: verifyButton && verifyButton.offsetParent !== null,
           isVerifyButtonEnabled: verifyButton && !verifyButton.disabled && !verifyButton.classList.contains('disabled')
@@ -862,10 +898,38 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     // Click Verify button (we already verified it's visible and enabled)
     addDebugStep('Code Entry', 'info', 'Clicking Verify button...');
     
+    // Take a screenshot before attempting to click the Verify button
+    await takeScreenshot('Before-Verify-Click', page);
+    
     try {
-      // Since we already verified the Verify button is visible and enabled, just click it
-      await page.click('button:has-text("Verify"), button:has-text("Vérifier"), button[type="submit"]');
-      addDebugStep('Code Entry', 'success', 'Clicked Verify button successfully');
+      // Find and click the Verify button using proper selectors
+      const verifyButtonClicked = await page.evaluate(() => {
+        const verifyButtonSelectors = [
+          'button[type="submit"]',
+          'button',
+          'input[type="submit"]',
+          '[role="button"]'
+        ];
+        
+        for (const selector of verifyButtonSelectors) {
+          const buttons = document.querySelectorAll(selector);
+          for (const button of buttons) {
+            const text = (button.innerText || button.textContent || '').toLowerCase();
+            if (text.includes('verify') || text.includes('vérifier') || text.includes('submit') || text.includes('continue')) {
+              button.click();
+              return true;
+            }
+          }
+        }
+        return false;
+      });
+      
+      if (verifyButtonClicked) {
+        addDebugStep('Code Entry', 'success', 'Clicked Verify button successfully');
+      } else {
+        addDebugStep('Code Entry', 'error', '❌ CRITICAL: Could not find or click Verify button - stopping process');
+        throw new Error('Verify button not found or not clickable - this step is obligatory');
+      }
       
       // Wait for page to update to password creation
       await page.waitForFunction(() => {
@@ -876,6 +940,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await takeScreenshot('Password-Creation-Page', page);
       
     } catch (error) {
+      // Take a screenshot before throwing the error to help with debugging
+      await takeScreenshot('Code-Entry-Error', page);
       addDebugStep('Code Entry', 'error', '❌ CRITICAL: Could not find Verify button or page did not update - stopping process', null, error.message);
       throw new Error(`Code verification failed: ${error.message}`);
     }
