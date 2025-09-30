@@ -226,212 +226,131 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     // Wait for the email input field
     await page.waitForSelector('input[data-test-id="authEmailInput"]', { timeout: 10000 });
     
-    // Clear and fill the email field
+    // Clear and fill the email field with smart validation
     addDebugStep('Email Input', 'info', `Filling email field with: ${tempEmail}`);
     
-    await page.evaluate((email) => {
+    // First, clear the field completely
+    await page.evaluate(() => {
       const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
       if (emailInput) {
-        // Clear and set the value
         emailInput.focus();
+        emailInput.select();
         emailInput.value = '';
-        emailInput.value = email;
-        
-        // Trigger multiple events to ensure validation
+        // Trigger events to clear any validation state
         emailInput.dispatchEvent(new Event('input', { bubbles: true }));
         emailInput.dispatchEvent(new Event('change', { bubbles: true }));
-        emailInput.dispatchEvent(new Event('keyup', { bubbles: true }));
-        emailInput.dispatchEvent(new Event('keydown', { bubbles: true }));
         emailInput.dispatchEvent(new Event('blur', { bubbles: true }));
-        emailInput.dispatchEvent(new Event('focus', { bubbles: true }));
-        
-        // Trigger React-specific events if it's a React app
-        if (emailInput._valueTracker) {
-          emailInput._valueTracker.setValue('');
-        }
-        
-        // Force validation
-        if (emailInput.checkValidity) {
-          emailInput.checkValidity();
-        }
       }
-    }, tempEmail);
+    });
+    
+    await sleep(500);
+    
+    // Now type the email character by character to ensure proper validation
+    addDebugStep('Email Input', 'info', 'Typing email character by character...');
+    await page.type('input[data-test-id="authEmailInput"]', tempEmail, { delay: 100 });
     
     await sleep(1000);
     
-    // Verify the email was entered
-    const enteredEmail = await page.evaluate(() => {
+    // Verify the email was entered and check if Next button is now visible
+    const emailValidation = await page.evaluate((expectedEmail) => {
       const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
-      return emailInput ? emailInput.value : null;
-    });
+      const enteredEmail = emailInput ? emailInput.value : null;
+      
+      // Check if Next button is visible and enabled
+      const nextButton = document.querySelector('button[data-test-id="authEmailButton"]');
+      const isNextButtonVisible = nextButton && nextButton.offsetParent !== null;
+      const isNextButtonEnabled = nextButton && !nextButton.disabled && !nextButton.classList.contains('disabled');
+      
+      // Check for any validation errors
+      const hasValidationError = document.querySelector('.error, .invalid, [class*="error"], [class*="invalid"]') !== null;
+      
+      return {
+        enteredEmail: enteredEmail,
+        isCorrect: enteredEmail === expectedEmail,
+        isNextButtonVisible: isNextButtonVisible,
+        isNextButtonEnabled: isNextButtonEnabled,
+        hasValidationError: hasValidationError,
+        nextButtonText: nextButton ? nextButton.innerText : null
+      };
+    }, tempEmail);
     
-    if (enteredEmail === tempEmail) {
-      addDebugStep('Email Input', 'success', `Email successfully entered: ${enteredEmail}`);
+    addDebugStep('Email Input', 'info', `Email validation results:`, null, JSON.stringify(emailValidation, null, 2));
+    
+    if (emailValidation.isCorrect) {
+      addDebugStep('Email Input', 'success', `Email successfully entered: ${emailValidation.enteredEmail}`);
     } else {
-      addDebugStep('Email Input', 'warning', `Email verification failed. Expected: ${tempEmail}, Got: ${enteredEmail}`);
+      addDebugStep('Email Input', 'error', `❌ CRITICAL: Email verification failed. Expected: ${tempEmail}, Got: ${emailValidation.enteredEmail} - stopping process`);
+      throw new Error('Email input failed - this step is obligatory');
+    }
+    
+    if (emailValidation.hasValidationError) {
+      addDebugStep('Email Input', 'warning', 'Validation error detected on page');
+    }
+    
+    if (emailValidation.isNextButtonVisible && emailValidation.isNextButtonEnabled) {
+      addDebugStep('Email Input', 'success', 'Next button is visible and enabled - email validation successful!');
+    } else {
+      addDebugStep('Email Input', 'warning', `Next button status - Visible: ${emailValidation.isNextButtonVisible}, Enabled: ${emailValidation.isNextButtonEnabled}`);
+      
+      // Try alternative email input method if Next button is not visible
+      addDebugStep('Email Input', 'info', 'Trying alternative email input method...');
+      
+      await page.evaluate((email) => {
+        const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
+        if (emailInput) {
+          // Clear and set value using different approach
+          emailInput.focus();
+          emailInput.value = '';
+          
+          // Simulate typing
+          for (let i = 0; i < email.length; i++) {
+            emailInput.value = email.substring(0, i + 1);
+            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+            emailInput.dispatchEvent(new Event('keyup', { bubbles: true }));
+          }
+          
+          // Final validation events
+          emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+          emailInput.dispatchEvent(new Event('blur', { bubbles: true }));
+          emailInput.dispatchEvent(new Event('focus', { bubbles: true }));
+          
+          // Force validation
+          if (emailInput.checkValidity) {
+            emailInput.checkValidity();
+          }
+        }
+      }, tempEmail);
+      
+      await sleep(2000);
+      
+      // Check again after alternative method
+      const revalidation = await page.evaluate(() => {
+        const nextButton = document.querySelector('button[data-test-id="authEmailButton"]');
+        return {
+          isNextButtonVisible: nextButton && nextButton.offsetParent !== null,
+          isNextButtonEnabled: nextButton && !nextButton.disabled && !nextButton.classList.contains('disabled')
+        };
+      });
+      
+      if (revalidation.isNextButtonVisible && revalidation.isNextButtonEnabled) {
+        addDebugStep('Email Input', 'success', 'Next button is now visible after alternative input method!');
+      } else {
+        addDebugStep('Email Input', 'error', '❌ CRITICAL: Next button still not visible after alternative input method - stopping process');
+        throw new Error('Email validation failed - Next button not becoming visible - this step is obligatory');
+      }
     }
     
     await takeScreenshot('Email-Entered', page);
     
-    // Step 5: Click Next button to proceed
-    addDebugStep('Next Button', 'info', 'Looking for Next button...');
+    // Step 5: Click Next button to proceed (we already verified it's visible and enabled)
+    addDebugStep('Next Button', 'info', 'Clicking Next button...');
     
     try {
-      // First, click on the email field to make sure it's focused and button becomes visible
-      await page.click('input[data-test-id="authEmailInput"]');
+      // Since we already verified the Next button is visible and enabled, just click it
+      await page.click('button[data-test-id="authEmailButton"]');
+      addDebugStep('Next Button', 'success', 'Clicked Next button successfully');
+      
       await sleep(1000);
-      
-      // Click under the email field to make the Next button visible
-      addDebugStep('Next Button', 'info', 'Clicking under email field to make Next button visible...');
-      const emailFieldBox = await page.evaluate(() => {
-        const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
-        if (emailInput) {
-          const rect = emailInput.getBoundingClientRect();
-          return {
-            x: rect.left + rect.width / 2,
-            y: rect.bottom + 50 // Click 50px below the email field
-          };
-        }
-        return null;
-      });
-      
-      if (emailFieldBox) {
-        await page.mouse.click(emailFieldBox.x, emailFieldBox.y);
-        addDebugStep('Next Button', 'success', 'Clicked under email field');
-      } else {
-        // Fallback: click in empty space
-        await page.mouse.click(100, 100);
-        addDebugStep('Next Button', 'info', 'Clicked in empty space as fallback');
-      }
-      
-      await sleep(2000); // Wait longer for button to become visible
-      
-      // Try multiple selectors for the Next button (avoiding Google button)
-      const nextButtonSelectors = [
-        'button[data-test-id="authEmailButton"]', // Specific selector from user
-        'button[type="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        'button:has-text("Next"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        'button:has-text("Suivant"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        'button:has-text("Continue"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        'button:has-text("Continuer"):not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        'input[type="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        '[data-test-id*="next"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        '[data-test-id*="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        'button[class*="submit"]:not([class*="google"]):not([class*="Google"])', // Exclude Google buttons
-        'button[class*="next"]:not([class*="google"]):not([class*="Google"])' // Exclude Google buttons
-      ];
-      
-      let nextButtonFound = false;
-      for (const selector of nextButtonSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 3000 });
-          
-          // Check if button is enabled and is the correct Next button (not Google button)
-          const buttonInfo = await page.evaluate((sel) => {
-            const button = document.querySelector(sel);
-            if (!button) return { found: false };
-            
-            const text = (button.innerText || button.textContent || '').toLowerCase();
-            const isGoogleButton = text.includes('google') || 
-                                 button.classList.contains('google') || 
-                                 button.classList.contains('Google') ||
-                                 button.getAttribute('class')?.includes('google') ||
-                                 button.getAttribute('class')?.includes('Google');
-            
-            return {
-              found: true,
-              enabled: !button.disabled && !button.classList.contains('disabled'),
-              isGoogleButton: isGoogleButton,
-              text: text,
-              isNextButton: text.includes('next') || text.includes('suivant') || text.includes('continue') || text.includes('continuer')
-            };
-          }, selector);
-          
-          if (!buttonInfo.found) {
-            addDebugStep('Next Button', 'warning', `Button not found with selector: ${selector}`);
-            continue;
-          }
-          
-          if (buttonInfo.isGoogleButton) {
-            addDebugStep('Next Button', 'warning', `Skipping Google button with selector: ${selector}`);
-            continue;
-          }
-          
-          if (!buttonInfo.isNextButton) {
-            addDebugStep('Next Button', 'warning', `Button text "${buttonInfo.text}" doesn't match Next button with selector: ${selector}`);
-            continue;
-          }
-          
-          const isEnabled = buttonInfo.enabled;
-          
-          if (!isEnabled) {
-            addDebugStep('Next Button', 'info', `Button found but disabled, waiting for it to become enabled...`);
-            
-            // Wait for button to become enabled
-            await page.waitForFunction((sel) => {
-              const button = document.querySelector(sel);
-              return button && !button.disabled && !button.classList.contains('disabled');
-            }, { timeout: 10000 }, selector);
-            
-            addDebugStep('Next Button', 'success', `Button is now enabled`);
-          }
-          
-          // Trigger events to ensure the button is properly activated
-          await page.evaluate((sel) => {
-            const button = document.querySelector(sel);
-            if (button) {
-              // Focus the email field first to trigger validation
-              const emailInput = document.querySelector('input[data-test-id="authEmailInput"]');
-              if (emailInput) {
-                emailInput.focus();
-                emailInput.blur();
-                emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                emailInput.dispatchEvent(new Event('change', { bubbles: true }));
-              }
-              
-              // Then focus the button
-              button.focus();
-            }
-          }, selector);
-          
-          await sleep(1000); // Wait a bit for any validation to complete
-          
-          // Now click the button
-          await page.click(selector);
-          addDebugStep('Next Button', 'success', `Clicked Next button using selector: ${selector}`);
-          nextButtonFound = true;
-          break;
-        } catch (e) {
-          addDebugStep('Next Button', 'warning', `Selector ${selector} failed: ${e.message}`);
-          // Try next selector
-          continue;
-        }
-      }
-      
-      if (!nextButtonFound) {
-        // Last resort: try to find any clickable button
-        const anyButton = await page.evaluate(() => {
-          const buttons = document.querySelectorAll('button, input[type="submit"], [role="button"]');
-          for (const btn of buttons) {
-            const text = (btn.innerText || btn.value || '').toLowerCase();
-            if (text.includes('next') || text.includes('suivant') || text.includes('continue') || text.includes('submit')) {
-              btn.click();
-              return true;
-            }
-          }
-          return false;
-        });
-        
-        if (anyButton) {
-          addDebugStep('Next Button', 'success', 'Clicked Next button using JavaScript evaluation');
-          nextButtonFound = true;
-        }
-      }
-      
-      if (!nextButtonFound) {
-        addDebugStep('Next Button', 'error', '❌ CRITICAL: Could not find Next button - stopping process');
-        throw new Error('Next button not found - this step is obligatory');
-      }
       
       // Wait for page to update to confirmation code page
       addDebugStep('Next Button', 'info', 'Waiting for page to transition to confirmation code step...');
