@@ -540,6 +540,30 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           // Refresh button not found, continue
         }
         
+        // Debug: Check what elements are available on the page
+        if (attempt === 1) {
+          const pageInfo = await tempMailPage.evaluate(() => {
+            const allLinks = document.querySelectorAll('a');
+            const allDivs = document.querySelectorAll('div');
+            const allElements = document.querySelectorAll('*');
+            
+            const emailRelated = Array.from(allElements).filter(el => {
+              const text = (el.innerText || el.textContent || '').toLowerCase();
+              return text.includes('latenode') || text.includes('confirm') || text.includes('email');
+            });
+            
+            return {
+              totalLinks: allLinks.length,
+              totalDivs: allDivs.length,
+              totalElements: allElements.length,
+              emailRelatedElements: emailRelated.length,
+              emailRelatedTexts: emailRelated.map(el => (el.innerText || el.textContent || '').substring(0, 50)).slice(0, 10)
+            };
+          });
+          
+          addDebugStep('Email Check', 'info', `Page debug info:`, null, JSON.stringify(pageInfo, null, 2));
+        }
+        
         // Try multiple selectors for the email
         const emailSelectors = [
           'a.email-item:has-text("Latenode")',
@@ -547,7 +571,20 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           'a.email-item:has-text("latenode")',
           'a.email-item:has-text("confirm")',
           'a[href*="detail"]:has-text("Latenode")',
-          'a[href*="detail"]:has-text("Confirm")'
+          'a[href*="detail"]:has-text("Confirm")',
+          // More specific selectors for the email item
+          'a:has-text("Latenode")',
+          'a:has-text("Confirm your email address")',
+          'a:has-text("Confirm your email")',
+          'a:has-text("confirm")',
+          // Look for any clickable element containing Latenode
+          '[class*="email"]:has-text("Latenode")',
+          '[class*="item"]:has-text("Latenode")',
+          '[class*="mail"]:has-text("Latenode")',
+          // Generic selectors for email items
+          'a[href*="detail"]',
+          '.email-item',
+          '[class*="email-item"]'
         ];
         
         for (const selector of emailSelectors) {
@@ -573,16 +610,50 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       }
       
       if (!emailFound) {
-        // Last resort: try JavaScript evaluation
+        // Last resort: try JavaScript evaluation with more comprehensive search
         const emailClicked = await tempMailPage.evaluate(() => {
-          const emailItems = document.querySelectorAll('a.email-item, a[href*="detail"]');
-          for (const item of emailItems) {
+          // Try multiple selectors for email items
+          const selectors = [
+            'a.email-item',
+            'a[href*="detail"]',
+            '[class*="email"]',
+            '[class*="item"]',
+            'a[class*="email"]',
+            'div[class*="email"]',
+            'div[class*="item"]'
+          ];
+          
+          let allItems = [];
+          for (const selector of selectors) {
+            const items = document.querySelectorAll(selector);
+            allItems = allItems.concat(Array.from(items));
+          }
+          
+          // Remove duplicates
+          allItems = [...new Set(allItems)];
+          
+          console.log('Found', allItems.length, 'potential email items');
+          
+          for (const item of allItems) {
             const text = (item.innerText || item.textContent || '').toLowerCase();
+            console.log('Checking item with text:', text.substring(0, 100));
+            
             if (text.includes('latenode') || text.includes('confirm')) {
+              console.log('Found Latenode email, clicking...');
               item.click();
               return true;
             }
           }
+          
+          // If no specific match, try clicking the first clickable email item
+          for (const item of allItems) {
+            if (item.tagName === 'A' || item.onclick || item.getAttribute('href')) {
+              console.log('Clicking first available email item');
+              item.click();
+              return true;
+            }
+          }
+          
           return false;
         });
         
