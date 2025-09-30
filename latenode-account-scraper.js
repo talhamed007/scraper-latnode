@@ -706,84 +706,128 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await takeScreenshot('Email-After-Scroll', tempMailPage);
       
       confirmationCode = await tempMailPage.evaluate(() => {
-        // Get the full page text after scrolling
-        const bodyText = document.body.innerText;
-        console.log('Full email text length:', bodyText.length);
-        console.log('Email text preview:', bodyText.substring(0, 500));
+        console.log('=== SMART CODE EXTRACTION START ===');
         
-        // First, try to find the specific span element with large font size (48px)
-        const largeFontSpans = document.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
-        console.log('Found large font spans:', largeFontSpans.length);
+        // Get all elements that might contain the code
+        const allElements = document.querySelectorAll('*');
+        const candidates = [];
         
-        for (const span of largeFontSpans) {
-          const text = span.textContent || span.innerText || '';
-          const codeMatch = text.match(/\d{4}/);
-          if (codeMatch) {
-            console.log('Found code in large font span:', codeMatch[0]);
-            return codeMatch[0];
-          }
-        }
-        
-        // Also try to find spans with large font sizes (any size >= 30px)
-        const allSpans = document.querySelectorAll('span');
-        for (const span of allSpans) {
-          const style = span.getAttribute('style') || '';
-          const fontSize = style.match(/font-size:\s*(\d+)px/);
-          if (fontSize && parseInt(fontSize[1]) >= 30) {
-            const text = span.textContent || span.innerText || '';
-            const codeMatch = text.match(/\d{4}/);
-            if (codeMatch) {
-              console.log('Found code in large font span (size:', fontSize[1], 'px):', codeMatch[0]);
-              return codeMatch[0];
-            }
-          }
-        }
-        
-        // Look for confirmation code in various formats with more specific patterns
-        const patterns = [
-          /confirmation code[:\s]*(\d{4})/i,
-          /verification code[:\s]*(\d{4})/i,
-          /your code[:\s]*(\d{4})/i,
-          /code[:\s]*(\d{4})/i,
-          /enter code[:\s]*(\d{4})/i,
-          /use code[:\s]*(\d{4})/i,
-          /code is[:\s]*(\d{4})/i,
-          /code:[\s]*(\d{4})/i,
-          /code[\s]*(\d{4})/i
-        ];
-        
-        for (const pattern of patterns) {
-          const match = bodyText.match(pattern);
-          if (match) {
-            console.log('Found confirmation code with pattern:', pattern, 'Code:', match[1]);
-            return match[1];
-          }
-        }
-        
-        // Look for any 4-digit number, but prioritize those that appear after "code" or "confirmation"
-        const allNumbers = bodyText.match(/\b\d{4}\b/g);
-        if (allNumbers && allNumbers.length > 0) {
-          console.log('Found 4-digit numbers:', allNumbers);
+        // Find all elements containing 4-digit numbers
+        for (const element of allElements) {
+          const text = element.textContent || element.innerText || '';
+          const numbers = text.match(/\b\d{4}\b/g);
           
-          // Look for numbers that appear near "code" or "confirmation" keywords
-          for (const number of allNumbers) {
-            const numberIndex = bodyText.indexOf(number);
-            const beforeText = bodyText.substring(Math.max(0, numberIndex - 50), numberIndex).toLowerCase();
-            const afterText = bodyText.substring(numberIndex, Math.min(bodyText.length, numberIndex + 50)).toLowerCase();
+          if (numbers && numbers.length > 0) {
+            // Get element properties for scoring
+            const computedStyle = window.getComputedStyle(element);
+            const fontSize = parseInt(computedStyle.fontSize) || 0;
+            const fontWeight = computedStyle.fontWeight;
+            const isBold = fontWeight === 'bold' || fontWeight === '700' || parseInt(fontWeight) >= 700;
+            const display = computedStyle.display;
+            const visibility = computedStyle.visibility;
+            const opacity = parseFloat(computedStyle.opacity) || 1;
+            const rect = element.getBoundingClientRect();
+            const area = rect.width * rect.height;
+            const isVisible = rect.width > 0 && rect.height > 0 && visibility !== 'hidden' && opacity > 0;
             
-            if (beforeText.includes('code') || beforeText.includes('confirmation') || 
-                afterText.includes('code') || afterText.includes('confirmation')) {
-              console.log('Found confirmation code near keyword:', number);
-              return number;
+            // Check if element has inline styles
+            const inlineStyle = element.getAttribute('style') || '';
+            const inlineFontSize = inlineStyle.match(/font-size:\s*(\d+)px/);
+            const inlineFontSizeValue = inlineFontSize ? parseInt(inlineFontSize[1]) : 0;
+            
+            for (const number of numbers) {
+              const score = {
+                number: number,
+                element: element.tagName,
+                fontSize: Math.max(fontSize, inlineFontSizeValue),
+                isBold: isBold,
+                area: area,
+                isVisible: isVisible,
+                display: display,
+                hasInlineStyle: inlineStyle.length > 0,
+                textLength: text.length,
+                position: {
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height
+                }
+              };
+              
+              candidates.push(score);
+              console.log('Found candidate:', score);
             }
           }
-          
-          // If no number near keywords, return the last one (likely at the bottom)
-          console.log('Using last 4-digit number found:', allNumbers[allNumbers.length - 1]);
-          return allNumbers[allNumbers.length - 1];
         }
         
-        return null;
+        console.log('Total candidates found:', candidates.length);
+        
+        if (candidates.length === 0) {
+          console.log('No 4-digit numbers found');
+          return null;
+        }
+        
+        // Filter out invisible or very small elements
+        const visibleCandidates = candidates.filter(c => 
+          c.isVisible && 
+          c.area > 100 && 
+          c.fontSize > 10 &&
+          c.textLength < 100 // Avoid very long text elements
+        );
+        
+        console.log('Visible candidates:', visibleCandidates.length);
+        
+        if (visibleCandidates.length === 0) {
+          console.log('No visible candidates, using all candidates');
+          return candidates[0].number;
+        }
+        
+        // Score candidates based on multiple factors
+        const scoredCandidates = visibleCandidates.map(candidate => {
+          let score = 0;
+          
+          // Font size score (higher is better)
+          score += candidate.fontSize * 2;
+          
+          // Bold text score
+          if (candidate.isBold) score += 50;
+          
+          // Area score (larger is better, but not too large)
+          score += Math.min(candidate.area / 100, 100);
+          
+          // Inline style score (elements with inline styles are often important)
+          if (candidate.hasInlineStyle) score += 30;
+          
+          // Position score (elements in the center are often more important)
+          const centerX = window.innerWidth / 2;
+          const centerY = window.innerHeight / 2;
+          const distanceFromCenter = Math.sqrt(
+            Math.pow(candidate.position.x + candidate.position.width/2 - centerX, 2) +
+            Math.pow(candidate.position.y + candidate.position.height/2 - centerY, 2)
+          );
+          score += Math.max(0, 100 - distanceFromCenter / 10);
+          
+          // Element type score (span elements are often used for codes)
+          if (candidate.element === 'SPAN') score += 20;
+          
+          // Text length score (shorter text is more likely to be a code)
+          score += Math.max(0, 50 - candidate.textLength);
+          
+          return { ...candidate, finalScore: score };
+        });
+        
+        // Sort by score (highest first)
+        scoredCandidates.sort((a, b) => b.finalScore - a.finalScore);
+        
+        console.log('Scored candidates (top 5):');
+        scoredCandidates.slice(0, 5).forEach((c, i) => {
+          console.log(`${i + 1}. Number: ${c.number}, Score: ${c.finalScore}, FontSize: ${c.fontSize}, Bold: ${c.isBold}, Area: ${c.area}`);
+        });
+        
+        const bestCandidate = scoredCandidates[0];
+        console.log('Selected code:', bestCandidate.number, 'with score:', bestCandidate.finalScore);
+        
+        return bestCandidate.number;
       });
       
       if (confirmationCode) {
