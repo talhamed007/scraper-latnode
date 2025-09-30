@@ -711,6 +711,34 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         console.log('Full email text length:', bodyText.length);
         console.log('Email text preview:', bodyText.substring(0, 500));
         
+        // First, try to find the specific span element with large font size (48px)
+        const largeFontSpans = document.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
+        console.log('Found large font spans:', largeFontSpans.length);
+        
+        for (const span of largeFontSpans) {
+          const text = span.textContent || span.innerText || '';
+          const codeMatch = text.match(/\d{4}/);
+          if (codeMatch) {
+            console.log('Found code in large font span:', codeMatch[0]);
+            return codeMatch[0];
+          }
+        }
+        
+        // Also try to find spans with large font sizes (any size >= 30px)
+        const allSpans = document.querySelectorAll('span');
+        for (const span of allSpans) {
+          const style = span.getAttribute('style') || '';
+          const fontSize = style.match(/font-size:\s*(\d+)px/);
+          if (fontSize && parseInt(fontSize[1]) >= 30) {
+            const text = span.textContent || span.innerText || '';
+            const codeMatch = text.match(/\d{4}/);
+            if (codeMatch) {
+              console.log('Found code in large font span (size:', fontSize[1], 'px):', codeMatch[0]);
+              return codeMatch[0];
+            }
+          }
+        }
+        
         // Look for confirmation code in various formats with more specific patterns
         const patterns = [
           /confirmation code[:\s]*(\d{4})/i,
