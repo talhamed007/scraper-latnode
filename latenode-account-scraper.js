@@ -711,21 +711,40 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         // FIRST: Look for the specific pattern you mentioned
         console.log('Looking for specific confirmation code pattern...');
         
-        // Look for divs containing "Confirmation code:" text
-        const confirmationDivs = document.querySelectorAll('div');
-        for (const div of confirmationDivs) {
+        // Look for divs containing "Confirmation code:" text (case insensitive)
+        const allDivs = document.querySelectorAll('div');
+        console.log('Total divs found:', allDivs.length);
+        
+        for (let i = 0; i < allDivs.length; i++) {
+          const div = allDivs[i];
           const text = div.textContent || div.innerText || '';
-          if (text.toLowerCase().includes('confirmation code')) {
-            console.log('Found div with "confirmation code" text:', text.substring(0, 100));
+          const innerHTML = div.innerHTML || '';
+          
+          console.log(`Div ${i}: text length: ${text.length}, innerHTML length: ${innerHTML.length}`);
+          
+          if (text.toLowerCase().includes('confirmation code') || innerHTML.toLowerCase().includes('confirmation code')) {
+            console.log('Found div with "confirmation code" text!');
+            console.log('Div text:', text.substring(0, 200));
+            console.log('Div innerHTML:', innerHTML.substring(0, 200));
             
             // Look for spans with font-size:48px inside this div
-            const spans = div.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
-            for (const span of spans) {
+            const spans = div.querySelectorAll('span');
+            console.log('Spans found in confirmation div:', spans.length);
+            
+            for (let j = 0; j < spans.length; j++) {
+              const span = spans[j];
+              const spanStyle = span.getAttribute('style') || '';
               const spanText = span.textContent || span.innerText || '';
-              const codeMatch = spanText.match(/\d{4}/);
-              if (codeMatch) {
-                console.log('Found code in confirmation div span:', codeMatch[0]);
-                return codeMatch[0];
+              
+              console.log(`Span ${j}: style="${spanStyle}", text="${spanText}"`);
+              
+              if (spanStyle.includes('font-size:48px') || spanStyle.includes('font-size: 48px')) {
+                console.log('Found span with font-size:48px!');
+                const codeMatch = spanText.match(/\d{4}/);
+                if (codeMatch) {
+                  console.log('Found code in confirmation div span:', codeMatch[0]);
+                  return codeMatch[0];
+                }
               }
             }
             
@@ -738,7 +757,44 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           }
         }
         
-        // SECOND: Look for spans with font-size:48px anywhere
+        console.log('No div with "confirmation code" text found');
+        
+        // SECOND: Look for the exact HTML structure you mentioned
+        console.log('Looking for exact HTML structure...');
+        
+        // Search for divs with the specific style attributes
+        const specificDivs = document.querySelectorAll('div[style*="margin: 0 auto"], div[style*="font-family: Helvetica"]');
+        console.log('Found divs with specific styles:', specificDivs.length);
+        
+        for (let i = 0; i < specificDivs.length; i++) {
+          const div = specificDivs[i];
+          const text = div.textContent || div.innerText || '';
+          const innerHTML = div.innerHTML || '';
+          
+          console.log(`Specific div ${i}: text="${text.substring(0, 100)}"`);
+          
+          if (text.toLowerCase().includes('confirmation code') || innerHTML.toLowerCase().includes('confirmation code')) {
+            console.log('Found div with exact structure!');
+            
+            // Look for spans with font-size:48px
+            const spans = div.querySelectorAll('span');
+            for (const span of spans) {
+              const spanStyle = span.getAttribute('style') || '';
+              const spanText = span.textContent || span.innerText || '';
+              
+              if (spanStyle.includes('font-size:48px')) {
+                console.log('Found span with font-size:48px in specific div:', spanText);
+                const codeMatch = spanText.match(/\d{4}/);
+                if (codeMatch) {
+                  console.log('Found code in specific div span:', codeMatch[0]);
+                  return codeMatch[0];
+                }
+              }
+            }
+          }
+        }
+        
+        // THIRD: Look for spans with font-size:48px anywhere
         console.log('Looking for spans with font-size:48px...');
         const largeFontSpans = document.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
         console.log('Found large font spans:', largeFontSpans.length);
