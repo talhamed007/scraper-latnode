@@ -441,6 +441,68 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     await sleep(2000);
     await takeScreenshot('TempMail100-Inbox', tempMailPage);
     
+    // Handle consent dialog if it appears
+    addDebugStep('Consent Dialog', 'info', 'Checking for consent dialog...');
+    try {
+      // Wait for consent dialog to appear with multiple selectors
+      const consentSelectors = [
+        'button:has-text("Consent")',
+        'button:has-text("Accept")', 
+        'button:has-text("Agree")',
+        'button:has-text("I agree")',
+        'button:has-text("Accept All")',
+        'button:has-text("Accept all")',
+        'button:has-text("Allow")',
+        'button:has-text("OK")',
+        'button:has-text("Continue")',
+        '[class*="consent"] button',
+        '[class*="cookie"] button',
+        '[class*="gdpr"] button',
+        'button[class*="accept"]',
+        'button[class*="consent"]'
+      ];
+      
+      let consentClicked = false;
+      for (const selector of consentSelectors) {
+        try {
+          await tempMailPage.waitForSelector(selector, { timeout: 2000 });
+          
+          // Check if button is visible and clickable
+          const buttonInfo = await tempMailPage.evaluate((sel) => {
+            const button = document.querySelector(sel);
+            if (!button) return { found: false };
+            
+            return {
+              found: true,
+              visible: button.offsetParent !== null,
+              enabled: !button.disabled && !button.classList.contains('disabled'),
+              text: button.innerText || button.textContent || ''
+            };
+          }, selector);
+          
+          if (buttonInfo.found && buttonInfo.visible && buttonInfo.enabled) {
+            await tempMailPage.click(selector);
+            addDebugStep('Consent Dialog', 'success', `Clicked consent button: "${buttonInfo.text}"`);
+            consentClicked = true;
+            break;
+          }
+        } catch (e) {
+          // Try next selector
+          continue;
+        }
+      }
+      
+      if (consentClicked) {
+        await sleep(2000);
+        await takeScreenshot('TempMail100-After-Consent', tempMailPage);
+      } else {
+        addDebugStep('Consent Dialog', 'info', 'No consent dialog found or already handled');
+      }
+      
+    } catch (error) {
+      addDebugStep('Consent Dialog', 'info', 'No consent dialog found or already handled');
+    }
+    
     // Look for the Latenode confirmation email
     addDebugStep('Email Check', 'info', 'Looking for Latenode confirmation email...');
     
