@@ -2,28 +2,49 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// Call this after you've clicked the email in the list.
+// Call this right after you clicked the email row in tempmail100
 async function extractCodeTempmail100(page, { timeout = 30000 } = {}) {
-  // 1) Wait for the email view to be present
+  // 1) Wait for the email view
   const rootSel = '.detail-box, .detail';
   await page.waitForSelector(rootSel, { visible: true, timeout });
-  const rootEl = await page.$(rootSel);
+  const root = await page.$(rootSel);
 
-  // 2) If there is an iframe inside the email view, use its contentFrame
-  const iframeEl = await rootEl.$('iframe');
-  if (iframeEl) {
-    const frame = await iframeEl.contentFrame();
-    if (!frame) throw new Error('iframe present but no contentFrame()');
-    return await extractFromEmailFrame(frame, timeout);
+  // 2) Find all iframes that are actually inside the email container
+  const candidateFrames = [];
+  for (const f of page.frames()) {
+    try {
+      const iframeEl = await f.frameElement();              // <iframe> element handle
+      const isInside = await root.evaluate((r, el) => r.contains(el), iframeEl);
+      if (!isInside) continue;
+
+      // Filter obvious non-content frames
+      const u = f.url() || '';
+      if (/googleads|doubleclick|recaptcha|gstatic|googlesyndication/i.test(u)) continue;
+
+      candidateFrames.push(f);
+    } catch {
+      // cross-origin frames may throw; skip
+    }
   }
 
-  // 3) Otherwise, the email HTML is inline -> extract scoped to .detail-box/.detail
-  return await extractFromEmailContainer(page, rootEl, timeout);
+  // 3) Try frames first (srcdoc/blank is common), then fallback to inline HTML in root
+  for (const f of candidateFrames) {
+    const got = await tryExtractFromFrame(f, timeout).catch(() => null);
+    if (got) return got;
+  }
+
+  const inline = await tryExtractFromContainer(page, root, timeout).catch(() => null);
+  if (inline) return inline;
+
+  throw new Error('Code not found in any email frame or container');
 }
 
-// --- extraction inside an iframe (Frame API) ------------------------------
-async function extractFromEmailFrame(frame, timeout) {
-  // The label "Confirmation code" is present in the body text
+// ── helpers ───────────────────────────────────────────────────────────────────
+function digits(s) { return String(s || '').replace(/\D+/g, ''); }
+function isOtp(s)  { return /^\d{4,8}$/.test(s || ''); }
+
+async function tryExtractFromFrame(frame, timeout) {
+  // Wait until frame actually contains the label text (no network-idle here)
   await frame.waitForFunction(
     () => /Confirmation code/i.test(document.body?.innerText || ''),
     { timeout }
@@ -35,79 +56,70 @@ async function extractFromEmailFrame(frame, timeout) {
     "//td/div[contains(., 'Confirmation code')]/following::span[1]"
   );
   if (el) {
-    const txt = (await frame.evaluate(e => e.textContent, el)).trim();
-    const code = digits(txt);
-    if (isOtp(code)) return code;
+    const raw = (await frame.evaluate(e => e.textContent, el)).trim();
+    const c = digits(raw);
+    if (isOtp(c)) return c;
   }
 
-  // B) large-font fallback (your email uses font-size:48px)
+  // B) large-font span fallback
   const spans = await frame.$$('span');
   for (const s of spans) {
-    const { text, fs } = await frame.evaluate(el => ({
-      text: (el.textContent || '').trim(),
-      fs: parseFloat(getComputedStyle(el).fontSize || '0'),
+    const { text, fs } = await frame.evaluate(e => ({
+      text: (e.textContent || '').trim(),
+      fs: parseFloat(getComputedStyle(e).fontSize || '0')
     }), s);
     const m = text.match(/\b(\d{4,8})\b/);
     if (m && fs >= 36) return m[1];
   }
 
-  // C) text search scoped to frame
-  const t = await frame.evaluate(() => document.body?.innerText || '');
-  const m = t.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
-  if (m) return m[1];
-
-  throw new Error('Code not found inside iframe');
+  // C) scoped text search
+  const txt = await frame.evaluate(() => document.body?.innerText || '');
+  const m = txt.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
+  return m ? m[1] : null;
 }
 
-// --- extraction scoped to the .detail/.detail-box element -----------------
-async function extractFromEmailContainer(page, rootEl, timeout) {
-  // Wait until the container actually contains the label text
+async function tryExtractFromContainer(page, rootEl, timeout) {
+  // Wait until the container text includes the label
   await page.waitForFunction(
-    (el) => /Confirmation code/i.test(el?.innerText || ''),
+    el => /Confirmation code/i.test(el?.innerText || ''),
     { timeout },
     rootEl
   );
 
-  // A) label → first following <span> (scoped to container)
-  const codeA = await page.evaluate((el) => {
+  // A) label → span (scoped to rootEl)
+  const codeA = await page.evaluate(el => {
     const lbl = Array.from(el.querySelectorAll('div, td')).find(n =>
       /Confirmation code/i.test(n.innerText || '')
     );
     const span = lbl?.querySelector('span') || lbl?.parentElement?.querySelector('span');
     const raw  = (span?.textContent || '').trim();
-    const num  = raw.replace(/\D+/g, '');
+    const num  = (raw || '').replace(/\D+/g, '');
     return /^\d{4,8}$/.test(num) ? num : null;
   }, rootEl);
   if (codeA) return codeA;
 
-  // B) pick the biggest-font span with digits within the container
-  const codeB = await page.evaluate((el) => {
+  // B) biggest-font span with digits
+  const codeB = await page.evaluate(el => {
     let best = null, bestFs = 0;
     for (const s of el.querySelectorAll('span')) {
       const txt = (s.textContent || '').trim();
-      const mm  = txt.match(/\b(\d{4,8})\b/);
-      if (!mm) continue;
+      const m   = txt.match(/\b(\d{4,8})\b/);
+      if (!m) continue;
       const fs = parseFloat(getComputedStyle(s).fontSize || '0');
-      if (fs > bestFs) { bestFs = fs; best = mm[1]; }
+      if (fs > bestFs) { bestFs = fs; best = m[1]; }
     }
     return best;
   }, rootEl);
   if (codeB) return codeB;
 
-  // C) text search scoped to container (won't grab year 2025)
-  const codeC = await page.evaluate((el) => {
-    const txt = el.innerText || '';
-    const m = txt.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
+  // C) scoped text search
+  const codeC = await page.evaluate(el => {
+    const t = el.innerText || '';
+    const m = t.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
     return m ? m[1] : null;
   }, rootEl);
-  if (codeC) return codeC;
-
-  throw new Error('Code not found in .detail/.detail-box');
+  return codeC;
 }
-
-// --- helpers --------------------------------------------------------------
-const digits = (s) => String(s || '').replace(/\D+/g, '');
-const isOtp  = (s) => /^\d{4,8}$/.test(s || '');
 
 // Global variable for io instance
 let io = null;
