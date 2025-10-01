@@ -23,13 +23,21 @@ async function extractCodeWithImageAnalysis(page) {
   // Send to ChatGPT Vision API
   addDebugStep('Image Analysis', 'info', 'Sending image to ChatGPT Vision API...');
   
+  // Check if API key is available
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY environment variable is not set');
+  }
+  
+  addDebugStep('Image Analysis', 'info', `API Key found: ${apiKey.substring(0, 10)}...`);
+  
   // Dynamic import for node-fetch (ES module)
   const { default: fetch } = await import('node-fetch');
   
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
