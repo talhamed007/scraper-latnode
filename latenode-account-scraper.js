@@ -843,6 +843,70 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       // Take a screenshot after scrolling to see the full email content
       await takeScreenshot('Email-After-Scroll', tempMailPage);
       
+      // Debug: Capture modal structure for ChatGPT
+      addDebugStep('Code Extraction', 'info', 'Debugging modal structure...');
+      const modalDebugInfo = await tempMailPage.evaluate(() => {
+        // Find all potential modal containers
+        const modalSelectors = [
+          'div[role="dialog"]',
+          '.modal',
+          '.ReactModal__Content',
+          '[class*="modal"]',
+          '[class*="Modal"]',
+          '[class*="dialog"]',
+          '[class*="Dialog"]',
+          '[class*="popup"]',
+          '[class*="Popup"]',
+          '[class*="overlay"]',
+          '[class*="Overlay"]'
+        ];
+        
+        const modals = [];
+        for (const selector of modalSelectors) {
+          const elements = document.querySelectorAll(selector);
+          for (const el of elements) {
+            const text = el.innerText || el.textContent || '';
+            if (text.includes('Back to home') || text.includes('Delete') || text.includes('Confirmation code')) {
+              modals.push({
+                selector: selector,
+                tagName: el.tagName,
+                className: el.className,
+                id: el.id,
+                role: el.getAttribute('role'),
+                textContent: text.substring(0, 200),
+                hasIframe: !!el.querySelector('iframe'),
+                iframeCount: el.querySelectorAll('iframe').length
+              });
+            }
+          }
+        }
+        
+        // Also check for any iframes
+        const iframes = Array.from(document.querySelectorAll('iframe')).map(iframe => ({
+          src: iframe.src,
+          id: iframe.id,
+          className: iframe.className,
+          hasContent: iframe.contentDocument ? true : false
+        }));
+        
+        return {
+          modals: modals,
+          iframes: iframes,
+          allElementsWithText: Array.from(document.querySelectorAll('*')).filter(el => {
+            const text = el.innerText || el.textContent || '';
+            return text.includes('Confirmation code') || text.includes('Back to home') || text.includes('Delete');
+          }).map(el => ({
+            tagName: el.tagName,
+            className: el.className,
+            id: el.id,
+            role: el.getAttribute('role'),
+            textContent: text.substring(0, 100)
+          })).slice(0, 10)
+        };
+      });
+      
+      addDebugStep('Code Extraction', 'info', 'Modal debug info:', null, JSON.stringify(modalDebugInfo, null, 2));
+      
       // Extract confirmation code using modal-aware method
       addDebugStep('Code Extraction', 'info', 'Extracting confirmation code from email modal...');
       try {
