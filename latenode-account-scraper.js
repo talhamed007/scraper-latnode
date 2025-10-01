@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// Import fetch for API calls (Node.js 18+)
+// Import fetch for API calls
 const fetch = require('node-fetch');
 
 // Image analysis function using ChatGPT Vision API
