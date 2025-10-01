@@ -2,105 +2,82 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// ---- Latenode email OTP extractor (Puppeteer) ----------------------------
-async function extractLatenodeOTP(page, { screenshotOnFail = true } = {}) {
-  // 1) Find the frame that contains the email content
-  const frame = await findEmailFrame(page);
+// Extract the Latenode confirmation code from the open tempmail detail view.
+async function getConfirmationCode(page, { timeout = 30000 } = {}) {
+  const frame = await findEmailFrame(page, timeout);
 
-  // 2) Give the frame a moment to paint the email
-  await frame.waitForSelector('table, div, body', { visible: true, timeout: 10_000 });
-
-  // 3) Strategy A: XPath – span after "Confirmation code"
+  // Strategy A — the span right after the "Confirmation code" label
   try {
     const [el] = await frame.$x(
+      "//div[contains(., 'Confirmation code')]/following::span[1] | " +
       "//td/div[contains(., 'Confirmation code')]/following::span[1]"
     );
     if (el) {
-      const code = (await frame.evaluate(e => e.textContent, el)).trim();
+      const raw = (await frame.evaluate(e => e.textContent, el)).trim();
+      const code = onlyDigits(raw);
       if (isOtp(code)) return code;
-      console.log('[OTP] XPath found but failed validation:', code);
-    } else {
-      console.log('[OTP] XPath element not found');
     }
-  } catch (e) {
-    console.log('[OTP] XPath error:', e.message);
-  }
+  } catch {}
 
-  // 4) Strategy B: CSS – large font-size number span (as in your screenshot)
+  // Strategy B — the big-font span (your screenshot shows font-size:48px)
   try {
-    const selector = "span[style*='font-size:48px']";
-    const el = await frame.$(selector);
-    if (el) {
-      const code = (await frame.evaluate(e => e.textContent, el)).trim();
-      if (isOtp(code)) return code;
-      console.log('[OTP] CSS 48px found but failed validation:', code);
-    } else {
-      console.log('[OTP] CSS element not found:', selector);
+    const sel = "span[style*='font-size:48px'], span";
+    const all = await frame.$$(sel);
+    for (const el of all) {
+      const { text, fontSize } = await frame.evaluate(el => {
+        const txt = (el.textContent || '').trim();
+        const fs  = parseFloat(getComputedStyle(el).fontSize || '0');
+        return { text: txt, fontSize: fs };
+      }, el);
+      const code = onlyDigits(text);
+      if (isOtp(code) && fontSize >= 36) return code; // require "big enough"
     }
-  } catch (e) {
-    console.log('[OTP] CSS error:', e.message);
-  }
+  } catch {}
 
-  // 5) Strategy C: Scoped text search near the label
-  try {
-    const { code, dump } = await frame.evaluate(() => {
-      const root =
-        document.querySelector('.modal, .email, .content, table') || document.body;
-      const text = root.innerText || '';
-      // Grab up to ~200 chars after the label and search for 4–8 digits
-      const m = text.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
-      return { code: m ? m[1] : null, dump: text.slice(0, 8000) };
-    });
-    if (code && /^\d{4,8}$/.test(code)) return code.trim();
+  // Strategy C — scoped text search just inside the email (avoid matching the year)
+  const code = await frame.evaluate(() => {
+    const root = document.querySelector("table[id^='rec'], table, .email, .content") || document.body;
+    const text = root.innerText || '';
+    const m = text.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
+    return m ? m[1] : null;
+  });
+  if (isOtp(code)) return code;
 
-    console.log('[OTP] Text search failed or invalid code:', code);
-    // Optional: uncomment to inspect content
-    // console.log('[OTP] Scoped dump:\n', dump);
-  } catch (e) {
-    console.log('[OTP] Text search error:', e.message);
-  }
-
-  // 6) Fail fast with artifacts to debug
-  if (screenshotOnFail) {
-    const file = `/tmp/otp-fail-${Date.now()}.png`;
-    try { await frame.screenshot({ path: file, fullPage: true }); } catch {}
-    console.log(`[OTP] Saved failure screenshot (if possible): ${file}`);
-  }
-  throw new Error('Could not extract confirmation code from email');
+  throw new Error('Could not extract confirmation code from the email.');
 }
 
-// ---- helpers -------------------------------------------------------------
-function isOtp(s) {
-  if (!s) return false;
-  const t = String(s).replace(/\D+/g, '');
-  return /^\d{4,8}$/.test(t);
-}
+// --- helpers ---------------------------------------------------------------
+function onlyDigits(s) { return String(s || '').replace(/\D+/g, ''); }
+function isOtp(s)      { return /^\d{4,8}$/.test(s || ''); }
 
-// Find the frame that actually renders the email content.
-// Tries: the focused/visible modal iframe; otherwise any frame whose URL/name
-// looks like message/detail/preview/templates; otherwise main frame.
-async function findEmailFrame(page) {
-  // Wait a bit for iframes to mount
-  await page.waitForTimeout(300);
+/**
+ * Find the frame that contains the email HTML.
+ * Works for iframes with src or srcdoc; falls back to main frame if email is inline.
+ */
+async function findEmailFrame(page, timeout = 30000) {
+  // Wait until an iframe (or the page) actually contains the label text.
+  await page.waitForFunction(() => {
+    const hasLabel = (root) =>
+      /Confirmation code/i.test((root?.innerText || ''));
+    if (hasLabel(document.body)) return true;
+    for (const iframe of document.querySelectorAll('iframe')) {
+      try {
+        const doc = iframe.contentDocument;
+        if (doc && hasLabel(doc.body)) return true;
+      } catch {}
+    }
+    return false;
+  }, { timeout, polling: 'mutation' });
 
-  // Candidate frames by URL/name hints
-  const hints = /detail|message|mail|preview|reader|tempmail|email/i;
-  const frames = page.frames();
-
-  // 1) Prefer a visible iframe element (modal) and take its contentFrame()
-  const visibleIframeHandle = await page.$("iframe, [sandbox='allow-scripts']");
-  if (visibleIframeHandle) {
+  // Prefer the child frame with the label; else use main.
+  for (const f of page.frames()) {
     try {
-      const f = await visibleIframeHandle.contentFrame();
-      if (f) return f;
-    } catch {}
+      const ok = await f.evaluate(() =>
+        /Confirmation code/i.test(document.body?.innerText || '')
+      );
+      if (ok) return f;
+    } catch {} // cross-origin frames
   }
-
-  // 2) Pick a child frame by URL/name heuristic
-  const byHint = frames.find(f => hints.test(f.url()) || hints.test(f.name()));
-  if (byHint) return byHint;
-
-  // 3) Fallback to main frame
   return page.mainFrame();
 }
 
@@ -824,7 +801,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
       // Extract confirmation code using robust iframe-aware method
       try {
-        confirmationCode = await extractLatenodeOTP(tempMailPage);
+        confirmationCode = await getConfirmationCode(tempMailPage, { timeout: 30000 });
         addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted: ${confirmationCode}`);
       } catch (error) {
         addDebugStep('Code Extraction', 'error', `❌ Code extraction failed: ${error.message}`);
