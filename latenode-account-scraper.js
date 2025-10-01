@@ -2,6 +2,82 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
+// Import fetch for API calls (Node.js 18+)
+const fetch = require('node-fetch');
+
+// Image analysis function using ChatGPT Vision API
+async function extractCodeWithImageAnalysis(page) {
+  addDebugStep('Image Analysis', 'info', 'Taking screenshot of email content...');
+  
+  // Take a screenshot of the email area
+  const screenshotPath = `latenode-account-${Date.now()}-email-screenshot.png`;
+  await page.screenshot({ 
+    path: screenshotPath, 
+    fullPage: true 
+  });
+  
+  addDebugStep('Image Analysis', 'info', `Screenshot saved: ${screenshotPath}`);
+  
+  // Read the image file and convert to base64
+  const imageBuffer = fs.readFileSync(screenshotPath);
+  const base64Image = imageBuffer.toString('base64');
+  
+  // Send to ChatGPT Vision API
+  addDebugStep('Image Analysis', 'info', 'Sending image to ChatGPT Vision API...');
+  
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Look at this email screenshot and extract the 4-digit confirmation code. The code should be a large, prominent number in the email body. Return only the 4-digit number, nothing else.'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 10
+    })
+  });
+  
+  if (!response.ok) {
+    throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+  }
+  
+  const data = await response.json();
+  const extractedCode = data.choices[0].message.content.trim();
+  
+  // Validate the extracted code
+  if (!/^\d{4}$/.test(extractedCode)) {
+    throw new Error(`Invalid code format: ${extractedCode}`);
+  }
+  
+  addDebugStep('Image Analysis', 'success', `ChatGPT extracted code: ${extractedCode}`);
+  
+  // Clean up the screenshot file
+  try {
+    fs.unlinkSync(screenshotPath);
+  } catch (e) {
+    // Ignore cleanup errors
+  }
+  
+  return extractedCode;
+}
+
 // === Latenode / TempMail100 confirmation code extractor ======================
 async function extractCodeTempmail100(page, { timeout = 30000, log = () => {} } = {}) {
   // 1) Email view should be visible (header "Confirm your email address - Latenode")
@@ -926,18 +1002,25 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
       addDebugStep('Code Extraction', 'info', 'Modal debug info:', null, JSON.stringify(modalDebugInfo, null, 2));
       
-      // Extract confirmation code using TempMail100-specific method
-      addDebugStep('Code Extraction', 'info', 'Extracting confirmation code from email view (.detail / .detail-box)...');
+      // Extract confirmation code using image analysis
+      addDebugStep('Code Extraction', 'info', 'Taking screenshot of email and analyzing with AI...');
       try {
-        // DO NOT rely on waitForNetworkIdle here (iframe may be srcdoc)
-        confirmationCode = await extractCodeTempmail100(tempMailPage, { 
-          timeout: 30000,
-          log: (msg) => addDebugStep('Code Extraction', 'info', msg) // so you see each frame tried
-        });
-        addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted: ${confirmationCode}`);
+        confirmationCode = await extractCodeWithImageAnalysis(tempMailPage);
+        addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted via image analysis: ${confirmationCode}`);
       } catch (error) {
-        addDebugStep('Code Extraction', 'error', `❌ Code extraction failed: ${error.message}`);
-        confirmationCode = null;
+        addDebugStep('Code Extraction', 'error', `❌ Image analysis failed: ${error.message}`);
+        // Fallback to DOM extraction
+        addDebugStep('Code Extraction', 'info', 'Falling back to DOM extraction...');
+        try {
+          confirmationCode = await extractCodeTempmail100(tempMailPage, { 
+            timeout: 30000,
+            log: (msg) => addDebugStep('Code Extraction', 'info', msg)
+          });
+          addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted via DOM: ${confirmationCode}`);
+        } catch (domError) {
+          addDebugStep('Code Extraction', 'error', `❌ DOM extraction also failed: ${domError.message}`);
+          confirmationCode = null;
+        }
       }
       
       if (confirmationCode) {
