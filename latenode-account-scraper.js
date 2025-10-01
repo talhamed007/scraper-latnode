@@ -895,13 +895,16 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           allElementsWithText: Array.from(document.querySelectorAll('*')).filter(el => {
             const text = el.innerText || el.textContent || '';
             return text.includes('Confirmation code') || text.includes('Back to home') || text.includes('Delete');
-          }).map(el => ({
-            tagName: el.tagName,
-            className: el.className,
-            id: el.id,
-            role: el.getAttribute('role'),
-            textContent: text.substring(0, 100)
-          })).slice(0, 10)
+          }).map(el => {
+            const text = el.innerText || el.textContent || '';
+            return {
+              tagName: el.tagName,
+              className: el.className,
+              id: el.id,
+              role: el.getAttribute('role'),
+              textContent: text.substring(0, 100)
+            };
+          }).slice(0, 10)
         };
       });
       
