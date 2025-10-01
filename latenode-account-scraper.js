@@ -1292,23 +1292,25 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     
     addDebugStep('Password Entry', 'info', `Entering password: ${generatedPassword}`);
     
-    // Fill password fields using specific selectors
+    // Fill password fields using page.type for character-by-character typing
     addDebugStep('Password Entry', 'info', 'Filling password field 1 (password)...');
     
-    // Fill first password field
+    // Fill first password field with character-by-character typing
     await page.waitForSelector('input[name="password"], input[data-test-id="passwordInput"]', { timeout: 5000 });
-    await page.evaluate((pwd) => {
+    
+    // Clear the field first
+    await page.evaluate(() => {
       const field = document.querySelector('input[name="password"], input[data-test-id="passwordInput"]');
       if (field) {
         field.focus();
         field.value = '';
-        field.value = pwd;
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
-        field.dispatchEvent(new Event('keyup', { bubbles: true }));
-        field.dispatchEvent(new Event('blur', { bubbles: true }));
       }
-    }, generatedPassword);
+    });
+    
+    // Type character by character
+    await page.type('input[name="password"], input[data-test-id="passwordInput"]', generatedPassword, { delay: 100 });
     
     // Verify first field
     const field1Value = await page.evaluate(() => {
@@ -1321,20 +1323,22 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     
     addDebugStep('Password Entry', 'info', 'Filling password field 2 (newPassword)...');
     
-    // Fill second password field
+    // Fill second password field with character-by-character typing
     await page.waitForSelector('input[name="newPassword"], input[data-test-id="newPasswordInput"]', { timeout: 5000 });
-    await page.evaluate((pwd) => {
+    
+    // Clear the field first
+    await page.evaluate(() => {
       const field = document.querySelector('input[name="newPassword"], input[data-test-id="newPasswordInput"]');
       if (field) {
         field.focus();
         field.value = '';
-        field.value = pwd;
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
-        field.dispatchEvent(new Event('keyup', { bubbles: true }));
-        field.dispatchEvent(new Event('blur', { bubbles: true }));
       }
-    }, generatedPassword);
+    });
+    
+    // Type character by character
+    await page.type('input[name="newPassword"], input[data-test-id="newPasswordInput"]', generatedPassword, { delay: 100 });
     
     // Verify second field
     const field2Value = await page.evaluate(() => {
@@ -1361,31 +1365,29 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     if (!field1Final || !field2Final) {
       addDebugStep('Password Entry', 'warning', 'Some fields still empty, attempting final fill...');
       
-      // Final attempt to fill empty fields
+      // Final attempt to fill empty fields using page.type
       if (!field1Final) {
-        addDebugStep('Password Entry', 'info', 'Refilling password field 1...');
-        await page.evaluate((pwd) => {
+        addDebugStep('Password Entry', 'info', 'Refilling password field 1 with page.type...');
+        await page.evaluate(() => {
           const field = document.querySelector('input[name="password"], input[data-test-id="passwordInput"]');
           if (field) {
             field.focus();
-            field.value = pwd;
-            field.dispatchEvent(new Event('input', { bubbles: true }));
-            field.dispatchEvent(new Event('change', { bubbles: true }));
+            field.value = '';
           }
-        }, generatedPassword);
+        });
+        await page.type('input[name="password"], input[data-test-id="passwordInput"]', generatedPassword, { delay: 100 });
       }
       
       if (!field2Final) {
-        addDebugStep('Password Entry', 'info', 'Refilling password field 2...');
-        await page.evaluate((pwd) => {
+        addDebugStep('Password Entry', 'info', 'Refilling password field 2 with page.type...');
+        await page.evaluate(() => {
           const field = document.querySelector('input[name="newPassword"], input[data-test-id="newPasswordInput"]');
           if (field) {
             field.focus();
-            field.value = pwd;
-            field.dispatchEvent(new Event('input', { bubbles: true }));
-            field.dispatchEvent(new Event('change', { bubbles: true }));
+            field.value = '';
           }
-        }, generatedPassword);
+        });
+        await page.type('input[name="newPassword"], input[data-test-id="newPasswordInput"]', generatedPassword, { delay: 100 });
       }
     }
     
