@@ -688,19 +688,30 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         await sleep(200);
       }
       
-      // Also try scrolling to bottom to ensure we see all content
+      // Scroll down gradually to ensure all content is loaded
       await tempMailPage.evaluate(() => {
+        // First scroll to the very bottom
         window.scrollTo(0, document.body.scrollHeight);
       });
       
       await sleep(1000);
       
-      // Scroll back up a bit to see the content better
+      // Scroll up to find the confirmation code area
       await tempMailPage.evaluate(() => {
-        window.scrollTo(0, document.body.scrollHeight - 500);
+        window.scrollTo(0, document.body.scrollHeight - 800);
+        
+        // Try to find and scroll to the confirmation code specifically
+        const confirmationElements = document.querySelectorAll('*');
+        for (const element of confirmationElements) {
+          const text = element.textContent || element.innerText || '';
+          if (text.toLowerCase().includes('confirmation code') || text.toLowerCase().includes('confirm your email')) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            break;
+          }
+        }
       });
       
-      await sleep(2000); // Wait for scrolling to complete
+      await sleep(3000); // Wait longer for scrolling to complete
       
       // Take a screenshot after scrolling to see the full email content
       await takeScreenshot('Email-After-Scroll', tempMailPage);
@@ -729,6 +740,23 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           const codeMatch = text.match(/\d{4}/);
           if (codeMatch) {
             console.log('Found code in 48px span:', codeMatch[0]);
+            return codeMatch[0];
+          }
+        }
+        
+        // Look for any element with very large font size (48px or larger)
+        const largeFontElements = document.querySelectorAll('*[style*="font-size:48px"], *[style*="font-size: 48px"], *[style*="font-size:4"], *[style*="font-size: 4"]');
+        console.log('Large font elements found:', largeFontElements.length);
+        
+        for (let i = 0; i < largeFontElements.length; i++) {
+          const element = largeFontElements[i];
+          const text = element.textContent || element.innerText || '';
+          const style = element.getAttribute('style') || '';
+          console.log(`Large font element ${i}: text="${text}", style="${style}"`);
+          
+          const codeMatch = text.match(/\d{4}/);
+          if (codeMatch) {
+            console.log('Found code in large font element:', codeMatch[0]);
             return codeMatch[0];
           }
         }
@@ -791,15 +819,23 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
             const isBold = fontWeight === 'bold' || fontWeight === '700' || parseInt(fontWeight) >= 700;
             const isVisible = rect.width > 0 && rect.height > 0;
             
+            // Check if this element has inline styles that might indicate large font
+            const inlineStyle = element.getAttribute('style') || '';
+            const inlineFontSize = inlineStyle.match(/font-size:\s*(\d+)px/);
+            const inlineFontSizeValue = inlineFontSize ? parseInt(inlineFontSize[1]) : 0;
+            const actualFontSize = Math.max(fontSize, inlineFontSizeValue);
+            
             for (const number of numbers) {
               candidates.push({
                 number: number,
-                fontSize: fontSize,
+                fontSize: actualFontSize,
                 isBold: isBold,
                 area: rect.width * rect.height,
                 isVisible: isVisible,
                 element: element.tagName,
-                textLength: text.length
+                textLength: text.length,
+                hasInlineStyle: inlineStyle.length > 0,
+                inlineStyle: inlineStyle
               });
             }
           }
@@ -807,15 +843,32 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         
         console.log('All candidates found:', candidates.length);
         candidates.forEach((c, i) => {
-          console.log(`Candidate ${i}: ${c.number}, fontSize: ${c.fontSize}, bold: ${c.isBold}, area: ${c.area}, visible: ${c.isVisible}`);
+          console.log(`Candidate ${i}: ${c.number}, fontSize: ${c.fontSize}, bold: ${c.isBold}, area: ${c.area}, visible: ${c.isVisible}, inlineStyle: ${c.inlineStyle}`);
         });
         
-        // Filter and score candidates
-        const visibleCandidates = candidates.filter(c => c.isVisible && c.area > 100 && c.fontSize > 10);
+        // Filter and score candidates - prioritize large, bold, visible elements
+        const visibleCandidates = candidates.filter(c => 
+          c.isVisible && 
+          c.area > 100 && 
+          c.fontSize > 20 && // Increased minimum font size
+          c.textLength < 50 // Shorter text is more likely to be a code
+        );
+        
+        console.log('Visible candidates after filtering:', visibleCandidates.length);
         
         if (visibleCandidates.length > 0) {
-          // Sort by font size (largest first)
-          visibleCandidates.sort((a, b) => b.fontSize - a.fontSize);
+          // Sort by font size (largest first), then by bold, then by area
+          visibleCandidates.sort((a, b) => {
+            if (b.fontSize !== a.fontSize) return b.fontSize - a.fontSize;
+            if (b.isBold !== a.isBold) return b.isBold - a.isBold;
+            return b.area - a.area;
+          });
+          
+          console.log('Top 3 candidates:');
+          visibleCandidates.slice(0, 3).forEach((c, i) => {
+            console.log(`${i + 1}. ${c.number} (fontSize: ${c.fontSize}, bold: ${c.isBold}, area: ${c.area})`);
+          });
+          
           console.log('Selected largest font size candidate:', visibleCandidates[0].number);
           return visibleCandidates[0].number;
         }
