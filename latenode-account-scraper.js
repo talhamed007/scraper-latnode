@@ -716,172 +716,70 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       // Take a screenshot after scrolling to see the full email content
       await takeScreenshot('Email-After-Scroll', tempMailPage);
       
-      confirmationCode = await tempMailPage.evaluate(() => {
-        console.log('=== COMPLETE CODE EXTRACTION DEBUG ===');
+      // Use XPath to find the confirmation code span following "Confirmation code" label
+      try {
+        addDebugStep('Code Extraction', 'info', 'Using XPath to find confirmation code span...');
         
-        // Get the full page HTML for debugging
-        const fullHTML = document.documentElement.outerHTML;
-        console.log('Full page HTML length:', fullHTML.length);
+        // Wait for the email body to render
+        await tempMailPage.waitForSelector('table, div', { timeout: 10000 });
         
-        // Look for ALL 4-digit numbers on the page
-        const allNumbers = fullHTML.match(/\b\d{4}\b/g);
-        console.log('All 4-digit numbers found in HTML:', allNumbers);
-        
-        // Look for spans with font-size:48px specifically
-        const spans48px = document.querySelectorAll('span[style*="font-size:48px"], span[style*="font-size: 48px"]');
-        console.log('Spans with font-size:48px found:', spans48px.length);
-        
-        for (let i = 0; i < spans48px.length; i++) {
-          const span = spans48px[i];
-          const text = span.textContent || span.innerText || '';
-          const style = span.getAttribute('style') || '';
-          console.log(`Span ${i}: text="${text}", style="${style}"`);
-          
-          const codeMatch = text.match(/\d{4}/);
-          if (codeMatch) {
-            console.log('Found code in 48px span:', codeMatch[0]);
-            return codeMatch[0];
-          }
-        }
-        
-        // Look for any element with very large font size (48px or larger)
-        const largeFontElements = document.querySelectorAll('*[style*="font-size:48px"], *[style*="font-size: 48px"], *[style*="font-size:4"], *[style*="font-size: 4"]');
-        console.log('Large font elements found:', largeFontElements.length);
-        
-        for (let i = 0; i < largeFontElements.length; i++) {
-          const element = largeFontElements[i];
-          const text = element.textContent || element.innerText || '';
-          const style = element.getAttribute('style') || '';
-          console.log(`Large font element ${i}: text="${text}", style="${style}"`);
-          
-          const codeMatch = text.match(/\d{4}/);
-          if (codeMatch) {
-            console.log('Found code in large font element:', codeMatch[0]);
-            return codeMatch[0];
-          }
-        }
-        
-        // Look for any element containing "confirmation code" text
-        const allElements = document.querySelectorAll('*');
-        console.log('Total elements on page:', allElements.length);
-        
-        for (let i = 0; i < allElements.length; i++) {
-          const element = allElements[i];
-          const text = element.textContent || element.innerText || '';
-          const innerHTML = element.innerHTML || '';
-          
-          if (text.toLowerCase().includes('confirmation code') || innerHTML.toLowerCase().includes('confirmation code')) {
-            console.log(`Found element ${i} with "confirmation code":`, element.tagName);
-            console.log('Element text:', text.substring(0, 200));
-            console.log('Element innerHTML:', innerHTML.substring(0, 200));
-            
-            // Look for 4-digit numbers in this element
-            const numbers = text.match(/\b\d{4}\b/g);
-            if (numbers && numbers.length > 0) {
-              console.log('Numbers found in confirmation element:', numbers);
-              
-              // Look for spans with large font size in this element
-              const spans = element.querySelectorAll('span');
-              for (const span of spans) {
-                const spanStyle = span.getAttribute('style') || '';
-                const spanText = span.textContent || span.innerText || '';
-                
-                if (spanStyle.includes('font-size:48px') || spanStyle.includes('font-size: 48px')) {
-                  console.log('Found 48px span in confirmation element:', spanText);
-                  const codeMatch = spanText.match(/\d{4}/);
-                  if (codeMatch) {
-                    console.log('Found code in 48px span within confirmation element:', codeMatch[0]);
-                    return codeMatch[0];
-                  }
-                }
-              }
-              
-              // Return the first number found in this element
-              console.log('Returning first number from confirmation element:', numbers[0]);
-              return numbers[0];
-            }
-          }
-        }
-        
-        // Look for the most prominent 4-digit number by visual characteristics
-        console.log('Looking for most prominent 4-digit number...');
-        
-        const candidates = [];
-        for (const element of allElements) {
-          const text = element.textContent || element.innerText || '';
-          const numbers = text.match(/\b\d{4}\b/g);
-          
-          if (numbers && numbers.length > 0) {
-            const rect = element.getBoundingClientRect();
-            const computedStyle = window.getComputedStyle(element);
-            const fontSize = parseInt(computedStyle.fontSize) || 0;
-            const fontWeight = computedStyle.fontWeight;
-            const isBold = fontWeight === 'bold' || fontWeight === '700' || parseInt(fontWeight) >= 700;
-            const isVisible = rect.width > 0 && rect.height > 0;
-            
-            // Check if this element has inline styles that might indicate large font
-            const inlineStyle = element.getAttribute('style') || '';
-            const inlineFontSize = inlineStyle.match(/font-size:\s*(\d+)px/);
-            const inlineFontSizeValue = inlineFontSize ? parseInt(inlineFontSize[1]) : 0;
-            const actualFontSize = Math.max(fontSize, inlineFontSizeValue);
-            
-            for (const number of numbers) {
-              candidates.push({
-                number: number,
-                fontSize: actualFontSize,
-                isBold: isBold,
-                area: rect.width * rect.height,
-                isVisible: isVisible,
-                element: element.tagName,
-                textLength: text.length,
-                hasInlineStyle: inlineStyle.length > 0,
-                inlineStyle: inlineStyle
-              });
-            }
-          }
-        }
-        
-        console.log('All candidates found:', candidates.length);
-        candidates.forEach((c, i) => {
-          console.log(`Candidate ${i}: ${c.number}, fontSize: ${c.fontSize}, bold: ${c.isBold}, area: ${c.area}, visible: ${c.isVisible}, inlineStyle: ${c.inlineStyle}`);
-        });
-        
-        // Filter and score candidates - prioritize large, bold, visible elements
-        const visibleCandidates = candidates.filter(c => 
-          c.isVisible && 
-          c.area > 100 && 
-          c.fontSize > 20 && // Increased minimum font size
-          c.textLength < 50 // Shorter text is more likely to be a code
+        // Find the OTP span following the label "Confirmation code" using XPath
+        const codeElements = await tempMailPage.$x(
+          "//td/div[contains(., 'Confirmation code')]/following::span[1] | " +
+          "//div[contains(., 'Confirmation code')]/following::span[1] | " +
+          "//*[contains(text(), 'Confirmation code')]/following::span[1]"
         );
         
-        console.log('Visible candidates after filtering:', visibleCandidates.length);
-        
-        if (visibleCandidates.length > 0) {
-          // Sort by font size (largest first), then by bold, then by area
-          visibleCandidates.sort((a, b) => {
-            if (b.fontSize !== a.fontSize) return b.fontSize - a.fontSize;
-            if (b.isBold !== a.isBold) return b.isBold - a.isBold;
-            return b.area - a.area;
-          });
+        if (codeElements.length > 0) {
+          const codeElement = codeElements[0];
+          confirmationCode = await tempMailPage.evaluate(el => el.textContent.trim(), codeElement);
+          addDebugStep('Code Extraction', 'success', `Found confirmation code via XPath: ${confirmationCode}`);
+        } else {
+          addDebugStep('Code Extraction', 'warning', 'XPath method failed, trying CSS selector...');
           
-          console.log('Top 3 candidates:');
-          visibleCandidates.slice(0, 3).forEach((c, i) => {
-            console.log(`${i + 1}. ${c.number} (fontSize: ${c.fontSize}, bold: ${c.isBold}, area: ${c.area})`);
-          });
-          
-          console.log('Selected largest font size candidate:', visibleCandidates[0].number);
-          return visibleCandidates[0].number;
+          // Fallback: CSS selector for span with font-size:48px
+          const largeFontSpan = await tempMailPage.$("span[style*='font-size:48px']");
+          if (largeFontSpan) {
+            confirmationCode = await tempMailPage.evaluate(el => el.textContent.trim(), largeFontSpan);
+            addDebugStep('Code Extraction', 'success', `Found confirmation code via CSS: ${confirmationCode}`);
+          } else {
+            addDebugStep('Code Extraction', 'warning', 'CSS method failed, trying text search...');
+            
+            // Last resort: Text search scoped to email content
+            confirmationCode = await tempMailPage.evaluate(() => {
+              // Narrow to the email container if present
+              const emailContainer = document.querySelector('.email, .content, table, .modal') || document.body;
+              const emailText = emailContainer.innerText;
+              
+              // Pull 4-digit code near "Confirmation code"
+              const match = emailText.match(/Confirmation code[\s\S]*?\b(\d{4})\b/i);
+              if (match) {
+                return match[1];
+              }
+              
+              // If that fails, look for any 4-digit number in the email container
+              const numbers = emailText.match(/\b\d{4}\b/g);
+              return numbers ? numbers[0] : null;
+            });
+            
+            if (confirmationCode) {
+              addDebugStep('Code Extraction', 'success', `Found confirmation code via text search: ${confirmationCode}`);
+            }
+          }
         }
         
-        // Last resort: return the first 4-digit number found
-        if (allNumbers && allNumbers.length > 0) {
-          console.log('Last resort: returning first number found:', allNumbers[0]);
-          return allNumbers[0];
+        // Validate the extracted code
+        if (confirmationCode && /^\d{4}$/.test(confirmationCode)) {
+          addDebugStep('Code Extraction', 'success', `✅ Confirmation code validated: ${confirmationCode}`);
+        } else {
+          addDebugStep('Code Extraction', 'error', `❌ Invalid confirmation code format: ${confirmationCode}`);
+          confirmationCode = null;
         }
         
-        console.log('No 4-digit numbers found at all');
-        return null;
-      });
+      } catch (error) {
+        addDebugStep('Code Extraction', 'error', `Code extraction failed: ${error.message}`);
+        confirmationCode = null;
+      }
       
       if (confirmationCode) {
         addDebugStep('Code Extraction', 'success', `Confirmation code extracted: ${confirmationCode}`);
