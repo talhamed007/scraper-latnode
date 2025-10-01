@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Image analysis function using ChatGPT Vision API
+// Updated to use OpenAI API key from environment variables
 async function extractCodeWithImageAnalysis(page) {
   addDebugStep('Image Analysis', 'info', 'Taking screenshot of email content...');
   
