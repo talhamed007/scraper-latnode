@@ -1300,6 +1300,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     for (let i = 0; i < passwordFields.length; i++) {
       const field = passwordFields[i];
       
+      addDebugStep('Password Entry', 'info', `Processing password field ${i + 1}...`);
+      
       // Clear the field first
       await page.evaluate((element) => {
         element.focus();
@@ -1309,9 +1311,19 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         element.dispatchEvent(new Event('keyup', { bubbles: true }));
       }, field);
       
-      // Type the password character by character
-      await page.evaluate((element, pwd) => {
+      // Wait a moment for the field to be ready
+      await page.waitForTimeout(200);
+      
+      // Type the password character by character using page.type for better simulation
+      await page.evaluate((element) => {
         element.focus();
+      }, field);
+      
+      // Use page.type to simulate real typing
+      await page.type(`input[type="password"]:nth-of-type(${i + 1})`, generatedPassword, { delay: 50 });
+      
+      // Trigger validation events
+      await page.evaluate((element, pwd) => {
         element.value = pwd;
         element.dispatchEvent(new Event('input', { bubbles: true }));
         element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1319,10 +1331,53 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         element.dispatchEvent(new Event('blur', { bubbles: true }));
       }, field, generatedPassword);
       
-      addDebugStep('Password Entry', 'info', `Filled password field ${i + 1}`);
+      // Verify the field was filled
+      const fieldValue = await page.evaluate((element) => element.value, field);
+      addDebugStep('Password Entry', 'info', `Field ${i + 1} value: ${fieldValue ? 'FILLED' : 'EMPTY'}`);
       
       // Small delay between fields
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
+    }
+    
+    // Double-check that both fields are filled
+    const allFields = await page.$$('input[type="password"]');
+    let filledCount = 0;
+    
+    for (let i = 0; i < allFields.length; i++) {
+      const value = await page.evaluate((element) => element.value, allFields[i]);
+      if (value && value.length > 0) {
+        filledCount++;
+      }
+    }
+    
+    addDebugStep('Password Entry', 'info', `Verification: ${filledCount}/${allFields.length} fields filled`);
+    
+    if (filledCount < allFields.length) {
+      addDebugStep('Password Entry', 'warning', 'Some fields not filled, attempting to fill again...');
+      
+      // Try filling again with a different approach
+      for (let i = 0; i < allFields.length; i++) {
+        const field = allFields[i];
+        const currentValue = await page.evaluate((element) => element.value, field);
+        
+        if (!currentValue || currentValue.length === 0) {
+          addDebugStep('Password Entry', 'info', `Refilling empty field ${i + 1}...`);
+          
+          await page.evaluate((element) => {
+            element.focus();
+            element.value = '';
+          }, field);
+          
+          await page.type(`input[type="password"]:nth-of-type(${i + 1})`, generatedPassword, { delay: 100 });
+          
+          await page.evaluate((element, pwd) => {
+            element.value = pwd;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('keyup', { bubbles: true }));
+          }, field, generatedPassword);
+        }
+      }
     }
     
     addDebugStep('Password Entry', 'success', 'All password fields filled successfully');
