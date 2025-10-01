@@ -2,132 +2,112 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// --- main entry ------------------------------------------------------------
-async function extractLatenodeCodeFromTempmail(page, { timeout = 30000 } = {}) {
-  const modal = await waitForEmailModal(page, timeout);        // step 1
-  const code  = await extractCodeFromModalOrIframe(page, modal, timeout); // steps 2–4
+// Call this after you've clicked the email in the list.
+async function extractCodeTempmail100(page, { timeout = 30000 } = {}) {
+  // 1) Wait for the email view to be present
+  const rootSel = '.detail-box, .detail';
+  await page.waitForSelector(rootSel, { visible: true, timeout });
+  const rootEl = await page.$(rootSel);
 
-  if (!/^\d{4,8}$/.test(code)) throw new Error(`Invalid code: ${code ?? 'null'}`);
-  return code;
-}
-
-// --- wait for the detail modal --------------------------------------------
-async function waitForEmailModal(page, timeout) {
-  const modalSel = "div[role='dialog'], .modal, .ReactModal__Content";
-  // wait for a modal that actually contains the email header ("Back to home"/"Delete")
-  return await page.waitForFunction((sel) => {
-    const m = document.querySelector(sel);
-    if (!m) return null;
-    const t = m.innerText || '';
-    return (/Back to home|Delete/i.test(t)) ? m : null;
-  }, { timeout, polling: 'mutation' }, modalSel);
-}
-
-// --- extract, handling iframe-or-not --------------------------------------
-async function extractCodeFromModalOrIframe(page, modalHandle, timeout) {
-  // 2) If the modal has an iframe, switch into it
-  const modalEl = await modalHandle.asElement();
-  const iframeEl = await modalEl.$('iframe');
+  // 2) If there is an iframe inside the email view, use its contentFrame
+  const iframeEl = await rootEl.$('iframe');
   if (iframeEl) {
     const frame = await iframeEl.contentFrame();
-    if (!frame) throw new Error('Modal iframe has no contentFrame');
-    return await extractFromFrame(frame, timeout);
+    if (!frame) throw new Error('iframe present but no contentFrame()');
+    return await extractFromEmailFrame(frame, timeout);
   }
 
-  // 3) Otherwise, extract while SCOPED to the modal element
-  return await extractFromModalElement(page, modalEl, timeout);
+  // 3) Otherwise, the email HTML is inline -> extract scoped to .detail-box/.detail
+  return await extractFromEmailContainer(page, rootEl, timeout);
 }
 
 // --- extraction inside an iframe (Frame API) ------------------------------
-async function extractFromFrame(frame, timeout) {
-  // Wait for the email to be painted (do NOT use network idle here)
-  await frame.waitForFunction(() => /Confirmation code/i.test(document.body?.innerText || ''), { timeout });
+async function extractFromEmailFrame(frame, timeout) {
+  // The label "Confirmation code" is present in the body text
+  await frame.waitForFunction(
+    () => /Confirmation code/i.test(document.body?.innerText || ''),
+    { timeout }
+  );
 
   // A) label → first following <span>
-  const xpaths = [
-    "//div[contains(., 'Confirmation code')]/following::span[1]",
-    "//td/div[contains(., 'Confirmation code')]/following::span[1]",
-  ];
-  for (const xp of xpaths) {
-    const [el] = await frame.$x(xp);
-    if (el) {
-      const raw  = (await frame.evaluate(e => e.textContent, el)).trim();
-      const code = raw.replace(/\D+/g, '');
-      if (/^\d{4,8}$/.test(code)) return code;
-    }
+  const [el] = await frame.$x(
+    "//div[contains(., 'Confirmation code')]/following::span[1] | " +
+    "//td/div[contains(., 'Confirmation code')]/following::span[1]"
+  );
+  if (el) {
+    const txt = (await frame.evaluate(e => e.textContent, el)).trim();
+    const code = digits(txt);
+    if (isOtp(code)) return code;
   }
 
-  // B) "big font" fallback (your email uses font-size:48px)
-  const bigSel = "span";
-  const candidates = await frame.$$(bigSel);
-  for (const el of candidates) {
-    const { text, fs } = await frame.evaluate(e => ({
-      text: (e.textContent || '').trim(),
-      fs: parseFloat(getComputedStyle(e).fontSize || '0'),
-    }), el);
-    const code = (text.match(/\b\d{4,8}\b/) || [])[0];
-    if (code && fs >= 36) return code;
+  // B) large-font fallback (your email uses font-size:48px)
+  const spans = await frame.$$('span');
+  for (const s of spans) {
+    const { text, fs } = await frame.evaluate(el => ({
+      text: (el.textContent || '').trim(),
+      fs: parseFloat(getComputedStyle(el).fontSize || '0'),
+    }), s);
+    const m = text.match(/\b(\d{4,8})\b/);
+    if (m && fs >= 36) return m[1];
   }
 
-  // C) text-only, scoped to the frame
-  const code = await frame.evaluate(() => {
-    const root = document.querySelector("table[id^='rec'], table, .email, .content") || document.body;
-    const txt  = root?.innerText || '';
-    const m = txt.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
-    return m ? m[1] : null;
-  });
-  if (code) return code;
+  // C) text search scoped to frame
+  const t = await frame.evaluate(() => document.body?.innerText || '');
+  const m = t.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
+  if (m) return m[1];
 
-  throw new Error('Could not find code inside iframe');
+  throw new Error('Code not found inside iframe');
 }
 
-// --- extraction scoped to the modal element (no iframe case) --------------
-async function extractFromModalElement(page, modalEl, timeout) {
-  // Wait until the modal actually contains the label text
-  await page.waitForFunction((m) => {
-    const t = (m.innerText || '');
-    return /Confirmation code/i.test(t);
-  }, { timeout }, modalEl);
+// --- extraction scoped to the .detail/.detail-box element -----------------
+async function extractFromEmailContainer(page, rootEl, timeout) {
+  // Wait until the container actually contains the label text
+  await page.waitForFunction(
+    (el) => /Confirmation code/i.test(el?.innerText || ''),
+    { timeout },
+    rootEl
+  );
 
-  // A) label → following <span>
-  const codeA = await page.evaluate((m) => {
-    const label = Array.from(m.querySelectorAll('div, td')).find(node =>
-      /Confirmation code/i.test(node.innerText || '')
+  // A) label → first following <span> (scoped to container)
+  const codeA = await page.evaluate((el) => {
+    const lbl = Array.from(el.querySelectorAll('div, td')).find(n =>
+      /Confirmation code/i.test(n.innerText || '')
     );
-    if (!label) return null;
-    const span = label.parentElement?.querySelector('span') ||
-                 label.querySelector('span');
+    const span = lbl?.querySelector('span') || lbl?.parentElement?.querySelector('span');
     const raw  = (span?.textContent || '').trim();
     const num  = raw.replace(/\D+/g, '');
     return /^\d{4,8}$/.test(num) ? num : null;
-  }, modalEl);
+  }, rootEl);
   if (codeA) return codeA;
 
-  // B) biggest-font span with digits inside the modal
-  const codeB = await page.evaluate((m) => {
-    const spans = Array.from(m.querySelectorAll('span'));
-    let best = null, bestFS = 0;
-    for (const s of spans) {
+  // B) pick the biggest-font span with digits within the container
+  const codeB = await page.evaluate((el) => {
+    let best = null, bestFs = 0;
+    for (const s of el.querySelectorAll('span')) {
       const txt = (s.textContent || '').trim();
       const mm  = txt.match(/\b(\d{4,8})\b/);
       if (!mm) continue;
       const fs = parseFloat(getComputedStyle(s).fontSize || '0');
-      if (fs > bestFS) { bestFS = fs; best = mm[1]; }
+      if (fs > bestFs) { bestFs = fs; best = mm[1]; }
     }
     return best;
-  }, modalEl);
+  }, rootEl);
   if (codeB) return codeB;
 
-  // C) text-only, but still scoped to modal (won't grab "2025")
-  const codeC = await page.evaluate((m) => {
-    const t = m.innerText || '';
-    const m1 = t.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
-    return m1 ? m1[1] : null;
-  }, modalEl);
+  // C) text search scoped to container (won't grab year 2025)
+  const codeC = await page.evaluate((el) => {
+    const txt = el.innerText || '';
+    const m = txt.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
+    return m ? m[1] : null;
+  }, rootEl);
   if (codeC) return codeC;
 
-  throw new Error('Could not find code inside modal');
+  throw new Error('Code not found in .detail/.detail-box');
 }
+
+// --- helpers --------------------------------------------------------------
+const digits = (s) => String(s || '').replace(/\D+/g, '');
+const isOtp  = (s) => /^\d{4,8}$/.test(s || '');
 
 // Global variable for io instance
 let io = null;
@@ -910,11 +890,12 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
       addDebugStep('Code Extraction', 'info', 'Modal debug info:', null, JSON.stringify(modalDebugInfo, null, 2));
       
-      // Extract confirmation code using modal-aware method
-      addDebugStep('Code Extraction', 'info', 'Extracting confirmation code from email modal...');
+      // Extract confirmation code using TempMail100-specific method
+      addDebugStep('Code Extraction', 'info', 'Extracting confirmation code from email view (.detail / .detail-box)...');
       try {
-        confirmationCode = await extractLatenodeCodeFromTempmail(tempMailPage, { timeout: 30000 });
-        addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted: ${confirmationCode}`);
+        // DO NOT rely on waitForNetworkIdle here (iframe may be srcdoc)
+        confirmationCode = await extractCodeTempmail100(tempMailPage, { timeout: 30000 });
+        addDebugStep('Code Extraction', 'success', `✅ Confirmation code: ${confirmationCode}`);
       } catch (error) {
         addDebugStep('Code Extraction', 'error', `❌ Code extraction failed: ${error.message}`);
         confirmationCode = null;
