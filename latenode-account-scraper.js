@@ -1400,10 +1400,39 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Registration', 'info', 'Looking for Save button...');
     
     try {
-      // Look for Save button first, then fallback to other buttons
-      const saveButton = await page.waitForSelector('button:has-text("Save"), button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]', { timeout: 10000 });
-      await page.click('button:has-text("Save"), button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]');
-      addDebugStep('Registration', 'success', 'Clicked Save/Register button');
+      // Look for Save button span first, then fallback to button itself
+      const saveButtonSelectors = [
+        'button[data-test-id="saveNewPassword"] span',
+        'button[data-test-id="saveNewPassword"]',
+        'button:has-text("Save")',
+        'button:has-text("Register")',
+        'button:has-text("Sign Up")',
+        'button:has-text("Enregistrer")',
+        'button[type="submit"]'
+      ];
+      
+      let saveButton = null;
+      let usedSelector = '';
+      
+      for (const selector of saveButtonSelectors) {
+        try {
+          saveButton = await page.$(selector);
+          if (saveButton) {
+            usedSelector = selector;
+            addDebugStep('Registration', 'info', `Found Save button with selector: ${selector}`);
+            break;
+          }
+        } catch (e) {
+          // Continue to next selector
+        }
+      }
+      
+      if (!saveButton) {
+        throw new Error('Could not find Save button');
+      }
+      
+      await saveButton.click();
+      addDebugStep('Registration', 'success', `Clicked Save button using selector: ${usedSelector}`);
       
       // Wait for successful registration or dashboard
       await page.waitForFunction(() => {
