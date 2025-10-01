@@ -2,6 +2,108 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
+// ---- Latenode email OTP extractor (Puppeteer) ----------------------------
+async function extractLatenodeOTP(page, { screenshotOnFail = true } = {}) {
+  // 1) Find the frame that contains the email content
+  const frame = await findEmailFrame(page);
+
+  // 2) Give the frame a moment to paint the email
+  await frame.waitForSelector('table, div, body', { visible: true, timeout: 10_000 });
+
+  // 3) Strategy A: XPath – span after "Confirmation code"
+  try {
+    const [el] = await frame.$x(
+      "//td/div[contains(., 'Confirmation code')]/following::span[1]"
+    );
+    if (el) {
+      const code = (await frame.evaluate(e => e.textContent, el)).trim();
+      if (isOtp(code)) return code;
+      console.log('[OTP] XPath found but failed validation:', code);
+    } else {
+      console.log('[OTP] XPath element not found');
+    }
+  } catch (e) {
+    console.log('[OTP] XPath error:', e.message);
+  }
+
+  // 4) Strategy B: CSS – large font-size number span (as in your screenshot)
+  try {
+    const selector = "span[style*='font-size:48px']";
+    const el = await frame.$(selector);
+    if (el) {
+      const code = (await frame.evaluate(e => e.textContent, el)).trim();
+      if (isOtp(code)) return code;
+      console.log('[OTP] CSS 48px found but failed validation:', code);
+    } else {
+      console.log('[OTP] CSS element not found:', selector);
+    }
+  } catch (e) {
+    console.log('[OTP] CSS error:', e.message);
+  }
+
+  // 5) Strategy C: Scoped text search near the label
+  try {
+    const { code, dump } = await frame.evaluate(() => {
+      const root =
+        document.querySelector('.modal, .email, .content, table') || document.body;
+      const text = root.innerText || '';
+      // Grab up to ~200 chars after the label and search for 4–8 digits
+      const m = text.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
+      return { code: m ? m[1] : null, dump: text.slice(0, 8000) };
+    });
+    if (code && /^\d{4,8}$/.test(code)) return code.trim();
+
+    console.log('[OTP] Text search failed or invalid code:', code);
+    // Optional: uncomment to inspect content
+    // console.log('[OTP] Scoped dump:\n', dump);
+  } catch (e) {
+    console.log('[OTP] Text search error:', e.message);
+  }
+
+  // 6) Fail fast with artifacts to debug
+  if (screenshotOnFail) {
+    const file = `/tmp/otp-fail-${Date.now()}.png`;
+    try { await frame.screenshot({ path: file, fullPage: true }); } catch {}
+    console.log(`[OTP] Saved failure screenshot (if possible): ${file}`);
+  }
+  throw new Error('Could not extract confirmation code from email');
+}
+
+// ---- helpers -------------------------------------------------------------
+function isOtp(s) {
+  if (!s) return false;
+  const t = String(s).replace(/\D+/g, '');
+  return /^\d{4,8}$/.test(t);
+}
+
+// Find the frame that actually renders the email content.
+// Tries: the focused/visible modal iframe; otherwise any frame whose URL/name
+// looks like message/detail/preview/templates; otherwise main frame.
+async function findEmailFrame(page) {
+  // Wait a bit for iframes to mount
+  await page.waitForTimeout(300);
+
+  // Candidate frames by URL/name hints
+  const hints = /detail|message|mail|preview|reader|tempmail|email/i;
+  const frames = page.frames();
+
+  // 1) Prefer a visible iframe element (modal) and take its contentFrame()
+  const visibleIframeHandle = await page.$("iframe, [sandbox='allow-scripts']");
+  if (visibleIframeHandle) {
+    try {
+      const f = await visibleIframeHandle.contentFrame();
+      if (f) return f;
+    } catch {}
+  }
+
+  // 2) Pick a child frame by URL/name heuristic
+  const byHint = frames.find(f => hints.test(f.url()) || hints.test(f.name()));
+  if (byHint) return byHint;
+
+  // 3) Fallback to main frame
+  return page.mainFrame();
+}
+
 // Global variable for io instance
 let io = null;
 
@@ -716,68 +818,16 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       // Take a screenshot after scrolling to see the full email content
       await takeScreenshot('Email-After-Scroll', tempMailPage);
       
-      // Use XPath to find the confirmation code span following "Confirmation code" label
+      // Wait for network to be idle to ensure email content is fully loaded
+      addDebugStep('Code Extraction', 'info', 'Waiting for email content to fully load...');
+      await tempMailPage.waitForNetworkIdle({ idleTime: 500, timeout: 5000 });
+      
+      // Extract confirmation code using robust iframe-aware method
       try {
-        addDebugStep('Code Extraction', 'info', 'Using XPath to find confirmation code span...');
-        
-        // Wait for the email body to render
-        await tempMailPage.waitForSelector('table, div', { timeout: 10000 });
-        
-        // Find the OTP span following the label "Confirmation code" using XPath
-        const codeElements = await tempMailPage.$x(
-          "//td/div[contains(., 'Confirmation code')]/following::span[1] | " +
-          "//div[contains(., 'Confirmation code')]/following::span[1] | " +
-          "//*[contains(text(), 'Confirmation code')]/following::span[1]"
-        );
-        
-        if (codeElements.length > 0) {
-          const codeElement = codeElements[0];
-          confirmationCode = await tempMailPage.evaluate(el => el.textContent.trim(), codeElement);
-          addDebugStep('Code Extraction', 'success', `Found confirmation code via XPath: ${confirmationCode}`);
-        } else {
-          addDebugStep('Code Extraction', 'warning', 'XPath method failed, trying CSS selector...');
-          
-          // Fallback: CSS selector for span with font-size:48px
-          const largeFontSpan = await tempMailPage.$("span[style*='font-size:48px']");
-          if (largeFontSpan) {
-            confirmationCode = await tempMailPage.evaluate(el => el.textContent.trim(), largeFontSpan);
-            addDebugStep('Code Extraction', 'success', `Found confirmation code via CSS: ${confirmationCode}`);
-          } else {
-            addDebugStep('Code Extraction', 'warning', 'CSS method failed, trying text search...');
-            
-            // Last resort: Text search scoped to email content
-            confirmationCode = await tempMailPage.evaluate(() => {
-              // Narrow to the email container if present
-              const emailContainer = document.querySelector('.email, .content, table, .modal') || document.body;
-              const emailText = emailContainer.innerText;
-              
-              // Pull 4-digit code near "Confirmation code"
-              const match = emailText.match(/Confirmation code[\s\S]*?\b(\d{4})\b/i);
-              if (match) {
-                return match[1];
-              }
-              
-              // If that fails, look for any 4-digit number in the email container
-              const numbers = emailText.match(/\b\d{4}\b/g);
-              return numbers ? numbers[0] : null;
-            });
-            
-            if (confirmationCode) {
-              addDebugStep('Code Extraction', 'success', `Found confirmation code via text search: ${confirmationCode}`);
-            }
-          }
-        }
-        
-        // Validate the extracted code
-        if (confirmationCode && /^\d{4}$/.test(confirmationCode)) {
-          addDebugStep('Code Extraction', 'success', `✅ Confirmation code validated: ${confirmationCode}`);
-        } else {
-          addDebugStep('Code Extraction', 'error', `❌ Invalid confirmation code format: ${confirmationCode}`);
-          confirmationCode = null;
-        }
-        
+        confirmationCode = await extractLatenodeOTP(tempMailPage);
+        addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted: ${confirmationCode}`);
       } catch (error) {
-        addDebugStep('Code Extraction', 'error', `Code extraction failed: ${error.message}`);
+        addDebugStep('Code Extraction', 'error', `❌ Code extraction failed: ${error.message}`);
         confirmationCode = null;
       }
       
