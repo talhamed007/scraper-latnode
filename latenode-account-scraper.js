@@ -29,6 +29,8 @@ async function extractCodeWithImageAnalysis(page) {
     throw new Error('OPENAI_API_KEY environment variable is not set');
   }
   
+  addDebugStep('Image Analysis', 'info', 'Environment variables loaded successfully');
+  
   addDebugStep('Image Analysis', 'info', `API Key found: ${apiKey.substring(0, 10)}...`);
   
   // Dynamic import for node-fetch (ES module)
