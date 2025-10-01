@@ -1284,41 +1284,60 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       throw new Error(`Code verification failed: ${error.message}`);
     }
     
-    // Step 8: Fill in password fields
+    // Step 8: Fill in password fields with smart logic
     addDebugStep('Password Entry', 'info', 'Filling in password fields...');
     
-    await page.evaluate((password) => {
-      // Fill first password field
-      const passwordInput = document.querySelector('input[name="password"], input[data-test-id="passwordInput"]');
-      if (passwordInput) {
-        passwordInput.focus();
-        passwordInput.value = '';
-        passwordInput.value = password;
-        passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-        passwordInput.dispatchEvent(new Event('change', { bubbles: true }));
-      }
+    // Wait for password form to be visible
+    await page.waitForSelector('input[type="password"], input[name*="password"], input[placeholder*="password" i]', { timeout: 10000 });
+    
+    addDebugStep('Password Entry', 'info', `Entering password: ${generatedPassword}`);
+    
+    // Find all password input fields
+    const passwordFields = await page.$$('input[type="password"], input[name*="password"], input[placeholder*="password" i]');
+    addDebugStep('Password Entry', 'info', `Found ${passwordFields.length} password fields`);
+    
+    // Fill each password field with smart logic
+    for (let i = 0; i < passwordFields.length; i++) {
+      const field = passwordFields[i];
       
-      // Fill second password field
-      const confirmPasswordInput = document.querySelector('input[name="newPassword"], input[data-test-id="newPasswordInput"]');
-      if (confirmPasswordInput) {
-        confirmPasswordInput.focus();
-        confirmPasswordInput.value = '';
-        confirmPasswordInput.value = password;
-        confirmPasswordInput.dispatchEvent(new Event('input', { bubbles: true }));
-        confirmPasswordInput.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    }, generatedPassword);
+      // Clear the field first
+      await page.evaluate((element) => {
+        element.focus();
+        element.value = '';
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event('keyup', { bubbles: true }));
+      }, field);
+      
+      // Type the password character by character
+      await page.evaluate((element, pwd) => {
+        element.focus();
+        element.value = pwd;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event('keyup', { bubbles: true }));
+        element.dispatchEvent(new Event('blur', { bubbles: true }));
+      }, field, generatedPassword);
+      
+      addDebugStep('Password Entry', 'info', `Filled password field ${i + 1}`);
+      
+      // Small delay between fields
+      await page.waitForTimeout(500);
+    }
+    
+    addDebugStep('Password Entry', 'success', 'All password fields filled successfully');
     
     await sleep(1000);
     await takeScreenshot('Password-Entered', page);
     
-    // Step 9: Click Register/Sign Up button
-    addDebugStep('Registration', 'info', 'Looking for Register/Sign Up button...');
+    // Step 9: Click Save button
+    addDebugStep('Registration', 'info', 'Looking for Save button...');
     
     try {
-      await page.waitForSelector('button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]', { timeout: 10000 });
-      await page.click('button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]');
-      addDebugStep('Registration', 'success', 'Clicked Register button');
+      // Look for Save button first, then fallback to other buttons
+      const saveButton = await page.waitForSelector('button:has-text("Save"), button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]', { timeout: 10000 });
+      await page.click('button:has-text("Save"), button:has-text("Register"), button:has-text("Sign Up"), button:has-text("Enregistrer"), button[type="submit"]');
+      addDebugStep('Registration', 'success', 'Clicked Save/Register button');
       
       // Wait for successful registration or dashboard
       await page.waitForFunction(() => {
@@ -1331,7 +1350,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       await takeScreenshot('Registration-Success', page);
       
     } catch (error) {
-      addDebugStep('Registration', 'error', '❌ CRITICAL: Could not find Register button or registration failed - stopping process', null, error.message);
+      addDebugStep('Registration', 'error', '❌ CRITICAL: Could not find Save button or registration failed - stopping process', null, error.message);
       throw new Error(`Registration failed: ${error.message}`);
     }
     
