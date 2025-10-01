@@ -2,9 +2,6 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// Import fetch for API calls
-const fetch = require('node-fetch');
-
 // Image analysis function using ChatGPT Vision API
 async function extractCodeWithImageAnalysis(page) {
   addDebugStep('Image Analysis', 'info', 'Taking screenshot of email content...');
@@ -24,6 +21,9 @@ async function extractCodeWithImageAnalysis(page) {
   
   // Send to ChatGPT Vision API
   addDebugStep('Image Analysis', 'info', 'Sending image to ChatGPT Vision API...');
+  
+  // Dynamic import for node-fetch (ES module)
+  const { default: fetch } = await import('node-fetch');
   
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
