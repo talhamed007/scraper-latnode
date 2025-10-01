@@ -2,96 +2,121 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// Call this right after you clicked the email row in tempmail100
-async function extractCodeTempmail100(page, { timeout = 30000 } = {}) {
-  // 1) Wait for the email view
+// === Latenode / TempMail100 confirmation code extractor ======================
+async function extractCodeTempmail100(page, { timeout = 30000, log = () => {} } = {}) {
+  // 1) Email view should be visible (header "Confirm your email address - Latenode")
   const rootSel = '.detail-box, .detail';
-  await page.waitForSelector(rootSel, { visible: true, timeout });
-  const root = await page.$(rootSel);
+  await page.waitForSelector(rootSel, { visible: true, timeout }).catch(() => {});
+  const root = await page.$(rootSel).catch(() => null);
 
-  // 2) Find all iframes that are actually inside the email container
-  const candidateFrames = [];
-  for (const f of page.frames()) {
+  // 2) Frames to try: every non-ad/non-recaptcha frame. We DO NOT require ancestry.
+  const bad = /googleads|doubleclick|recaptcha|googlesyndication|gstatic/i;
+  const frames = page.frames().filter(f => !bad.test(f.url() || ''));
+
+  // Sort to try most likely first: about:blank/srcdoc frames, then others.
+  frames.sort((a, b) => {
+    const ua = a.url(); const ub = b.url();
+    const sa = !ua || ua === 'about:blank'; 
+    const sb = !ub || ub === 'about:blank';
+    return (sa === sb) ? 0 : (sa ? -1 : 1);
+  });
+
+  // 3) Try frames
+  for (const f of frames) {
     try {
-      const iframeEl = await f.frameElement();              // <iframe> element handle
-      const isInside = await root.evaluate((r, el) => r.contains(el), iframeEl);
-      if (!isInside) continue;
+      // Quick same-origin content probe (fast; avoids 30s waits)
+      const hasContent = await f.evaluate(() => {
+        const b = document.body;
+        if (!b) return false;
+        const htmlLen = (b.innerHTML || '').length;
+        const textLen = (b.innerText || '').length;
+        return htmlLen > 50 || textLen > 20;
+      }).catch(() => false);
 
-      // Filter obvious non-content frames
-      const u = f.url() || '';
-      if (/googleads|doubleclick|recaptcha|gstatic|googlesyndication/i.test(u)) continue;
+      if (!hasContent) {
+        log(`Frame skip (no content): ${f.url() || 'about:blank'}`);
+        continue;
+      }
 
-      candidateFrames.push(f);
-    } catch {
-      // cross-origin frames may throw; skip
+      // Short wait for any text to settle (no long timeouts)
+      await f.waitForFunction(
+        () => !!(document.body && (document.body.innerText || '').trim().length),
+        { timeout: Math.min(2500, timeout) }
+      ).catch(() => {});
+
+      // Try extracting (no dependency on exact "Confirmation code" wording)
+      const code = await tryExtractFromFrame(f).catch(() => null);
+      if (code) {
+        log(`Frame OK: ${f.url() || 'about:blank'} -> ${code}`);
+        return code;
+      } else {
+        // For debugging: peek a snippet so you can see what it contained
+        const preview = await f.evaluate(() => (document.body?.innerText || '').slice(0, 120)).catch(() => '');
+        log(`Frame tried but no code: ${f.url() || 'about:blank'} | text="${preview}"`);
+      }
+    } catch (e) {
+      log(`Frame error ${f.url() || 'about:blank'}: ${e.message}`);
     }
   }
 
-  // 3) Try frames first (srcdoc/blank is common), then fallback to inline HTML in root
-  for (const f of candidateFrames) {
-    const got = await tryExtractFromFrame(f, timeout).catch(() => null);
-    if (got) return got;
+  // 4) Fallback: inline container (no frames case)
+  if (root) {
+    const inline = await tryExtractFromContainer(page, root).catch(() => null);
+    if (inline) {
+      log(`Inline container -> ${inline}`);
+      return inline;
+    }
   }
-
-  const inline = await tryExtractFromContainer(page, root, timeout).catch(() => null);
-  if (inline) return inline;
 
   throw new Error('Code not found in any email frame or container');
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function digits(s) { return String(s || '').replace(/\D+/g, ''); }
-function isOtp(s)  { return /^\d{4,8}$/.test(s || ''); }
+const digits = s => String(s || '').replace(/\D+/g, '');
+const isOtp  = s => /^\d{4,8}$/.test(s || '');
 
-async function tryExtractFromFrame(frame, timeout) {
-  // Wait until frame actually contains the label text (no network-idle here)
-  await frame.waitForFunction(
-    () => /Confirmation code/i.test(document.body?.innerText || ''),
-    { timeout }
-  );
-
-  // A) label → first following <span>
+async function tryExtractFromFrame(frame) {
+  // A) label → next span (works for Latenode template)
   const [el] = await frame.$x(
-    "//div[contains(., 'Confirmation code')]/following::span[1] | " +
-    "//td/div[contains(., 'Confirmation code')]/following::span[1]"
+    "//div[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'confirmation code')]/following::span[1] | " +
+    "//td/div[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'confirmation code')]/following::span[1]"
   );
   if (el) {
-    const raw = (await frame.evaluate(e => e.textContent, el)).trim();
+    const raw = (await frame.evaluate(e => e.textContent, el) || '').trim();
     const c = digits(raw);
     if (isOtp(c)) return c;
   }
 
-  // B) large-font span fallback
-  const spans = await frame.$$('span');
-  for (const s of spans) {
-    const { text, fs } = await frame.evaluate(e => ({
-      text: (e.textContent || '').trim(),
-      fs: parseFloat(getComputedStyle(e).fontSize || '0')
-    }), s);
-    const m = text.match(/\b(\d{4,8})\b/);
-    if (m && fs >= 36) return m[1];
-  }
+  // B) biggest-font span that contains 4–8 digits (very reliable for this email)
+  const big = await frame.evaluate(() => {
+    let best = null, bestSize = 0;
+    const spans = Array.from(document.querySelectorAll('span'));
+    for (const s of spans) {
+      const txt = (s.textContent || '').trim();
+      const m = txt.match(/\b(\d{4,8})\b/);
+      if (!m) continue;
+      const fs = parseFloat(getComputedStyle(s).fontSize || '0');
+      if (fs > bestSize) { best = m[1]; bestSize = fs; }
+    }
+    return best;
+  });
+  if (isOtp(big)) return big;
 
-  // C) scoped text search
+  // C) loose text search (handles colon / nbsp / newlines)
   const txt = await frame.evaluate(() => document.body?.innerText || '');
-  const m = txt.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
-  return m ? m[1] : null;
+  const m = txt.match(/confirmation\s*code[\s:\u00A0]*[\r\n\s]*?(\b\d{4,8}\b)/i);
+  if (m && isOtp(m[1])) return m[1];
+
+  return null;
 }
 
-async function tryExtractFromContainer(page, rootEl, timeout) {
-  // Wait until the container text includes the label
-  await page.waitForFunction(
-    el => /Confirmation code/i.test(el?.innerText || ''),
-    { timeout },
-    rootEl
-  );
-
-  // A) label → span (scoped to rootEl)
+async function tryExtractFromContainer(page, rootEl) {
+  // A) label → next span inside container
   const codeA = await page.evaluate(el => {
-    const lbl = Array.from(el.querySelectorAll('div, td')).find(n =>
-      /Confirmation code/i.test(n.innerText || '')
+    const label = Array.from(el.querySelectorAll('div, td')).find(n =>
+      /confirmation\s*code/i.test(n.innerText || '')
     );
-    const span = lbl?.querySelector('span') || lbl?.parentElement?.querySelector('span');
+    const span = label && (label.querySelector('span') || label.parentElement?.querySelector('span'));
     const raw  = (span?.textContent || '').trim();
     const num  = (raw || '').replace(/\D+/g, '');
     return /^\d{4,8}$/.test(num) ? num : null;
@@ -102,23 +127,22 @@ async function tryExtractFromContainer(page, rootEl, timeout) {
   const codeB = await page.evaluate(el => {
     let best = null, bestFs = 0;
     for (const s of el.querySelectorAll('span')) {
-      const txt = (s.textContent || '').trim();
-      const m   = txt.match(/\b(\d{4,8})\b/);
+      const m = (s.textContent || '').trim().match(/\b(\d{4,8})\b/);
       if (!m) continue;
       const fs = parseFloat(getComputedStyle(s).fontSize || '0');
-      if (fs > bestFs) { bestFs = fs; best = m[1]; }
+      if (fs > bestFs) { best = m[1]; bestFs = fs; }
     }
     return best;
   }, rootEl);
   if (codeB) return codeB;
 
-  // C) scoped text search
+  // C) container text
   const codeC = await page.evaluate(el => {
     const t = el.innerText || '';
-    const m = t.match(/Confirmation code[\s\S]{0,200}?(\b\d{4,8}\b)/i);
+    const m = t.match(/confirmation\s*code[\s:\u00A0]*[\r\n\s]*?(\b\d{4,8}\b)/i);
     return m ? m[1] : null;
   }, rootEl);
-  return codeC;
+  return codeC || null;
 }
 
 // Global variable for io instance
@@ -906,8 +930,11 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       addDebugStep('Code Extraction', 'info', 'Extracting confirmation code from email view (.detail / .detail-box)...');
       try {
         // DO NOT rely on waitForNetworkIdle here (iframe may be srcdoc)
-        confirmationCode = await extractCodeTempmail100(tempMailPage, { timeout: 30000 });
-        addDebugStep('Code Extraction', 'success', `✅ Confirmation code: ${confirmationCode}`);
+        confirmationCode = await extractCodeTempmail100(tempMailPage, { 
+          timeout: 30000,
+          log: (msg) => addDebugStep('Code Extraction', 'info', msg) // so you see each frame tried
+        });
+        addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted: ${confirmationCode}`);
       } catch (error) {
         addDebugStep('Code Extraction', 'error', `❌ Code extraction failed: ${error.message}`);
         confirmationCode = null;
