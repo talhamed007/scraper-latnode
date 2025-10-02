@@ -332,94 +332,74 @@ async function createKieAccount(io, email, password) {
     
     addDebugStep('Popup Wait', 'info', `Page content: ${JSON.stringify(pageContent, null, 2)}`);
     
-    // Step 4: Click "Sign in with Google" button (using fallback method directly)
-    addDebugStep('Google Sign-in', 'info', 'Looking for Sign in with Google button using fallback method...');
+    // Step 4: Click "Sign in with Microsoft" button (using fallback method directly)
+    addDebugStep('Microsoft Sign-in', 'info', 'Looking for Sign in with Microsoft button using fallback method...');
     
     // Debug: Check what elements are available
     const debugInfo = await page.evaluate(() => {
       const spans = Array.from(document.querySelectorAll('span')).filter(s => 
-        s.textContent && s.textContent.toLowerCase().includes('google')
+        s.textContent && s.textContent.toLowerCase().includes('microsoft')
       );
       const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]')).filter(b => 
-        b.textContent && b.textContent.toLowerCase().includes('google')
+        b.textContent && b.textContent.toLowerCase().includes('microsoft')
       );
       
       return {
-        googleSpans: spans.map(s => ({
+        microsoftSpans: spans.map(s => ({
           text: s.textContent.trim(),
           classes: s.className,
           tagName: s.tagName
         })),
-        googleButtons: buttons.map(b => ({
+        microsoftButtons: buttons.map(b => ({
           text: b.textContent.trim(),
           tagName: b.tagName,
           classes: b.className
-        })),
-        specificSpan: document.querySelector('span.nsm7Bb-HzV7m-LgbsSe-BPrWId') ? 'found' : 'not found'
+        }))
       };
     });
     
-    addDebugStep('Google Sign-in', 'info', `Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
+    addDebugStep('Microsoft Sign-in', 'info', `Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
     
     try {
       // Use fallback method with human-like mouse movement
       const buttonFound = await page.evaluate(() => {
-        // First try to find the specific span element
-        const googleSpan = document.querySelector('span.nsm7Bb-HzV7m-LgbsSe-BPrWId');
-        if (googleSpan && googleSpan.textContent && googleSpan.textContent.trim().toLowerCase().includes('inloggen met google')) {
-          // Find the parent button
-          let button = googleSpan.closest('button, a, div[role="button"]');
-          if (!button) {
-            // If no direct parent button, look for any clickable parent
-            button = googleSpan.closest('[onclick], [role="button"], button, a');
-          }
-          
-          if (button) {
-            const rect = button.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            
-            // Store position for mouse movement
-            window.googleButtonPosition = { x: centerX, y: centerY };
-            return true;
-          }
-        }
-        
-        // Fallback: try to find by text content in buttons
+        // Try to find Microsoft sign-in button by text content
         const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
-        const googleBtn = buttons.find(btn => 
+        const microsoftBtn = buttons.find(btn => 
           btn.textContent && (
-            btn.textContent.trim().toLowerCase().includes('inloggen met google') ||
-            btn.textContent.trim().toLowerCase().includes('sign in with google') ||
-            btn.textContent.trim().toLowerCase().includes('continue with google') ||
-            btn.textContent.trim().toLowerCase().includes('login with google')
+            btn.textContent.trim().toLowerCase().includes('sign in with microsoft') ||
+            btn.textContent.trim().toLowerCase().includes('microsoft') ||
+            btn.textContent.trim().toLowerCase().includes('sign in')
           )
         );
         
-        if (googleBtn) {
+        if (microsoftBtn) {
           // Get button position for human-like movement
-          const rect = googleBtn.getBoundingClientRect();
+          const rect = microsoftBtn.getBoundingClientRect();
           const centerX = rect.left + rect.width / 2;
           const centerY = rect.top + rect.height / 2;
           
           // Store position for mouse movement
-          window.googleButtonPosition = { x: centerX, y: centerY };
+          window.microsoftButtonPosition = { x: centerX, y: centerY };
           return true;
         }
         
-        // Final fallback: try to find any element containing "inloggen met google"
+        // Fallback: try to find any element containing "microsoft" or "sign in"
         const allElements = Array.from(document.querySelectorAll('*'));
-        const inloggenElement = allElements.find(el => 
-          el.textContent && el.textContent.trim().toLowerCase().includes('inloggen met google')
+        const microsoftElement = allElements.find(el => 
+          el.textContent && (
+            el.textContent.trim().toLowerCase().includes('sign in with microsoft') ||
+            el.textContent.trim().toLowerCase().includes('microsoft')
+          )
         );
         
-        if (inloggenElement) {
-          const rect = inloggenElement.getBoundingClientRect();
+        if (microsoftElement) {
+          const rect = microsoftElement.getBoundingClientRect();
           const centerX = rect.left + rect.width / 2;
           const centerY = rect.top + rect.height / 2;
           
           // Store position for mouse movement
-          window.googleButtonPosition = { x: centerX, y: centerY };
+          window.microsoftButtonPosition = { x: centerX, y: centerY };
           return true;
         }
         
@@ -428,7 +408,7 @@ async function createKieAccount(io, email, password) {
       
       if (buttonFound) {
         // Human-like mouse movement to the button
-        const buttonPos = await page.evaluate(() => window.googleButtonPosition);
+        const buttonPos = await page.evaluate(() => window.microsoftButtonPosition);
         
         // Move mouse to button with human-like path
         await page.mouse.move(buttonPos.x - 50, buttonPos.y - 20, { steps: 10 });
@@ -441,10 +421,10 @@ async function createKieAccount(io, email, password) {
         // Click the button
         await page.mouse.click(buttonPos.x, buttonPos.y);
         
-        addDebugStep('Google Sign-in', 'success', 'Clicked Google sign-in button with human-like movement');
+        addDebugStep('Microsoft Sign-in', 'success', 'Clicked Microsoft sign-in button with human-like movement');
         
         // Take screenshot immediately after clicking
-        await takeScreenshot('Google-Signin-Clicked', page);
+        await takeScreenshot('Microsoft-Signin-Clicked', page);
         
         // Wait a bit for any redirects or new windows
         await sleep(2000);
@@ -452,65 +432,65 @@ async function createKieAccount(io, email, password) {
         // Check if page is still accessible
         try {
           await page.evaluate(() => document.title);
-          addDebugStep('Google Sign-in', 'info', 'Page is still accessible after Google sign-in click');
+          addDebugStep('Microsoft Sign-in', 'info', 'Page is still accessible after Microsoft sign-in click');
         } catch (e) {
-          addDebugStep('Google Sign-in', 'warning', 'Page became inaccessible after Google sign-in click - this is normal for redirects');
+          addDebugStep('Microsoft Sign-in', 'warning', 'Page became inaccessible after Microsoft sign-in click - this is normal for redirects');
         }
         
       } else {
-        throw new Error('Could not find Sign in with Google button with fallback method');
+        throw new Error('Could not find Sign in with Microsoft button with fallback method');
       }
       
     } catch (error) {
-      addDebugStep('Google Sign-in', 'error', `Google sign-in failed: ${error.message}`);
+      addDebugStep('Microsoft Sign-in', 'error', `Microsoft sign-in failed: ${error.message}`);
       
       // Try to take screenshot even if there's an error
       try {
-        await takeScreenshot('Google-Signin-Error', page);
+        await takeScreenshot('Microsoft-Signin-Error', page);
       } catch (screenshotError) {
-        addDebugStep('Google Sign-in', 'error', `Screenshot failed: ${screenshotError.message}`);
+        addDebugStep('Microsoft Sign-in', 'error', `Screenshot failed: ${screenshotError.message}`);
       }
       
       throw error;
     }
     
-    // Step 5: Wait for Google login popup to appear and load
-    addDebugStep('Google Login Popup', 'info', 'Waiting for Google login popup to appear...');
+    // Step 5: Wait for Microsoft login popup to appear and load
+    addDebugStep('Microsoft Login Popup', 'info', 'Waiting for Microsoft login popup to appear...');
     
     try {
-      // Wait for Google login page/popup to load
+      // Wait for Microsoft login page/popup to load
       await page.waitForFunction(() => {
-        // Check for Google login specific elements
-        const googleElements = document.querySelectorAll('input[type="email"], input[name="identifier"], input[id="identifierId"]');
-        const hasGoogleLogin = googleElements.length > 0;
+        // Check for Microsoft login specific elements
+        const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
+        const hasMicrosoftLogin = microsoftElements.length > 0;
         
-        // Also check for Google login page indicators
-        const googlePageIndicators = document.querySelectorAll('[class*="google"], [class*="gmail"], [class*="account"]');
-        const hasGooglePage = googlePageIndicators.length > 0;
+        // Also check for Microsoft login page indicators
+        const microsoftPageIndicators = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]');
+        const hasMicrosoftPage = microsoftPageIndicators.length > 0;
         
-        // Check for Google-specific text
-        const googleText = document.body.textContent.toLowerCase();
-        const hasGoogleText = googleText.includes('google') || googleText.includes('gmail') || googleText.includes('account');
+        // Check for Microsoft-specific text
+        const microsoftText = document.body.textContent.toLowerCase();
+        const hasMicrosoftText = microsoftText.includes('microsoft') || microsoftText.includes('outlook') || microsoftText.includes('account');
         
-        return hasGoogleLogin || hasGooglePage || hasGoogleText;
+        return hasMicrosoftLogin || hasMicrosoftPage || hasMicrosoftText;
       }, { timeout: 15000 });
       
-      addDebugStep('Google Login Popup', 'success', 'Google login popup detected, waiting for full load...');
+      addDebugStep('Microsoft Login Popup', 'success', 'Microsoft login popup detected, waiting for full load...');
       
       // Additional wait for content to fully load
       await sleep(3000);
       
-      // Take screenshot of the Google login popup
-      await takeScreenshot('Google-Login-Popup', page);
+      // Take screenshot of the Microsoft login popup
+      await takeScreenshot('Microsoft-Login-Popup', page);
       
     } catch (error) {
-      addDebugStep('Google Login Popup', 'error', `Google login popup wait failed: ${error.message}`);
+      addDebugStep('Microsoft Login Popup', 'error', `Microsoft login popup wait failed: ${error.message}`);
       
       // Take screenshot to see what's happening after timeout
-      await takeScreenshot('Google-Login-Timeout', page);
+      await takeScreenshot('Microsoft-Login-Timeout', page);
       
       // Try to continue anyway - maybe the popup is there but our detection failed
-      addDebugStep('Google Login Popup', 'info', 'Attempting to continue despite timeout...');
+      addDebugStep('Microsoft Login Popup', 'info', 'Attempting to continue despite timeout...');
     }
     
     // Step 6: Enter email
@@ -526,13 +506,13 @@ async function createKieAccount(io, email, password) {
         throw new Error('Page session closed - cannot proceed with email entry');
       }
       
-      // Try multiple selectors for email field (Google login)
+      // Try multiple selectors for email field (Microsoft login)
       const emailSelectors = [
+        'input[name="loginfmt"]',
+        'input[id="i0116"]',
         'input[type="email"]',
         'input[name="identifier"]',
         'input[id="identifierId"]',
-        'input[name="loginfmt"]',
-        'input[id="i0116"]',
         'input[placeholder*="email" i]',
         'input[placeholder*="Email" i]',
         'input[placeholder*="Enter your email" i]'
