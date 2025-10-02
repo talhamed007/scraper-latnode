@@ -236,10 +236,39 @@
             border: 2px solid #e1e5e9;
         }
         
+        .guidance-layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        
+        .guidance-input-section {
+            flex: 1;
+        }
+        
         .guidance-input {
             display: flex;
             gap: 10px;
             margin-bottom: 15px;
+        }
+        
+        .control-panel-inline {
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .control-buttons-inline {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .control-buttons-inline .btn {
+            margin: 0;
+            padding: 8px 12px;
+            font-size: 12px;
         }
         
         .guidance-input input[type="text"] {
@@ -408,15 +437,34 @@
             </button>
         </form>
         
-        <div id="controlPanel" class="control-panel hidden">
-            <div>
-                <div id="aiStatus" class="ai-status stopped">AI Status: Stopped</div>
-            </div>
-            <div class="control-buttons">
-                <button id="pauseBtn" class="btn btn-pause" disabled>⏸️ Pause AI</button>
-                <button id="resumeBtn" class="btn btn-resume" disabled>▶️ Resume AI</button>
-                <button id="stopBtn" class="btn btn-stop" disabled>⏹️ Stop AI</button>
-                <button id="takeScreenshotBtn" class="btn btn-screenshot" disabled>📸 Take Screenshot</button>
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div id="logs" class="logs hidden">
+            <h3>📋 AI Decision Log</h3>
+            <div id="logEntries"></div>
+        </div>
+        
+        <div id="guidanceSection" class="guidance-section hidden">
+            <h3>💬 Your Guidance</h3>
+            <div class="guidance-layout">
+                <div class="guidance-input-section">
+                    <div class="guidance-input">
+                        <input type="text" id="guidanceInput" placeholder="Type your guidance for the AI (e.g., 'Click the blue button in top-right')">
+                        <button id="sendGuidanceBtn" class="btn" disabled>📤 Send Guidance</button>
+                        <button id="clearGuidanceBtn" class="btn">🗑️ Clear</button>
+                    </div>
+                    <div id="guidanceStatus" class="status info hidden">Ready to send guidance to AI</div>
+                </div>
+                
+                <div class="control-panel-inline">
+                    <div id="aiStatus" class="ai-status stopped">AI Status: Stopped</div>
+                    <div class="control-buttons-inline">
+                        <button id="pauseBtn" class="btn btn-pause" disabled>⏸️ Pause AI</button>
+                        <button id="resumeBtn" class="btn btn-resume" disabled>▶️ Resume AI</button>
+                        <button id="stopBtn" class="btn btn-stop" disabled>⏹️ Stop AI</button>
+                        <button id="takeScreenshotBtn" class="btn btn-screenshot" disabled>📸 Take Screenshot</button>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -435,23 +483,6 @@
                 <img id="currentScreenshot" class="hidden" alt="Current screenshot">
                 <div id="screenshotInfo" class="screenshot-info"></div>
             </div>
-        </div>
-        
-        <div id="guidanceSection" class="guidance-section hidden">
-            <h3>💬 Your Guidance</h3>
-            <div class="guidance-input">
-                <input type="text" id="guidanceInput" placeholder="Type your guidance for the AI (e.g., 'Click the blue button in top-right')">
-                <button id="sendGuidanceBtn" class="btn" disabled>📤 Send Guidance</button>
-                <button id="clearGuidanceBtn" class="btn">🗑️ Clear</button>
-            </div>
-            <div id="guidanceStatus" class="status info hidden">Ready to send guidance to AI</div>
-        </div>
-        
-        <div id="status" class="status" style="display: none;"></div>
-        
-        <div id="logs" class="logs hidden">
-            <h3>📋 AI Decision Log</h3>
-            <div id="logEntries"></div>
         </div>
         
         <div id="results" class="results hidden">
@@ -480,7 +511,6 @@
         const logEntries = document.getElementById('logEntries');
         const results = document.getElementById('results');
         const resultItems = document.getElementById('resultItems');
-        const controlPanel = document.getElementById('controlPanel');
         const screenshotSection = document.getElementById('screenshotSection');
         const guidanceSection = document.getElementById('guidanceSection');
         const aiStatus = document.getElementById('aiStatus');
@@ -610,7 +640,6 @@
             startBtn.disabled = false;
             startBtn.textContent = '🚀 Start Collaborative AI Scraper';
             status.style.display = 'none';
-            controlPanel.classList.add('hidden');
             screenshotSection.classList.add('hidden');
             guidanceSection.classList.add('hidden');
             logs.classList.add('hidden');
@@ -710,7 +739,6 @@
             startBtn.textContent = '🤖 Starting Collaborative AI...';
             showStatus('🤖 Starting collaborative AI scraper...', 'info');
             showLogs();
-            controlPanel.classList.remove('hidden');
             screenshotSection.classList.remove('hidden');
             guidanceSection.classList.remove('hidden');
             
