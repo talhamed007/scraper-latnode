@@ -3538,6 +3538,15 @@ const { scrapeRecraftSimple } = require('./recraft-simple-scraper');
 const { scrapeRecraftWithSession, getSessionStatus, cleanupSession } = require('./recraft-session-scraper');
 const { createLatenodeAccount } = require('./latenode-account-scraper');
 const { createKieAccount, createKieAccountAI } = require('./kie-account-scraper');
+const { 
+  createKieAccountCollaborative, 
+  setGuidance, 
+  clearGuidance, 
+  pauseAI, 
+  resumeAI, 
+  stopAI, 
+  takeManualScreenshot 
+} = require('./kie-account-collaborative-scraper');
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -3875,6 +3884,121 @@ app.post('/api/kie-account-ai', async (req, res) => {
     });
   }
 });
+
+// Collaborative Kie.ai Account Creation Route
+app.post('/api/kie-account-collaborative', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    console.log('🤖 Starting collaborative Kie.ai account creation...');
+    
+    // Set the global io instance for the scraper
+    global.io = io;
+    
+    // Get email and password from request body
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Email and password are required'
+      });
+    }
+    
+    // Pass io instance and credentials to the collaborative scraper function
+    const result = await createKieAccountCollaborative(io, email, password);
+    
+    res.json({
+      ok: true,
+      success: result.success,
+      email: result.email,
+      password: result.password,
+      message: result.message
+    });
+    
+  } catch (error) {
+    console.error('❌ Collaborative Kie.ai account creation error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Serve collaborative Kie.ai page
+app.get('/kie-collaborative', (req, res) => {
+  res.sendFile(path.join(__dirname, 'kie-account-collaborative-test.html'));
+});
+
+// AI Control Endpoints
+app.post('/api/pause-ai', async (req, res) => {
+  try {
+    pauseAI();
+    res.json({ success: true, message: 'AI paused successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/resume-ai', async (req, res) => {
+  try {
+    resumeAI();
+    res.json({ success: true, message: 'AI resumed successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/stop-ai', async (req, res) => {
+  try {
+    stopAI();
+    res.json({ success: true, message: 'AI stopped successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Guidance Endpoint
+app.post('/api/send-guidance', async (req, res) => {
+  try {
+    const { guidance } = req.body;
+    
+    if (!guidance || guidance.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Guidance message is required'
+      });
+    }
+    
+    setGuidance(guidance.trim());
+    res.json({ success: true, message: 'Guidance sent successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Manual Screenshot Endpoint
+app.post('/api/take-screenshot', async (req, res) => {
+  try {
+    // This would need to be implemented with a global page reference
+    // For now, return a placeholder response
+    res.json({ 
+      success: true, 
+      message: 'Manual screenshot feature requires page reference',
+      screenshot: null 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
