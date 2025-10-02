@@ -314,9 +314,57 @@ async function createKieAccount(io, email, password) {
     // Step 4: Click "Sign in with Google" button (using fallback method directly)
     addDebugStep('Google Sign-in', 'info', 'Looking for Sign in with Google button using fallback method...');
     
+    // Debug: Check what elements are available
+    const debugInfo = await page.evaluate(() => {
+      const spans = Array.from(document.querySelectorAll('span')).filter(s => 
+        s.textContent && s.textContent.toLowerCase().includes('google')
+      );
+      const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]')).filter(b => 
+        b.textContent && b.textContent.toLowerCase().includes('google')
+      );
+      
+      return {
+        googleSpans: spans.map(s => ({
+          text: s.textContent.trim(),
+          classes: s.className,
+          tagName: s.tagName
+        })),
+        googleButtons: buttons.map(b => ({
+          text: b.textContent.trim(),
+          tagName: b.tagName,
+          classes: b.className
+        })),
+        specificSpan: document.querySelector('span.nsm7Bb-HzV7m-LgbsSe-BPrWId') ? 'found' : 'not found'
+      };
+    });
+    
+    addDebugStep('Google Sign-in', 'info', `Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
+    
     try {
       // Use fallback method with human-like mouse movement
       const buttonFound = await page.evaluate(() => {
+        // First try to find the specific span element
+        const googleSpan = document.querySelector('span.nsm7Bb-HzV7m-LgbsSe-BPrWId');
+        if (googleSpan && googleSpan.textContent && googleSpan.textContent.trim().toLowerCase().includes('inloggen met google')) {
+          // Find the parent button
+          let button = googleSpan.closest('button, a, div[role="button"]');
+          if (!button) {
+            // If no direct parent button, look for any clickable parent
+            button = googleSpan.closest('[onclick], [role="button"], button, a');
+          }
+          
+          if (button) {
+            const rect = button.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            // Store position for mouse movement
+            window.googleButtonPosition = { x: centerX, y: centerY };
+            return true;
+          }
+        }
+        
+        // Fallback: try to find by text content in buttons
         const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
         const googleBtn = buttons.find(btn => 
           btn.textContent && (
