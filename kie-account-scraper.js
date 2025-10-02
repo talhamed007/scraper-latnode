@@ -707,6 +707,7 @@ async function createKieAccountAI(io, email, password) {
 
 async function createKieAccount(io, email, password) {
   let browser = null;
+  let page = null;
   
   try {
     // Set global IO instance
@@ -720,9 +721,10 @@ async function createKieAccount(io, email, password) {
     addDebugStep('Account Creation', 'info', `📧 Email: ${email}`);
     addDebugStep('Account Creation', 'info', `🔑 Password: ${generatedPassword}`);
     
-    // Launch browser
+    // Launch browser with timeout
     addDebugStep('Browser', 'info', 'Launching browser...');
-    browser = await puppeteer.launch({
+    
+    const browserPromise = puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -737,12 +739,30 @@ async function createKieAccount(io, email, password) {
       ]
     });
     
-    const page = await browser.newPage();
+    // Add timeout to browser launch
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Browser launch timeout after 30 seconds')), 30000)
+    );
+    
+    browser = await Promise.race([browserPromise, timeoutPromise]);
+    
+    addDebugStep('Browser', 'success', 'Browser launched successfully');
+    
+    // Create new page
+    addDebugStep('Browser', 'info', 'Creating new page...');
+    page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
+    addDebugStep('Browser', 'success', 'Page created and viewport set');
+    
+    // Verify page is created
+    if (!page) {
+      throw new Error('Page was not created successfully');
+    }
     
     // Step 1: Navigate to Kie.ai
     addDebugStep('Navigation', 'info', 'Navigating to Kie.ai...');
     await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
+    addDebugStep('Navigation', 'success', 'Successfully navigated to Kie.ai');
     
     // Human-like behavior: random delay after page load
     await randomHumanDelay(1000, 3000);
@@ -1420,11 +1440,27 @@ async function createKieAccount(io, email, password) {
   } catch (error) {
     addDebugStep('Account Creation', 'error', '❌ Kie.ai account creation failed', null, error.message);
     
+    // Add more detailed error logging
+    console.error('Detailed error:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Check if page was created
+    if (!page) {
+      addDebugStep('Account Creation', 'error', 'Page was never created - browser launch or page creation failed');
+    }
+    
+    // Check if browser was created
+    if (!browser) {
+      addDebugStep('Account Creation', 'error', 'Browser was never created - puppeteer launch failed');
+    }
+    
     // Return a more user-friendly error message for Railway
     if (error.message.includes('Failed to launch the browser process')) {
       throw new Error('Browser launch failed. This may be due to server environment limitations. Please try again or contact support.');
     } else if (error.message.includes('Missing X server')) {
       throw new Error('Display server not available. This is a server environment limitation.');
+    } else if (error.message.includes('page is not defined')) {
+      throw new Error('Page creation failed. Browser may not have launched properly. Please try again.');
     } else {
       throw new Error(`Kie.ai account creation failed: ${error.message}`);
     }
