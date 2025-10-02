@@ -62,7 +62,7 @@ function sleep(ms) {
 }
 
 // AI-powered decision making using GPT Vision
-async function getAIDecision(page, context, step) {
+async function getAIDecision(page, context, step, email = '', password = '') {
   try {
     addDebugStep('AI Decision', 'info', `Getting AI decision for: ${context}`);
     
@@ -101,21 +101,41 @@ async function getAIDecision(page, context, step) {
             role: 'system',
             content: `You are an AI assistant helping with web scraping for Kie.ai account creation. 
 
-SCENARIO: We are creating a Kie.ai account by:
-1. Going to https://kie.ai/
-2. Clicking "Get Started" 
-3. Looking for a sign-in popup with "Sign in with Microsoft" or "Sign in with Google" button
-4. Clicking the sign-in button
-5. Filling in email and password
-6. Completing the account creation process
+SCENARIO: We are creating a Kie.ai account by following these EXACT steps:
+1. Go to https://kie.ai/ (DONE)
+2. Look for and click the "Get Started" button (usually in top-right corner or main hero section)
+3. Wait for a popup/modal to appear with sign-in options
+4. Look for either "Sign in with Microsoft" or "Sign in with Google" button in the popup
+5. Click the sign-in button (Microsoft preferred, Google as fallback)
+6. Wait for the sign-in page to load
+7. Fill in the email field with the provided email
+8. Click Next/Continue button
+9. Fill in the password field
+10. Complete the account creation process
 
 CURRENT STEP: ${step}
 CONTEXT: ${context}
+
+CREDENTIALS TO USE:
+- Email: ${email}
+- Password: ${password}
 
 Page Information:
 - Title: ${pageInfo.title}
 - URL: ${pageInfo.url}
 - Available buttons: ${JSON.stringify(pageInfo.allButtons, null, 2)}
+
+IMPORTANT INSTRUCTIONS:
+- Look for buttons with text like "Get Started", "Start", "Sign Up", "Create Account" (usually in top-right corner or main hero section)
+- Look for sign-in buttons with "Microsoft", "Google", "Sign in with" (usually in a popup/modal)
+- If you see a popup/modal, look inside it for sign-in options
+- If you see email/password fields, fill them with the provided credentials
+- Always provide coordinates for clicking when possible
+- Be very specific about what you're looking for and why
+- If you see "Get Started" button, click it immediately
+- If you see sign-in options, prefer Microsoft over Google
+- If you see email field, type the provided email
+- If you see password field, type the provided password
 
 Please analyze the screenshot and page information, then respond with a JSON object containing:
 {
@@ -123,18 +143,26 @@ Please analyze the screenshot and page information, then respond with a JSON obj
   "target": "button text or selector",
   "coordinates": {"x": number, "y": number} (if clicking),
   "text": "text to type" (if typing),
-  "reasoning": "explanation of decision",
-  "nextStep": "what to do next"
+  "reasoning": "detailed explanation of what you see and what you're clicking",
+  "nextStep": "what should happen next"
 }
 
-Be specific about what element to click and provide coordinates if possible.`
+Be very specific about what element to click and provide coordinates if possible.`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Please analyze this screenshot and tell me what to do next for the Kie.ai account creation process.`
+                text: `Please analyze this screenshot of the Kie.ai website and tell me exactly what to do next. 
+
+Look for:
+1. "Get Started" button (if we haven't clicked it yet)
+2. Sign-in popup with Microsoft/Google options (if popup is visible)
+3. Email/password input fields (if we're on a sign-in page)
+4. Any other relevant buttons or forms
+
+Be very specific about what you see and what you want to click. Provide exact coordinates if possible.`
               },
               {
                 type: 'image_url',
@@ -354,7 +382,7 @@ async function createKieAccountAI(io, email, password) {
         });
       }
       
-      const aiDecision = await getAIDecision(page, currentContext, step);
+      const aiDecision = await getAIDecision(page, currentContext, step, email, password);
       
       if (!aiDecision) {
         addDebugStep('AI Loop', 'error', 'AI decision failed, falling back to manual process');
