@@ -4000,10 +4000,43 @@ app.post('/api/take-screenshot', async (req, res) => {
         screenshot: screenshot
       });
     } else {
+      // If no global page, try to create a temporary browser session
+      console.log('No global page available, creating temporary browser session...');
+      const puppeteer = require('puppeteer');
+      
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      });
+      
+      const page = await browser.newPage();
+      await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 10000 });
+      
+      const timestamp = Date.now();
+      const filename = `manual-screenshot-${timestamp}.png`;
+      const screenshotPath = require('path').join(__dirname, 'screenshots', filename);
+      
+      // Ensure screenshots directory exists
+      const screenshotsDir = require('path').join(__dirname, 'screenshots');
+      if (!require('fs').existsSync(screenshotsDir)) {
+        require('fs').mkdirSync(screenshotsDir, { recursive: true });
+      }
+      
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      await browser.close();
+      
       res.json({ 
-        success: false, 
-        message: 'No active browser session for screenshot',
-        screenshot: null
+        success: true, 
+        message: 'Manual screenshot taken successfully (temporary session)',
+        screenshot: filename
       });
     }
   } catch (error) {

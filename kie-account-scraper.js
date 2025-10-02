@@ -48,7 +48,15 @@ async function takeScreenshot(name, page) {
     }
     
     await page.screenshot({ path: screenshotPath, fullPage: true });
-    addDebugStep('Screenshot', 'info', `Screenshot saved: ${filename}`, filename);
+    
+    // Verify screenshot was actually saved
+    if (fs.existsSync(screenshotPath)) {
+      const stats = fs.statSync(screenshotPath);
+      addDebugStep('Screenshot', 'info', `Screenshot saved: ${filename} (${stats.size} bytes)`, filename);
+    } else {
+      addDebugStep('Screenshot', 'error', `Screenshot file not found after saving: ${filename}`);
+    }
+    
     return filename;
   } catch (error) {
     addDebugStep('Screenshot', 'error', `Failed to take screenshot: ${error.message}`);
@@ -458,7 +466,8 @@ async function createKieAccountAI(io, email, password) {
     
     // Human-like behavior: random delay after page load
     await randomHumanDelay(1000, 3000);
-    await takeScreenshot('Kie-Homepage', page);
+    const homepageScreenshot = await takeScreenshot('Kie-Homepage', page);
+    addDebugStep('Navigation', 'info', `Homepage screenshot: ${homepageScreenshot || 'Failed to take screenshot'}`);
     
     // AI Decision Loop
     let step = 1;
@@ -766,7 +775,8 @@ async function createKieAccount(io, email, password) {
     
     // Human-like behavior: random delay after page load
     await randomHumanDelay(1000, 3000);
-    await takeScreenshot('Kie-Homepage', page);
+    const homepageScreenshot = await takeScreenshot('Kie-Homepage', page);
+    addDebugStep('Navigation', 'info', `Homepage screenshot: ${homepageScreenshot || 'Failed to take screenshot'}`);
     
     // Step 2: Click "Get Started" button
     addDebugStep('Get Started', 'info', 'Looking for Get Started button...');
