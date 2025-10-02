@@ -537,22 +537,84 @@ async function executeGuidance(page, decision, step) {
         const guidance = decision.text;
         addDebugStep('Guidance Execution', 'info', `Executing guidance: ${guidance}`);
         
-        // Simple guidance parsing - can be enhanced
+        // Enhanced guidance parsing for better element detection
         if (guidance.toLowerCase().includes('click')) {
-            // Extract button text or selector from guidance
+            // Try multiple approaches to find the element
+            let element = null;
+            let foundMethod = '';
+            
+            // Method 1: Look for specific button text
             const buttonMatch = guidance.match(/click\s+(?:the\s+)?(.+?)(?:\s+button)?/i);
             if (buttonMatch) {
                 const buttonText = buttonMatch[1];
-                const element = await page.$x(`//button[contains(text(), "${buttonText}")]`) || 
-                               await page.$x(`//a[contains(text(), "${buttonText}")]`) ||
-                               await page.$x(`//*[contains(text(), "${buttonText}")]`);
+                console.log(`Looking for button with text: "${buttonText}"`);
                 
-                if (element && element.length > 0) {
-                    await element[0].click();
-                    addDebugStep('Guidance Execution', 'success', `Clicked: ${buttonText}`);
-                } else {
-                    throw new Error(`Could not find element: ${buttonText}`);
+                // Try different XPath patterns
+                const patterns = [
+                    `//button[contains(text(), "${buttonText}")]`,
+                    `//a[contains(text(), "${buttonText}")]`,
+                    `//*[contains(text(), "${buttonText}")]`,
+                    `//button[contains(., "${buttonText}")]`,
+                    `//*[contains(., "${buttonText}")]`
+                ];
+                
+                for (const pattern of patterns) {
+                    try {
+                        element = await page.$x(pattern);
+                        if (element && element.length > 0) {
+                            foundMethod = pattern;
+                            break;
+                        }
+                    } catch (e) {
+                        // Continue to next pattern
+                    }
                 }
+            }
+            
+            // Method 2: Look for HTML elements in guidance
+            const htmlMatch = guidance.match(/<[^>]+>([^<]+)<\/[^>]+>/);
+            if (htmlMatch && !element) {
+                const innerText = htmlMatch[1];
+                console.log(`Looking for element with inner text: "${innerText}"`);
+                
+                const patterns = [
+                    `//*[contains(text(), "${innerText}")]`,
+                    `//button[contains(text(), "${innerText}")]`,
+                    `//a[contains(text(), "${innerText}")]`
+                ];
+                
+                for (const pattern of patterns) {
+                    try {
+                        element = await page.$x(pattern);
+                        if (element && element.length > 0) {
+                            foundMethod = pattern;
+                            break;
+                        }
+                    } catch (e) {
+                        // Continue to next pattern
+                    }
+                }
+            }
+            
+            if (element && element.length > 0) {
+                await element[0].click();
+                addDebugStep('Guidance Execution', 'success', `Clicked element using: ${foundMethod}`);
+            } else {
+                // Get page content for debugging
+                const pageContent = await page.evaluate(() => {
+                    return {
+                        title: document.title,
+                        url: window.location.href,
+                        buttons: Array.from(document.querySelectorAll('button, a')).map(btn => ({
+                            text: btn.innerText.trim(),
+                            tagName: btn.tagName,
+                            className: btn.className
+                        })).filter(btn => btn.text.length > 0)
+                    };
+                });
+                
+                addDebugStep('Guidance Execution', 'error', `Could not find element. Available buttons: ${JSON.stringify(pageContent.buttons)}`);
+                throw new Error(`Could not find element. Page title: ${pageContent.title}`);
             }
         } else if (guidance.toLowerCase().includes('type')) {
             // Extract text to type from guidance

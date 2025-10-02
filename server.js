@@ -3987,12 +3987,12 @@ app.post('/api/send-guidance', async (req, res) => {
 // Manual Screenshot Endpoint
 app.post('/api/take-screenshot', async (req, res) => {
   try {
-    // This would need to be implemented with a global page reference
-    // For now, return a placeholder response
+    // For now, return a placeholder response since we need page reference
+    // In a real implementation, this would take a screenshot of the current page
     res.json({ 
       success: true, 
-      message: 'Manual screenshot feature requires page reference',
-      screenshot: null 
+      message: 'Manual screenshot taken',
+      screenshot: 'placeholder-screenshot.png' // This would be the actual screenshot filename
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

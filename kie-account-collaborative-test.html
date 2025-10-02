@@ -735,20 +735,26 @@
 
         function displayScreenshot(data) {
             if (data.screenshot) {
+                console.log('Updating screenshots with:', data.screenshot);
+                
                 // Update main screenshot viewer
-                currentScreenshot.src = `/screenshots/${data.screenshot}`;
+                currentScreenshot.src = `/screenshots/${data.screenshot}?t=${Date.now()}`;
                 currentScreenshot.classList.remove('hidden');
                 screenshotPlaceholder.classList.add('hidden');
                 currentScreenshotData = data.screenshot;
                 downloadScreenshotBtn.disabled = false;
                 
                 // Update quick screenshot box
-                quickScreenshot.src = `/screenshots/${data.screenshot}`;
+                quickScreenshot.src = `/screenshots/${data.screenshot}?t=${Date.now()}`;
                 quickScreenshot.classList.remove('hidden');
                 quickScreenshotPlaceholder.classList.add('hidden');
                 
                 const timestamp = new Date().toLocaleString();
                 screenshotInfo.textContent = `Screenshot taken: ${timestamp}`;
+                
+                console.log('Screenshots updated successfully');
+            } else {
+                console.log('No screenshot data received');
             }
         }
 
@@ -853,6 +859,7 @@
         }
 
         function takeScreenshot() {
+            console.log('Taking manual screenshot...');
             fetch('/api/take-screenshot', {
                 method: 'POST',
                 headers: {
@@ -862,8 +869,11 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Screenshot response:', data);
                 if (data.success && data.screenshot) {
                     displayScreenshot(data);
+                } else {
+                    console.log('Screenshot failed or no data:', data);
                 }
             })
             .catch(error => {
