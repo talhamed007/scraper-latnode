@@ -212,12 +212,10 @@ async function createKieAccount(io, email, password) {
     
     // Try multiple selectors for the Get Started button
     const getStartedSelectors = [
-      'button:has-text("Get Started")',
-      'a:has-text("Get Started")',
-      'button[class*="Get Started"]',
-      'button:contains("Get Started")',
       '//button[contains(text(), "Get Started")]',
-      '//a[contains(text(), "Get Started")]'
+      '//a[contains(text(), "Get Started")]',
+      'button[class*="Get Started"]',
+      'a[class*="Get Started"]'
     ];
     
     let getStartedButton = null;
@@ -291,7 +289,7 @@ async function createKieAccount(io, email, password) {
       });
       
       // Also check for Microsoft sign-in specific elements
-      const microsoftElements = document.querySelectorAll('button:contains("Sign in with Microsoft"), a:contains("Sign in with Microsoft"), [class*="microsoft"], [class*="signin"]');
+      const microsoftElements = document.querySelectorAll('[class*="microsoft"], [class*="signin"]');
       const hasMicrosoftElements = microsoftElements.length > 0;
       
       return hasVisibleModal || hasMicrosoftElements;
@@ -310,10 +308,6 @@ async function createKieAccount(io, email, password) {
     
     // Try multiple selectors for Microsoft sign-in button
     const microsoftSelectors = [
-      'button:has-text("Sign in with Microsoft")',
-      'a:has-text("Sign in with Microsoft")',
-      'button:contains("Sign in with Microsoft")',
-      'a:contains("Sign in with Microsoft")',
       '//button[contains(text(), "Sign in with Microsoft")]',
       '//a[contains(text(), "Sign in with Microsoft")]',
       '[class*="microsoft"] button',
@@ -389,7 +383,7 @@ async function createKieAccount(io, email, password) {
     
     // Click Next button
     addDebugStep('Email Entry', 'info', 'Clicking Next button...');
-    await page.click('input[type="submit"], button:has-text("Next")');
+    await page.click('input[type="submit"], //button[contains(text(), "Next")]');
     addDebugStep('Email Entry', 'success', 'Clicked Next button');
     await takeScreenshot('Email-Next-Clicked', page);
     
@@ -402,15 +396,15 @@ async function createKieAccount(io, email, password) {
     
     // Click Next button
     addDebugStep('Password Entry', 'info', 'Clicking Next button...');
-    await page.click('input[type="submit"], button:has-text("Next")');
+    await page.click('input[type="submit"], //button[contains(text(), "Next")]');
     addDebugStep('Password Entry', 'success', 'Clicked Next button');
     await takeScreenshot('Password-Next-Clicked', page);
     
     // Step 6: Handle "Save password?" popup - click "Never"
     try {
       addDebugStep('Password Save', 'info', 'Checking for password save popup...');
-      await page.waitForSelector('button:has-text("Never"), button:has-text("Don\'t save")', { timeout: 5000 });
-      await page.click('button:has-text("Never"), button:has-text("Don\'t save")');
+      await page.waitForSelector('//button[contains(text(), "Never")] | //button[contains(text(), "Don\'t save")]', { timeout: 5000 });
+      await page.click('//button[contains(text(), "Never")] | //button[contains(text(), "Don\'t save")]');
       addDebugStep('Password Save', 'success', 'Clicked Never on password save popup');
       await takeScreenshot('Password-Save-Never', page);
     } catch (error) {
@@ -419,28 +413,28 @@ async function createKieAccount(io, email, password) {
     
     // Step 7: Handle "Let's protect your account" - click "Skip for now"
     addDebugStep('Account Protection', 'info', 'Looking for account protection popup...');
-    await page.waitForSelector('a:has-text("Skip for now"), button:has-text("Skip for now")', { timeout: 10000 });
-    await page.click('a:has-text("Skip for now"), button:has-text("Skip for now")');
+    await page.waitForSelector('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]', { timeout: 10000 });
+    await page.click('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]');
     addDebugStep('Account Protection', 'success', 'Clicked Skip for now on account protection');
     await takeScreenshot('Account-Protection-Skipped', page);
     
     // Step 8: Handle "Sign in faster" popup - click "Skip for now"
     addDebugStep('Sign-in Faster', 'info', 'Looking for sign-in faster popup...');
-    await page.waitForSelector('button:has-text("Skip for now")', { timeout: 10000 });
-    await page.click('button:has-text("Skip for now")');
+    await page.waitForSelector('//button[contains(text(), "Skip for now")]', { timeout: 10000 });
+    await page.click('//button[contains(text(), "Skip for now")]');
     addDebugStep('Sign-in Faster', 'success', 'Clicked Skip for now on sign-in faster');
     await takeScreenshot('Signin-Faster-Skipped', page);
     
     // Step 9: Handle "Stay signed in?" - click "Yes"
     addDebugStep('Stay Signed In', 'info', 'Looking for stay signed in popup...');
-    await page.waitForSelector('button:has-text("Yes"), button:has-text("Yes")', { timeout: 10000 });
-    await page.click('button:has-text("Yes"), button:has-text("Yes")');
+    await page.waitForSelector('//button[contains(text(), "Yes")]', { timeout: 10000 });
+    await page.click('//button[contains(text(), "Yes")]');
     addDebugStep('Stay Signed In', 'success', 'Clicked Yes on stay signed in');
     await takeScreenshot('Stay-Signed-In-Yes', page);
     
     // Step 10: Handle "Let this app access your info?" - scroll and click "Accept"
     addDebugStep('App Access', 'info', 'Looking for app access consent popup...');
-    await page.waitForSelector('button:has-text("Accept"), button:has-text("Accept")', { timeout: 10000 });
+    await page.waitForSelector('//button[contains(text(), "Accept")]', { timeout: 10000 });
     
     // Scroll down to make sure Accept button is visible
     await page.evaluate(() => {
@@ -448,14 +442,14 @@ async function createKieAccount(io, email, password) {
     });
     await sleep(1000);
     
-    await page.click('button:has-text("Accept"), button:has-text("Accept")');
+    await page.click('//button[contains(text(), "Accept")]');
     addDebugStep('App Access', 'success', 'Clicked Accept on app access consent');
     await takeScreenshot('App-Access-Accepted', page);
     
     // Step 11: Handle "I am human" checkbox
     addDebugStep('Human Verification', 'info', 'Looking for I am human checkbox...');
-    await page.waitForSelector('input[type="checkbox"]:has-text("I am human"), label:has-text("I am human")', { timeout: 10000 });
-    await page.click('input[type="checkbox"]:has-text("I am human"), label:has-text("I am human")');
+    await page.waitForSelector('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]', { timeout: 10000 });
+    await page.click('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]');
     addDebugStep('Human Verification', 'success', 'Clicked I am human checkbox');
     await takeScreenshot('Human-Verification-Checked', page);
     
@@ -476,7 +470,7 @@ async function createKieAccount(io, email, password) {
           const solved = await solveCaptchaWithAI(page);
           if (solved) {
             // Click Next button after solving CAPTCHA
-            await page.click('button:has-text("Next"), button:has-text("Continue")');
+            await page.click('//button[contains(text(), "Next")] | //button[contains(text(), "Continue")]');
             addDebugStep('CAPTCHA', 'success', 'CAPTCHA solved and Next clicked');
             await takeScreenshot('CAPTCHA-Solved', page);
             break;
@@ -507,8 +501,8 @@ async function createKieAccount(io, email, password) {
     // Step 13: Final "I am human" checkbox
     try {
       addDebugStep('Final Verification', 'info', 'Looking for final I am human checkbox...');
-      await page.waitForSelector('input[type="checkbox"]:has-text("I am human"), label:has-text("I am human")', { timeout: 5000 });
-      await page.click('input[type="checkbox"]:has-text("I am human"), label:has-text("I am human")');
+      await page.waitForSelector('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]', { timeout: 5000 });
+      await page.click('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]');
       addDebugStep('Final Verification', 'success', 'Clicked final I am human checkbox');
       await takeScreenshot('Final-Human-Verification', page);
     } catch (error) {
