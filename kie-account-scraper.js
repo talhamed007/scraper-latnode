@@ -518,8 +518,10 @@ async function createKieAccountAI(io, email, password) {
               await humanLikeClick(page, aiDecision.coordinates.x, aiDecision.coordinates.y);
               addDebugStep('AI Action', 'success', `Human-like clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`);
               
-              // Emit click action with screenshot
+              // Take screenshot after click action
               const clickScreenshot = await takeScreenshot(`AI-Click-${step}`, page);
+              addDebugStep('AI Action', 'info', `Screenshot after click: ${clickScreenshot || 'Failed'}`);
+              
               if (globalIO) {
                 globalIO.emit('log', {
                   step: 'AI Action',
@@ -539,8 +541,10 @@ async function createKieAccountAI(io, email, password) {
               }
               addDebugStep('AI Action', 'success', `Human-like clicked: ${aiDecision.target}`);
               
-              // Emit click action with screenshot
+              // Take screenshot after click action
               const clickScreenshot = await takeScreenshot(`AI-Click-${step}`, page);
+              addDebugStep('AI Action', 'info', `Screenshot after click: ${clickScreenshot || 'Failed'}`);
+              
               if (globalIO) {
                 globalIO.emit('log', {
                   step: 'AI Action',
@@ -558,8 +562,10 @@ async function createKieAccountAI(io, email, password) {
               await humanLikeType(page, aiDecision.target, aiDecision.text);
               addDebugStep('AI Action', 'success', `Human-like typed: ${aiDecision.text} into ${aiDecision.target}`);
               
-              // Emit type action with screenshot
+              // Take screenshot after typing action
               const typeScreenshot = await takeScreenshot(`AI-Type-${step}`, page);
+              addDebugStep('AI Action', 'info', `Screenshot after typing: ${typeScreenshot || 'Failed'}`);
+              
               if (globalIO) {
                 globalIO.emit('log', {
                   step: 'AI Action',
@@ -576,8 +582,10 @@ async function createKieAccountAI(io, email, password) {
             await randomHumanDelay(1000, 3000);
             addDebugStep('AI Action', 'info', 'Human-like waited as requested by AI');
             
-            // Emit wait action with screenshot
+            // Take screenshot after wait action
             const waitScreenshot = await takeScreenshot(`AI-Wait-${step}`, page);
+            addDebugStep('AI Action', 'info', `Screenshot after wait: ${waitScreenshot || 'Failed'}`);
+            
             if (globalIO) {
               globalIO.emit('log', {
                 step: 'AI Action',
@@ -848,7 +856,9 @@ async function createKieAccount(io, email, password) {
       addDebugStep('Get Started', 'success', `Clicked Get Started button using selector: ${usedSelector}`);
     }
     
-    await takeScreenshot('Get-Started-Clicked', page);
+    // Take screenshot after Get Started click
+    const getStartedScreenshot = await takeScreenshot('Get-Started-Clicked', page);
+    addDebugStep('Get Started', 'info', `Screenshot after Get Started click: ${getStartedScreenshot || 'Failed'}`);
     
     // Step 3: Wait for popup to appear and load fully
     addDebugStep('Popup Wait', 'info', 'Waiting for popup to appear after Get Started click...');
@@ -1256,6 +1266,10 @@ async function createKieAccount(io, email, password) {
           await humanLikeType(page, usedEmailSelector, email);
           addDebugStep('Email Entry', 'success', `Human-like entered email using selector: ${usedEmailSelector}`);
           
+          // Take screenshot after email entry
+          const emailScreenshot = await takeScreenshot('Email-Entered', page);
+          addDebugStep('Email Entry', 'info', `Screenshot after email entry: ${emailScreenshot || 'Failed'}`);
+          
           // Trigger events to ensure validation
           await page.evaluate((sel) => {
             const el = document.querySelector(sel);
@@ -1427,6 +1441,12 @@ async function createKieAccount(io, email, password) {
     
     // Step 14: Wait for dashboard
     addDebugStep('Dashboard', 'info', 'Waiting for dashboard...');
+    
+    // Verify page is still available
+    if (!page) {
+      throw new Error('Page is undefined when trying to wait for dashboard');
+    }
+    
     await page.waitForFunction(() => {
       const url = window.location.href;
       return url.includes('kie.ai') && (url.includes('dashboard') || url.includes('home') || url.includes('console') || 
