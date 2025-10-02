@@ -162,6 +162,21 @@ Be specific about what element to click and provide coordinates if possible.`
     try {
       const decision = JSON.parse(aiResponse);
       addDebugStep('AI Decision', 'success', `AI Decision: ${decision.action} - ${decision.reasoning}`);
+      
+      // Take screenshot for AI decision
+      const screenshotPath = await takeScreenshot('AI-Decision', page);
+      
+      // Emit AI decision with screenshot to UI
+      if (globalIO) {
+        globalIO.emit('log', {
+          step: 'AI Decision',
+          type: 'info',
+          message: `AI wants to ${decision.action}: ${decision.reasoning}`,
+          timestamp: new Date().toLocaleString(),
+          screenshot: screenshotPath
+        });
+      }
+      
       return decision;
     } catch (parseError) {
       addDebugStep('AI Decision', 'error', `Failed to parse AI response: ${parseError.message}`);
@@ -291,6 +306,9 @@ async function createKieAccountAI(io, email, password) {
   let page = null;
   
   try {
+    // Set global IO instance for logging
+    globalIO = io;
+    
     addDebugStep('AI Account Creation', 'info', 'Starting AI-powered Kie.ai account creation...');
     
     // Launch browser
@@ -324,10 +342,34 @@ async function createKieAccountAI(io, email, password) {
     while (step <= maxSteps) {
       addDebugStep('AI Loop', 'info', `Step ${step}: Getting AI decision...`);
       
+      // Emit AI loop step with screenshot
+      const loopScreenshot = await takeScreenshot(`AI-Loop-Step-${step}`, page);
+      if (globalIO) {
+        globalIO.emit('log', {
+          step: 'AI Loop',
+          type: 'info',
+          message: `Step ${step}: Getting AI decision for: ${currentContext}`,
+          timestamp: new Date().toLocaleString(),
+          screenshot: loopScreenshot
+        });
+      }
+      
       const aiDecision = await getAIDecision(page, currentContext, step);
       
       if (!aiDecision) {
         addDebugStep('AI Loop', 'error', 'AI decision failed, falling back to manual process');
+        
+        // Emit error with screenshot
+        const errorScreenshot = await takeScreenshot('AI-Decision-Failed', page);
+        if (globalIO) {
+          globalIO.emit('log', {
+            step: 'AI Loop',
+            type: 'error',
+            message: 'AI decision failed, falling back to manual process',
+            timestamp: new Date().toLocaleString(),
+            screenshot: errorScreenshot
+          });
+        }
         break;
       }
       
@@ -340,10 +382,34 @@ async function createKieAccountAI(io, email, password) {
               // Click at specific coordinates
               await page.mouse.click(aiDecision.coordinates.x, aiDecision.coordinates.y);
               addDebugStep('AI Action', 'success', `Clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`);
+              
+              // Emit click action with screenshot
+              const clickScreenshot = await takeScreenshot(`AI-Click-${step}`, page);
+              if (globalIO) {
+                globalIO.emit('log', {
+                  step: 'AI Action',
+                  type: 'success',
+                  message: `Clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`,
+                  timestamp: new Date().toLocaleString(),
+                  screenshot: clickScreenshot
+                });
+              }
             } else if (aiDecision.target) {
               // Click by selector or text
               await page.click(aiDecision.target);
               addDebugStep('AI Action', 'success', `Clicked: ${aiDecision.target}`);
+              
+              // Emit click action with screenshot
+              const clickScreenshot = await takeScreenshot(`AI-Click-${step}`, page);
+              if (globalIO) {
+                globalIO.emit('log', {
+                  step: 'AI Action',
+                  type: 'success',
+                  message: `Clicked: ${aiDecision.target}`,
+                  timestamp: new Date().toLocaleString(),
+                  screenshot: clickScreenshot
+                });
+              }
             }
             break;
             
@@ -351,16 +417,53 @@ async function createKieAccountAI(io, email, password) {
             if (aiDecision.text && aiDecision.target) {
               await page.type(aiDecision.target, aiDecision.text, { delay: 100 });
               addDebugStep('AI Action', 'success', `Typed: ${aiDecision.text} into ${aiDecision.target}`);
+              
+              // Emit type action with screenshot
+              const typeScreenshot = await takeScreenshot(`AI-Type-${step}`, page);
+              if (globalIO) {
+                globalIO.emit('log', {
+                  step: 'AI Action',
+                  type: 'success',
+                  message: `Typed: ${aiDecision.text} into ${aiDecision.target}`,
+                  timestamp: new Date().toLocaleString(),
+                  screenshot: typeScreenshot
+                });
+              }
             }
             break;
             
           case 'wait':
             await sleep(3000);
             addDebugStep('AI Action', 'info', 'Waited as requested by AI');
+            
+            // Emit wait action with screenshot
+            const waitScreenshot = await takeScreenshot(`AI-Wait-${step}`, page);
+            if (globalIO) {
+              globalIO.emit('log', {
+                step: 'AI Action',
+                type: 'info',
+                message: 'Waited as requested by AI',
+                timestamp: new Date().toLocaleString(),
+                screenshot: waitScreenshot
+              });
+            }
             break;
             
           case 'success':
             addDebugStep('AI Action', 'success', 'AI reports success!');
+            
+            // Emit success with screenshot
+            const successScreenshot = await takeScreenshot('AI-Success', page);
+            if (globalIO) {
+              globalIO.emit('log', {
+                step: 'AI Action',
+                type: 'success',
+                message: 'AI reports success! Account created successfully with AI assistance',
+                timestamp: new Date().toLocaleString(),
+                screenshot: successScreenshot
+              });
+            }
+            
             return {
               success: true,
               email: email,
@@ -370,11 +473,21 @@ async function createKieAccountAI(io, email, password) {
             
           case 'error':
             addDebugStep('AI Action', 'error', `AI reports error: ${aiDecision.reasoning}`);
+            
+            // Emit error with screenshot
+            const errorScreenshot = await takeScreenshot('AI-Error', page);
+            if (globalIO) {
+              globalIO.emit('log', {
+                step: 'AI Action',
+                type: 'error',
+                message: `AI reports error: ${aiDecision.reasoning}`,
+                timestamp: new Date().toLocaleString(),
+                screenshot: errorScreenshot
+              });
+            }
+            
             throw new Error(`AI detected error: ${aiDecision.reasoning}`);
         }
-        
-        // Take screenshot after action
-        await takeScreenshot(`AI-Step-${step}`, page);
         
         // Update context for next step
         currentContext = aiDecision.nextStep || "Continue with the next step in the account creation process";
@@ -385,6 +498,19 @@ async function createKieAccountAI(io, email, password) {
         
       } catch (actionError) {
         addDebugStep('AI Action', 'error', `Action failed: ${actionError.message}`);
+        
+        // Emit action error with screenshot
+        const actionErrorScreenshot = await takeScreenshot(`AI-Action-Error-${step}`, page);
+        if (globalIO) {
+          globalIO.emit('log', {
+            step: 'AI Action',
+            type: 'error',
+            message: `Action failed: ${actionError.message}`,
+            timestamp: new Date().toLocaleString(),
+            screenshot: actionErrorScreenshot
+          });
+        }
+        
         // Try to continue with next step
         step++;
       }
@@ -392,11 +518,50 @@ async function createKieAccountAI(io, email, password) {
     
     addDebugStep('AI Loop', 'warning', 'Reached maximum steps, falling back to manual process');
     
+    // Emit fallback warning with screenshot
+    const fallbackScreenshot = await takeScreenshot('AI-Fallback', page);
+    if (globalIO) {
+      globalIO.emit('log', {
+        step: 'AI Loop',
+        type: 'warning',
+        message: 'Reached maximum steps, falling back to manual process',
+        timestamp: new Date().toLocaleString(),
+        screenshot: fallbackScreenshot
+      });
+    }
+    
     // Fallback to manual process if AI loop completes
     return await createKieAccount(io, email, password);
     
   } catch (error) {
     addDebugStep('AI Account Creation', 'error', `AI account creation failed: ${error.message}`);
+    
+    // Emit final error with screenshot if page is still available
+    try {
+      if (page) {
+        const finalErrorScreenshot = await takeScreenshot('AI-Final-Error', page);
+        if (globalIO) {
+          globalIO.emit('log', {
+            step: 'AI Account Creation',
+            type: 'error',
+            message: `AI account creation failed: ${error.message}`,
+            timestamp: new Date().toLocaleString(),
+            screenshot: finalErrorScreenshot
+          });
+        }
+      }
+    } catch (screenshotError) {
+      // Screenshot failed, just emit the error without screenshot
+      if (globalIO) {
+        globalIO.emit('log', {
+          step: 'AI Account Creation',
+          type: 'error',
+          message: `AI account creation failed: ${error.message}`,
+          timestamp: new Date().toLocaleString()
+        });
+      }
+    }
+    
     return {
       success: false,
       error: error.message,
