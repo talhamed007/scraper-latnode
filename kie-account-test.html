@@ -172,26 +172,32 @@
             color: #856404;
         }
         
-        .screenshots {
-            margin-top: 20px;
-        }
-        
         .screenshot {
-            margin: 10px 0;
-            text-align: center;
+            margin: 5px 0;
+            padding: 5px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #e1e5e9;
         }
         
         .screenshot img {
-            max-width: 100%;
+            max-width: 200px;
+            max-height: 150px;
             border: 1px solid #ddd;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .screenshot img:hover {
+            transform: scale(1.05);
         }
         
         .screenshot-title {
             font-weight: 600;
+            font-size: 12px;
             margin-bottom: 5px;
-            color: #333;
+            color: #666;
         }
         
         .loading {
@@ -289,8 +295,6 @@
                 <strong>Ready</strong> System: Waiting for account creation to start...
             </div>
         </div>
-        
-        <div class="screenshots" id="screenshots"></div>
     </div>
 
     <script>
@@ -302,7 +306,6 @@
         const results = document.getElementById('results');
         const resultContent = document.getElementById('resultContent');
         const logs = document.getElementById('logs');
-        const screenshots = document.getElementById('screenshots');
         
         // Socket.IO event listeners
         socket.on('debugStep', (data) => {
@@ -322,24 +325,22 @@
             `;
             
             logs.appendChild(logEntry);
-            logs.scrollTop = logs.scrollHeight;
             
-            // Add screenshot if available
+            // Add screenshot if available - place it under the log entry
             if (data.screenshot) {
-                addScreenshot(data.screenshot, data.step);
+                const screenshotDiv = document.createElement('div');
+                screenshotDiv.className = 'screenshot';
+                
+                screenshotDiv.innerHTML = `
+                    <div class="screenshot-title">📸 Screenshot: ${data.step}</div>
+                    <img src="/screenshots/${data.screenshot}" alt="${data.step}" onerror="this.style.display='none'" 
+                         onclick="window.open('/screenshots/${data.screenshot}', '_blank')">
+                `;
+                
+                logEntry.appendChild(screenshotDiv);
             }
-        }
-        
-        function addScreenshot(filename, step) {
-            const screenshotDiv = document.createElement('div');
-            screenshotDiv.className = 'screenshot';
             
-            screenshotDiv.innerHTML = `
-                <div class="screenshot-title">${step}</div>
-                <img src="/screenshots/${filename}" alt="${step}" onerror="this.style.display='none'">
-            `;
-            
-            screenshots.appendChild(screenshotDiv);
+            logs.scrollTop = logs.scrollHeight;
         }
         
         function showStatus(message, type) {
@@ -371,7 +372,6 @@
             hideStatus();
             results.style.display = 'none';
             logs.innerHTML = '<div class="log-entry info"><strong>Ready</strong> System: Waiting for account creation to start...</div>';
-            screenshots.innerHTML = '';
         }
         
         // Form submission

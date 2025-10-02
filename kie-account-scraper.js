@@ -206,9 +206,76 @@ async function createKieAccount(io, email, password) {
     
     // Step 2: Click "Get Started" button
     addDebugStep('Get Started', 'info', 'Looking for Get Started button...');
-    await page.waitForSelector('button:has-text("Get Started"), a:has-text("Get Started")', { timeout: 10000 });
-    await page.click('button:has-text("Get Started"), a:has-text("Get Started")');
-    addDebugStep('Get Started', 'success', 'Clicked Get Started button');
+    
+    // Wait for the page to be fully loaded
+    await sleep(3000);
+    
+    // Try multiple selectors for the Get Started button
+    const getStartedSelectors = [
+      'button:has-text("Get Started")',
+      'a:has-text("Get Started")',
+      'button[class*="Get Started"]',
+      'button:contains("Get Started")',
+      '//button[contains(text(), "Get Started")]',
+      '//a[contains(text(), "Get Started")]'
+    ];
+    
+    let getStartedButton = null;
+    let usedSelector = '';
+    
+    for (const selector of getStartedSelectors) {
+      try {
+        if (selector.startsWith('//')) {
+          // XPath selector
+          getStartedButton = await page.waitForXPath(selector, { timeout: 5000 });
+        } else {
+          // CSS selector
+          getStartedButton = await page.waitForSelector(selector, { timeout: 5000 });
+        }
+        
+        if (getStartedButton) {
+          usedSelector = selector;
+          addDebugStep('Get Started', 'info', `Found Get Started button with selector: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        // Continue to next selector
+        addDebugStep('Get Started', 'info', `Selector ${selector} failed: ${e.message}`);
+      }
+    }
+    
+    if (!getStartedButton) {
+      // Fallback: try to find by text content using evaluate
+      addDebugStep('Get Started', 'info', 'Trying fallback method to find Get Started button...');
+      
+      const buttonFound = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, a'));
+        const getStartedBtn = buttons.find(btn => 
+          btn.textContent && btn.textContent.trim().toLowerCase().includes('get started')
+        );
+        
+        if (getStartedBtn) {
+          getStartedBtn.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (buttonFound) {
+        addDebugStep('Get Started', 'success', 'Clicked Get Started button using fallback method');
+      } else {
+        throw new Error('Could not find Get Started button with any method');
+      }
+    } else {
+      // Click the found button
+      if (usedSelector.startsWith('//')) {
+        await getStartedButton.click();
+      } else {
+        await page.click(selector);
+      }
+      addDebugStep('Get Started', 'success', `Clicked Get Started button using selector: ${usedSelector}`);
+    }
+    
     await takeScreenshot('Get-Started-Clicked', page);
     
     // Step 3: Click "Sign in with Microsoft" button
