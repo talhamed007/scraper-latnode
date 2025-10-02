@@ -287,7 +287,7 @@ async function createKieAccount(io, email, password) {
     // Step 3: Wait for popup to appear and load fully
     addDebugStep('Popup Wait', 'info', 'Waiting for popup to appear after Get Started click...');
     
-    // Wait for any popup/modal to appear
+    // Wait for any popup/modal to appear with multiple detection methods
     await page.waitForFunction(() => {
       // Check for common popup indicators
       const modals = document.querySelectorAll('[role="dialog"], [role="modal"], .modal, .popup, .overlay');
@@ -296,20 +296,41 @@ async function createKieAccount(io, email, password) {
         return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
       });
       
-      // Also check for Microsoft sign-in specific elements
-      const microsoftElements = document.querySelectorAll('[class*="microsoft"], [class*="signin"]');
-      const hasMicrosoftElements = microsoftElements.length > 0;
+      // Check for Google sign-in specific elements
+      const googleElements = document.querySelectorAll('[class*="google"], [class*="signin"], [class*="login"]');
+      const hasGoogleElements = googleElements.length > 0;
       
-      return hasVisibleModal || hasMicrosoftElements;
-    }, { timeout: 15000 });
+      // Check for the specific Google span we're looking for
+      const specificSpan = document.querySelector('span.nsm7Bb-HzV7m-LgbsSe-BPrWId');
+      const hasSpecificSpan = specificSpan !== null;
+      
+      // Check for any text containing "inloggen" or "sign in"
+      const signInText = document.body.textContent.toLowerCase();
+      const hasSignInText = signInText.includes('inloggen') || signInText.includes('sign in') || signInText.includes('google');
+      
+      return hasVisibleModal || hasGoogleElements || hasSpecificSpan || hasSignInText;
+    }, { timeout: 20000 });
     
     addDebugStep('Popup Wait', 'success', 'Popup detected, waiting for full load...');
     
     // Additional wait for content to fully load
-    await sleep(3000);
+    await sleep(5000);
     
     // Take screenshot of the popup
     await takeScreenshot('Popup-Appeared', page);
+    
+    // Debug: Check what's actually on the page
+    const pageContent = await page.evaluate(() => {
+      return {
+        title: document.title,
+        url: window.location.href,
+        bodyText: document.body.textContent.substring(0, 500),
+        allSpans: Array.from(document.querySelectorAll('span')).map(s => s.textContent.trim()).filter(t => t.length > 0).slice(0, 10),
+        allButtons: Array.from(document.querySelectorAll('button, a')).map(b => b.textContent.trim()).filter(t => t.length > 0).slice(0, 10)
+      };
+    });
+    
+    addDebugStep('Popup Wait', 'info', `Page content: ${JSON.stringify(pageContent, null, 2)}`);
     
     // Step 4: Click "Sign in with Google" button (using fallback method directly)
     addDebugStep('Google Sign-in', 'info', 'Looking for Sign in with Google button using fallback method...');
@@ -385,6 +406,23 @@ async function createKieAccount(io, email, password) {
           window.googleButtonPosition = { x: centerX, y: centerY };
           return true;
         }
+        
+        // Final fallback: try to find any element containing "inloggen met google"
+        const allElements = Array.from(document.querySelectorAll('*'));
+        const inloggenElement = allElements.find(el => 
+          el.textContent && el.textContent.trim().toLowerCase().includes('inloggen met google')
+        );
+        
+        if (inloggenElement) {
+          const rect = inloggenElement.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          
+          // Store position for mouse movement
+          window.googleButtonPosition = { x: centerX, y: centerY };
+          return true;
+        }
+        
         return false;
       });
       
