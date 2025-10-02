@@ -1042,31 +1042,111 @@ async function createKieAccount(io, email, password) {
         throw new Error('Page session closed - cannot proceed with email entry');
       }
       
-      // Try multiple selectors for email field (Microsoft login)
+      // Take screenshot to see current page state
+      await takeScreenshot('Before-Email-Entry', page);
+      
+      // Get all input fields on the page for debugging
+      const allInputs = await page.evaluate(() => {
+        const inputs = Array.from(document.querySelectorAll('input'));
+        return inputs.map(input => ({
+          type: input.type,
+          name: input.name,
+          id: input.id,
+          placeholder: input.placeholder,
+          className: input.className,
+          visible: input.offsetParent !== null,
+          value: input.value
+        }));
+      });
+      
+      addDebugStep('Email Entry', 'info', `Found ${allInputs.length} input fields on page: ${JSON.stringify(allInputs)}`);
+      
+      // Comprehensive email field detection
       const emailSelectors = [
+        // Microsoft-specific selectors
         'input[name="loginfmt"]',
         'input[id="i0116"]',
+        'input[name="email"]',
+        'input[id="email"]',
+        
+        // Generic email selectors
         'input[type="email"]',
-        'input[name="identifier"]',
-        'input[id="identifierId"]',
+        'input[type="text"][name*="email" i]',
+        'input[type="text"][id*="email" i]',
+        'input[type="text"][class*="email" i]',
+        
+        // Placeholder-based selectors
         'input[placeholder*="email" i]',
         'input[placeholder*="Email" i]',
-        'input[placeholder*="Enter your email" i]'
+        'input[placeholder*="mail" i]',
+        'input[placeholder*="Mail" i]',
+        'input[placeholder*="e-mail" i]',
+        'input[placeholder*="E-mail" i]',
+        'input[placeholder*="Enter your email" i]',
+        
+        // Aria-label based selectors
+        'input[aria-label*="email" i]',
+        'input[aria-label*="Email" i]',
+        'input[aria-label*="mail" i]',
+        'input[aria-label*="Mail" i]',
+        'input[aria-label*="e-mail" i]',
+        'input[aria-label*="E-mail" i]',
+        
+        // Google-specific selectors
+        'input[name="identifier"]',
+        'input[id="identifierId"]',
+        
+        // Generic text input selectors (fallback)
+        'input[type="text"]',
+        'input:not([type])'
       ];
       
       let emailField = null;
       let usedEmailSelector = '';
       
+      // Try each selector with shorter timeout
       for (const selector of emailSelectors) {
         try {
-          emailField = await page.waitForSelector(selector, { timeout: 3000 });
+          addDebugStep('Email Entry', 'info', `Trying email selector: ${selector}`);
+          
+          // Wait for selector with shorter timeout
+          emailField = await page.waitForSelector(selector, { timeout: 2000 });
+          
           if (emailField) {
-            usedEmailSelector = selector;
-            addDebugStep('Email Entry', 'info', `Found email field with selector: ${selector}`);
-            break;
+            // Check if element is visible and interactable
+            const isVisible = await emailField.isIntersectingViewport();
+            const isEnabled = await emailField.isEnabled();
+            
+            if (isVisible && isEnabled) {
+              usedEmailSelector = selector;
+              addDebugStep('Email Entry', 'success', `Found visible and enabled email field with selector: ${selector}`);
+              break;
+            } else {
+              addDebugStep('Email Entry', 'info', `Email field found but not visible/enabled: ${selector}`);
+              emailField = null;
+            }
           }
         } catch (e) {
           addDebugStep('Email Entry', 'info', `Email selector ${selector} failed: ${e.message}`);
+        }
+      }
+      
+      // If no specific email field found, try to find any text input
+      if (!emailField) {
+        addDebugStep('Email Entry', 'info', 'No specific email field found, looking for any text input...');
+        
+        const textInputs = await page.$$('input[type="text"], input:not([type])');
+        for (let i = 0; i < textInputs.length; i++) {
+          const input = textInputs[i];
+          const isVisible = await input.isIntersectingViewport();
+          const isEnabled = await input.isEnabled();
+          
+          if (isVisible && isEnabled) {
+            emailField = input;
+            usedEmailSelector = `text-input-${i}`;
+            addDebugStep('Email Entry', 'info', `Using text input ${i} as email field`);
+            break;
+          }
         }
       }
       
@@ -1097,40 +1177,72 @@ async function createKieAccount(io, email, password) {
           if (emailFieldFound) {
             addDebugStep('Email Entry', 'success', 'Email entered using fallback method');
           } else {
-            throw new Error('Could not find email field with any method');
+            // Try XPath fallback
+            addDebugStep('Email Entry', 'info', 'Trying XPath fallback for email field...');
+            const xpathResult = await page.$x('//input[@type="text" or @type="email" or not(@type)]');
+            if (xpathResult.length > 0) {
+              const xpathField = xpathResult[0];
+              const isVisible = await xpathField.isIntersectingViewport();
+              const isEnabled = await xpathField.isEnabled();
+              
+              if (isVisible && isEnabled) {
+                emailField = xpathField;
+                usedEmailSelector = 'xpath-fallback';
+                addDebugStep('Email Entry', 'info', 'Found email field using XPath fallback');
+              }
+            }
+            
+            if (!emailField) {
+              throw new Error('Could not find email field with any method');
+            }
           }
         } catch (e) {
           addDebugStep('Email Entry', 'error', `Fallback method failed: ${e.message}`);
           throw e;
         }
       } else {
-        // Human-like mouse movement to email field
+        // Human-like email entry
         try {
-          const emailFieldRect = await page.evaluate((selector) => {
-            const field = document.querySelector(selector);
-            if (field) {
-              const rect = field.getBoundingClientRect();
-              return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-            }
-            return null;
-          }, usedEmailSelector);
-          
-          if (emailFieldRect) {
-            // Move mouse to email field with human-like path
-            await page.mouse.move(emailFieldRect.x - 30, emailFieldRect.y - 10, { steps: 8 });
-            await sleep(150);
-            await page.mouse.move(emailFieldRect.x, emailFieldRect.y, { steps: 3 });
-            await sleep(200);
+          // Get element position for human-like interaction
+          const box = await emailField.boundingBox();
+          if (box) {
+            const centerX = box.x + box.width / 2;
+            const centerY = box.y + box.height / 2;
             
-            // Click to focus the field
-            await page.mouse.click(emailFieldRect.x, emailFieldRect.y);
-            await sleep(100);
+            // Human-like mouse movement to field
+            await humanLikeMouseMove(page, 0, 0, centerX, centerY);
+            await randomHumanDelay(200, 500);
           }
           
-          await page.type(usedEmailSelector, email, { delay: 100 });
-          addDebugStep('Email Entry', 'success', `Email entered using selector: ${usedEmailSelector}`);
+          // Click to focus the field
+          await emailField.click();
+          await randomHumanDelay(100, 300);
+          
+          // Clear any existing text
+          await emailField.click({ clickCount: 3 });
+          await randomHumanDelay(50, 150);
+          
+          // Use human-like typing
+          await humanLikeType(page, usedEmailSelector, email);
+          addDebugStep('Email Entry', 'success', `Human-like entered email using selector: ${usedEmailSelector}`);
+          
+          // Trigger events to ensure validation
+          await page.evaluate((sel) => {
+            const el = document.querySelector(sel);
+            if (el) {
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              el.dispatchEvent(new Event('blur', { bubbles: true }));
+              el.dispatchEvent(new Event('keyup', { bubbles: true }));
+              el.dispatchEvent(new Event('keydown', { bubbles: true }));
+            }
+          }, usedEmailSelector);
+          
+          // Wait a bit for validation
+          await randomHumanDelay(500, 1000);
+          
         } catch (e) {
-          addDebugStep('Email Entry', 'error', `Mouse movement or typing failed: ${e.message}`);
+          addDebugStep('Email Entry', 'error', `Human-like email entry failed: ${e.message}`);
           throw e;
         }
       }
