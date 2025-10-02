@@ -273,6 +273,12 @@
                 <input type="password" id="password" name="password" required placeholder="Enter your Microsoft password">
             </div>
             
+            <div class="form-group">
+                <button type="button" class="btn btn-screenshot" id="screenshotBtn" style="background: linear-gradient(45deg, #28a745, #20c997); margin-bottom: 10px;">
+                    📸 Take Screenshot
+                </button>
+            </div>
+            
             <button type="submit" class="btn" id="createBtn">
                 🚀 Start Account Creation
             </button>
@@ -306,7 +312,53 @@
         const results = document.getElementById('results');
         const resultContent = document.getElementById('resultContent');
         const logs = document.getElementById('logs');
+        const screenshotBtn = document.getElementById('screenshotBtn');
         
+        // Screenshot functionality
+        function takeScreenshot() {
+            console.log('Taking manual screenshot...');
+            fetch('/api/take-screenshot', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Screenshot response:', data);
+                if (data.success && data.screenshot) {
+                    // Add screenshot to logs
+                    addLogEntry({
+                        step: 'Manual Screenshot',
+                        type: 'info',
+                        message: `Screenshot taken: ${data.screenshot}`,
+                        timestamp: new Date().toLocaleString(),
+                        screenshot: data.screenshot
+                    });
+                } else {
+                    addLogEntry({
+                        step: 'Manual Screenshot',
+                        type: 'error',
+                        message: 'Failed to take screenshot: ' + (data.message || 'Unknown error'),
+                        timestamp: new Date().toLocaleString()
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Screenshot error:', error);
+                addLogEntry({
+                    step: 'Manual Screenshot',
+                    type: 'error',
+                    message: 'Screenshot error: ' + error.message,
+                    timestamp: new Date().toLocaleString()
+                });
+            });
+        }
+
+        // Event listeners
+        screenshotBtn.addEventListener('click', takeScreenshot);
+
         // Socket.IO event listeners
         socket.on('debugStep', (data) => {
             addLogEntry(data);
