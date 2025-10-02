@@ -3545,7 +3545,8 @@ const {
   pauseAI, 
   resumeAI, 
   stopAI, 
-  takeManualScreenshot 
+  takeManualScreenshot,
+  setGlobalPage
 } = require('./kie-account-collaborative-scraper');
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -3987,14 +3988,26 @@ app.post('/api/send-guidance', async (req, res) => {
 // Manual Screenshot Endpoint
 app.post('/api/take-screenshot', async (req, res) => {
   try {
-    // For now, return a placeholder response since we need page reference
-    // In a real implementation, this would take a screenshot of the current page
-    res.json({ 
-      success: true, 
-      message: 'Manual screenshot taken',
-      screenshot: 'placeholder-screenshot.png' // This would be the actual screenshot filename
-    });
+    console.log('📸 Manual screenshot requested');
+    
+    // Try to take a real screenshot using the global page reference
+    const screenshot = await takeManualScreenshot(null); // null because we'll use globalPage
+    
+    if (screenshot) {
+      res.json({ 
+        success: true, 
+        message: 'Manual screenshot taken successfully',
+        screenshot: screenshot
+      });
+    } else {
+      res.json({ 
+        success: false, 
+        message: 'No active browser session for screenshot',
+        screenshot: null
+      });
+    }
   } catch (error) {
+    console.error('❌ Manual screenshot error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

@@ -81,7 +81,15 @@ function stopAI() {
 // Take manual screenshot
 async function takeManualScreenshot(page) {
     try {
-        const screenshot = await takeScreenshot('Manual-Screenshot', page);
+        // Use global page if no page provided
+        const targetPage = page || globalPage;
+        
+        if (!targetPage) {
+            console.log('No page available for manual screenshot');
+            return null;
+        }
+        
+        const screenshot = await takeScreenshot('Manual-Screenshot', targetPage);
         if (globalIO && screenshot) {
             globalIO.emit('screenshot', { screenshot });
         }
@@ -90,6 +98,14 @@ async function takeManualScreenshot(page) {
         addDebugStep('Screenshot', 'error', `Manual screenshot failed: ${error.message}`);
         return null;
     }
+}
+
+// Global page reference for manual screenshots
+let globalPage = null;
+
+// Set global page reference
+function setGlobalPage(page) {
+    globalPage = page;
 }
 
 // Enhanced AI decision making with guidance integration
@@ -326,6 +342,9 @@ async function createKieAccountCollaborative(io, email, password) {
 
         page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
+        
+        // Set global page reference for manual screenshots
+        setGlobalPage(page);
 
         // Navigate to Kie.ai
         addDebugStep('Navigation', 'info', 'Navigating to Kie.ai...');
@@ -461,6 +480,9 @@ async function createKieAccountCollaborative(io, email, password) {
         if (browser) {
             await browser.close();
         }
+        
+        // Clear global page reference
+        globalPage = null;
         
         if (globalIO) {
             globalIO.emit('ai-status', { status: 'stopped' });
@@ -696,5 +718,6 @@ module.exports = {
     pauseAI,
     resumeAI,
     stopAI,
-    takeManualScreenshot
+    takeManualScreenshot,
+    setGlobalPage
 };
