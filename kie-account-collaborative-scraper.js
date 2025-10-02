@@ -48,12 +48,22 @@ function clearGuidance() {
 function pauseAI() {
     aiPaused = true;
     addDebugStep('AI Control', 'info', 'AI paused by user');
+    
+    // Emit status update to UI
+    if (globalIO) {
+        globalIO.emit('ai-status', { status: 'paused' });
+    }
 }
 
 // Resume AI
 function resumeAI() {
     aiPaused = false;
     addDebugStep('AI Control', 'info', 'AI resumed by user');
+    
+    // Emit status update to UI
+    if (globalIO) {
+        globalIO.emit('ai-status', { status: 'running' });
+    }
 }
 
 // Stop AI
@@ -61,6 +71,11 @@ function stopAI() {
     aiStopped = true;
     aiPaused = false;
     addDebugStep('AI Control', 'info', 'AI stopped by user');
+    
+    // Emit status update to UI
+    if (globalIO) {
+        globalIO.emit('ai-status', { status: 'stopped' });
+    }
 }
 
 // Take manual screenshot

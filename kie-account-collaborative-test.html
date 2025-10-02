@@ -514,12 +514,18 @@
             aiStatus.textContent = `AI Status: ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`;
             aiStatus.className = `ai-status ${newStatus}`;
             
-            // Update button states
+            // Update button states with better logic
             pauseBtn.disabled = newStatus !== 'running';
             resumeBtn.disabled = newStatus !== 'paused' && newStatus !== 'waiting';
             stopBtn.disabled = newStatus === 'stopped';
             takeScreenshotBtn.disabled = newStatus === 'stopped';
             sendGuidanceBtn.disabled = newStatus === 'stopped';
+            
+            // Debug logging
+            console.log(`AI Status updated to: ${newStatus}`);
+            console.log(`Pause button disabled: ${pauseBtn.disabled}`);
+            console.log(`Resume button disabled: ${resumeBtn.disabled}`);
+            console.log(`Stop button disabled: ${stopBtn.disabled}`);
         }
 
         function displayScreenshot(data) {
@@ -734,22 +740,32 @@
         });
 
         pauseBtn.addEventListener('click', () => {
+            console.log('Pause button clicked');
             fetch('/api/pause-ai', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
+                    console.log('Pause response:', data);
                     if (data.success) {
                         showGuidanceStatus('AI paused. You can now send guidance.', 'info');
                     }
+                })
+                .catch(error => {
+                    console.error('Pause error:', error);
                 });
         });
 
         resumeBtn.addEventListener('click', () => {
+            console.log('Resume button clicked');
             fetch('/api/resume-ai', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
+                    console.log('Resume response:', data);
                     if (data.success) {
                         showGuidanceStatus('AI resumed. It will continue with automatic decisions.', 'success');
                     }
+                })
+                .catch(error => {
+                    console.error('Resume error:', error);
                 });
         });
 
