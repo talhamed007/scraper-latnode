@@ -172,95 +172,6 @@
             font-size: 14px;
         }
         
-        .screenshot-section {
-            margin: 20px 0;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            border: 2px solid #e1e5e9;
-        }
-        
-        .screenshot-viewer {
-            display: flex;
-            gap: 20px;
-            align-items: flex-start;
-        }
-        
-        .screenshot-controls {
-            min-width: 200px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        
-        .screenshot-controls .btn {
-            margin: 0;
-            padding: 10px 15px;
-            font-size: 14px;
-            width: 100%;
-        }
-        
-        .auto-screenshot {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-        }
-        
-        .auto-screenshot input[type="checkbox"] {
-            transform: scale(1.1);
-        }
-        
-        .screenshot-display {
-            flex: 1;
-            text-align: center;
-            min-height: 200px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        .screenshot-placeholder {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 200px;
-            background: #f0f0f0;
-            border: 2px dashed #ccc;
-            border-radius: 8px;
-            color: #666;
-        }
-        
-        .placeholder-icon {
-            font-size: 48px;
-            margin-bottom: 10px;
-        }
-        
-        .placeholder-text {
-            font-size: 14px;
-        }
-        
-        .screenshot-image {
-            max-width: 100%;
-            max-height: 300px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-            object-fit: contain;
-        }
-        
-        .screenshot-image:hover {
-            transform: scale(1.02);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        .screenshot-info {
-            margin-top: 10px;
-            font-size: 12px;
-            color: #666;
-        }
         
         .guidance-section {
             margin: 20px 0;
@@ -270,87 +181,17 @@
             border: 2px solid #e1e5e9;
         }
         
-        .guidance-layout {
+        .main-control-line {
             display: flex;
+            align-items: center;
             gap: 20px;
-            align-items: flex-start;
-        }
-        
-        .guidance-input-section {
-            flex: 1;
+            margin-bottom: 15px;
         }
         
         .guidance-input {
             display: flex;
             gap: 10px;
-            margin-bottom: 15px;
-        }
-        
-        .control-panel-inline {
-            min-width: 350px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        
-        .control-buttons-inline {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        
-        .control-buttons-inline .btn {
-            margin: 0;
-            padding: 10px;
-            font-size: 16px;
-            min-width: 40px;
-            min-height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .quick-screenshot-box {
-            background: #f8f9fa;
-            border: 1px solid #e1e5e9;
-            border-radius: 8px;
-            padding: 10px;
-            text-align: center;
-        }
-        
-        .quick-screenshot-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: #666;
-            margin-bottom: 8px;
-        }
-        
-        .quick-screenshot-placeholder {
-            height: 80px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f0f0f0;
-            border: 1px dashed #ccc;
-            border-radius: 4px;
-        }
-        
-        .quick-placeholder-icon {
-            font-size: 24px;
-            color: #999;
-        }
-        
-        .quick-screenshot-image {
-            max-width: 100%;
-            max-height: 80px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-            object-fit: cover;
-        }
-        
-        .quick-screenshot-image:hover {
-            transform: scale(1.05);
+            flex: 1;
         }
         
         .guidance-input input[type="text"] {
@@ -365,6 +206,77 @@
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .guidance-input .btn {
+            margin: 0;
+            padding: 12px 20px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .control-buttons-inline {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-buttons-inline .btn {
+            margin: 0;
+            padding: 10px;
+            font-size: 16px;
+            min-width: 40px;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-view-section {
+            margin-top: 15px;
+        }
+        
+        .quick-screenshot-box {
+            background: #f8f9fa;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            max-width: 300px;
+        }
+        
+        .quick-screenshot-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .quick-screenshot-placeholder {
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f0f0;
+            border: 1px dashed #ccc;
+            border-radius: 6px;
+        }
+        
+        .quick-placeholder-icon {
+            font-size: 32px;
+            color: #999;
+        }
+        
+        .quick-screenshot-image {
+            max-width: 100%;
+            max-height: 100px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            object-fit: cover;
+        }
+        
+        .quick-screenshot-image:hover {
+            transform: scale(1.05);
         }
         
         .guidance-input .btn {
@@ -562,54 +474,32 @@
         </div>
         
         <div id="guidanceSection" class="guidance-section hidden">
-            <h3>💬 Your Guidance</h3>
-            <div class="guidance-layout">
-                <div class="guidance-input-section">
-                    <div class="guidance-input">
-                        <input type="text" id="guidanceInput" placeholder="Type your guidance for the AI (e.g., 'Click the blue button in top-right')">
-                        <button id="sendGuidanceBtn" class="btn" disabled>📤 Send Guidance</button>
-                        <button id="clearGuidanceBtn" class="btn">🗑️ Clear</button>
-                    </div>
-                    <div id="guidanceStatus" class="status info hidden">Ready to send guidance to AI</div>
+            <div class="main-control-line">
+                <div class="guidance-input">
+                    <input type="text" id="guidanceInput" placeholder="Type your guidance for the AI (e.g., 'Click the blue button in top-right')">
+                    <button id="sendGuidanceBtn" class="btn" disabled>📤 Send Guidance</button>
+                    <button id="clearGuidanceBtn" class="btn">🗑️ Clear</button>
                 </div>
                 
-                <div class="control-panel-inline">
-                    <div id="aiStatus" class="ai-status stopped">AI Status: Stopped</div>
-                    <div class="control-buttons-inline">
-                        <button id="pauseBtn" class="btn btn-pause" disabled title="Pause AI">⏸️</button>
-                        <button id="resumeBtn" class="btn btn-resume" disabled title="Resume AI">▶️</button>
-                        <button id="stopBtn" class="btn btn-stop" disabled title="Stop AI">⏹️</button>
-                        <button id="takeScreenshotBtn" class="btn btn-screenshot" disabled title="Take Screenshot">📸</button>
-                    </div>
-                    <div class="quick-screenshot-box">
-                        <div class="quick-screenshot-title">📸 Quick View</div>
-                        <div id="quickScreenshotPlaceholder" class="quick-screenshot-placeholder">
-                            <div class="quick-placeholder-icon">📷</div>
-                        </div>
-                        <img id="quickScreenshot" class="quick-screenshot-image hidden" alt="Quick screenshot" onclick="window.open(this.src, '_blank')">
-                    </div>
+                <div id="aiStatus" class="ai-status stopped">AI Status: Stopped</div>
+                
+                <div class="control-buttons-inline">
+                    <button id="pauseBtn" class="btn btn-pause" disabled title="Pause AI">⏸️</button>
+                    <button id="resumeBtn" class="btn btn-resume" disabled title="Resume AI">▶️</button>
+                    <button id="stopBtn" class="btn btn-stop" disabled title="Stop AI">⏹️</button>
+                    <button id="takeScreenshotBtn" class="btn btn-screenshot" disabled title="Take Screenshot">📸</button>
                 </div>
             </div>
-        </div>
-        
-        <div id="screenshotSection" class="screenshot-section hidden">
-            <h3>📸 Screenshot Viewer</h3>
-            <div class="screenshot-viewer">
-                <div class="screenshot-controls">
-                    <button id="manualScreenshotBtn" class="btn btn-screenshot">📸 Take Screenshot</button>
-                    <button id="downloadScreenshotBtn" class="btn" disabled>💾 Download</button>
-                    <div class="auto-screenshot">
-                        <input type="checkbox" id="autoScreenshot" checked>
-                        <label for="autoScreenshot">Auto (3s)</label>
+            
+            <div id="guidanceStatus" class="status info hidden">Ready to send guidance to AI</div>
+            
+            <div class="quick-view-section">
+                <div class="quick-screenshot-box">
+                    <div class="quick-screenshot-title">📸 Quick View</div>
+                    <div id="quickScreenshotPlaceholder" class="quick-screenshot-placeholder">
+                        <div class="quick-placeholder-icon">📷</div>
                     </div>
-                </div>
-                <div class="screenshot-display">
-                    <div id="screenshotPlaceholder" class="screenshot-placeholder">
-                        <div class="placeholder-icon">📷</div>
-                        <div class="placeholder-text">No screenshot taken yet</div>
-                    </div>
-                    <img id="currentScreenshot" class="screenshot-image hidden" alt="Current screenshot" onclick="window.open(this.src, '_blank')">
-                    <div id="screenshotInfo" class="screenshot-info"></div>
+                    <img id="quickScreenshot" class="quick-screenshot-image hidden" alt="Quick screenshot" onclick="window.open(this.src, '_blank')">
                 </div>
             </div>
         </div>
@@ -640,12 +530,8 @@
         const logEntries = document.getElementById('logEntries');
         const results = document.getElementById('results');
         const resultItems = document.getElementById('resultItems');
-        const screenshotSection = document.getElementById('screenshotSection');
         const guidanceSection = document.getElementById('guidanceSection');
         const aiStatus = document.getElementById('aiStatus');
-        const currentScreenshot = document.getElementById('currentScreenshot');
-        const screenshotPlaceholder = document.getElementById('screenshotPlaceholder');
-        const screenshotInfo = document.getElementById('screenshotInfo');
         const quickScreenshot = document.getElementById('quickScreenshot');
         const quickScreenshotPlaceholder = document.getElementById('quickScreenshotPlaceholder');
         const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
@@ -735,24 +621,15 @@
 
         function displayScreenshot(data) {
             if (data.screenshot) {
-                console.log('Updating screenshots with:', data.screenshot);
+                console.log('Updating quick screenshot with:', data.screenshot);
                 
-                // Update main screenshot viewer
-                currentScreenshot.src = `/screenshots/${data.screenshot}?t=${Date.now()}`;
-                currentScreenshot.classList.remove('hidden');
-                screenshotPlaceholder.classList.add('hidden');
-                currentScreenshotData = data.screenshot;
-                downloadScreenshotBtn.disabled = false;
-                
-                // Update quick screenshot box
+                // Update quick screenshot box only
                 quickScreenshot.src = `/screenshots/${data.screenshot}?t=${Date.now()}`;
                 quickScreenshot.classList.remove('hidden');
                 quickScreenshotPlaceholder.classList.add('hidden');
+                currentScreenshotData = data.screenshot;
                 
-                const timestamp = new Date().toLocaleString();
-                screenshotInfo.textContent = `Screenshot taken: ${timestamp}`;
-                
-                console.log('Screenshots updated successfully');
+                console.log('Quick screenshot updated successfully');
             } else {
                 console.log('No screenshot data received');
             }
@@ -828,12 +705,16 @@
             startBtn.disabled = false;
             startBtn.textContent = '🚀 Start Collaborative AI Scraper';
             status.style.display = 'none';
-            screenshotSection.classList.add('hidden');
             guidanceSection.classList.add('hidden');
             logs.classList.add('hidden');
             results.classList.add('hidden');
             logEntries.innerHTML = '';
             updateAIStatus('stopped');
+            
+            // Reset quick screenshot display
+            quickScreenshot.classList.add('hidden');
+            quickScreenshotPlaceholder.classList.remove('hidden');
+            currentScreenshotData = null;
             
             if (autoScreenshotInterval) {
                 clearInterval(autoScreenshotInterval);
@@ -841,22 +722,6 @@
             }
         }
 
-        function startAutoScreenshot() {
-            if (autoScreenshotCheckbox.checked && aiState !== 'stopped') {
-                autoScreenshotInterval = setInterval(() => {
-                    if (aiState !== 'stopped') {
-                        takeScreenshot();
-                    }
-                }, 3000);
-            }
-        }
-
-        function stopAutoScreenshot() {
-            if (autoScreenshotInterval) {
-                clearInterval(autoScreenshotInterval);
-                autoScreenshotInterval = null;
-            }
-        }
 
         function takeScreenshot() {
             console.log('Taking manual screenshot...');
@@ -881,14 +746,6 @@
             });
         }
 
-        function downloadScreenshot() {
-            if (currentScreenshotData) {
-                const link = document.createElement('a');
-                link.href = `/screenshots/${currentScreenshotData}`;
-                link.download = `screenshot-${Date.now()}.png`;
-                link.click();
-            }
-        }
 
         function sendGuidance() {
             const guidance = guidanceInput.value.trim();
@@ -1000,16 +857,7 @@
                 });
         });
 
-        manualScreenshotBtn.addEventListener('click', takeScreenshot);
-        downloadScreenshotBtn.addEventListener('click', downloadScreenshot);
-        
-        autoScreenshotCheckbox.addEventListener('change', () => {
-            if (autoScreenshotCheckbox.checked) {
-                startAutoScreenshot();
-            } else {
-                stopAutoScreenshot();
-            }
-        });
+        takeScreenshotBtn.addEventListener('click', takeScreenshot);
 
         sendGuidanceBtn.addEventListener('click', sendGuidance);
         
