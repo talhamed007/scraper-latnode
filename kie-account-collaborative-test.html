@@ -180,46 +180,80 @@
             border: 2px solid #e1e5e9;
         }
         
-        .screenshot-controls {
+        .screenshot-viewer {
             display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        
+        .screenshot-controls {
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
             gap: 10px;
-            margin-bottom: 15px;
-            align-items: center;
         }
         
         .screenshot-controls .btn {
             margin: 0;
-            padding: 10px 20px;
+            padding: 10px 15px;
             font-size: 14px;
-            width: auto;
+            width: 100%;
         }
         
         .auto-screenshot {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            font-size: 12px;
         }
         
         .auto-screenshot input[type="checkbox"] {
-            transform: scale(1.2);
+            transform: scale(1.1);
         }
         
-        .current-screenshot {
+        .screenshot-display {
+            flex: 1;
             text-align: center;
-            margin: 15px 0;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
         
-        .current-screenshot img {
+        .screenshot-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            background: #f0f0f0;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            color: #666;
+        }
+        
+        .placeholder-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        .placeholder-text {
+            font-size: 14px;
+        }
+        
+        .screenshot-image {
             max-width: 100%;
-            max-height: 400px;
+            max-height: 300px;
             border: 2px solid #ddd;
             border-radius: 8px;
             cursor: pointer;
             transition: transform 0.2s ease;
+            object-fit: contain;
         }
         
-        .current-screenshot img:hover {
+        .screenshot-image:hover {
             transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
         
         .screenshot-info {
@@ -253,7 +287,7 @@
         }
         
         .control-panel-inline {
-            min-width: 300px;
+            min-width: 350px;
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -274,6 +308,49 @@
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+        
+        .quick-screenshot-box {
+            background: #f8f9fa;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .quick-screenshot-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .quick-screenshot-placeholder {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f0f0;
+            border: 1px dashed #ccc;
+            border-radius: 4px;
+        }
+        
+        .quick-placeholder-icon {
+            font-size: 24px;
+            color: #999;
+        }
+        
+        .quick-screenshot-image {
+            max-width: 100%;
+            max-height: 80px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            object-fit: cover;
+        }
+        
+        .quick-screenshot-image:hover {
+            transform: scale(1.05);
         }
         
         .guidance-input input[type="text"] {
@@ -469,24 +546,36 @@
                         <button id="stopBtn" class="btn btn-stop" disabled title="Stop AI">⏹️</button>
                         <button id="takeScreenshotBtn" class="btn btn-screenshot" disabled title="Take Screenshot">📸</button>
                     </div>
+                    <div class="quick-screenshot-box">
+                        <div class="quick-screenshot-title">📸 Quick View</div>
+                        <div id="quickScreenshotPlaceholder" class="quick-screenshot-placeholder">
+                            <div class="quick-placeholder-icon">📷</div>
+                        </div>
+                        <img id="quickScreenshot" class="quick-screenshot-image hidden" alt="Quick screenshot" onclick="window.open(this.src, '_blank')">
+                    </div>
                 </div>
             </div>
         </div>
         
         <div id="screenshotSection" class="screenshot-section hidden">
-            <h3>📸 Screenshot Controls</h3>
-            <div class="screenshot-controls">
-                <button id="manualScreenshotBtn" class="btn btn-screenshot">📸 Take Screenshot Now</button>
-                <button id="downloadScreenshotBtn" class="btn" disabled>💾 Download Screenshot</button>
-                <div class="auto-screenshot">
-                    <input type="checkbox" id="autoScreenshot" checked>
-                    <label for="autoScreenshot">Auto Screenshot (every 3s)</label>
+            <h3>📸 Screenshot Viewer</h3>
+            <div class="screenshot-viewer">
+                <div class="screenshot-controls">
+                    <button id="manualScreenshotBtn" class="btn btn-screenshot">📸 Take Screenshot</button>
+                    <button id="downloadScreenshotBtn" class="btn" disabled>💾 Download</button>
+                    <div class="auto-screenshot">
+                        <input type="checkbox" id="autoScreenshot" checked>
+                        <label for="autoScreenshot">Auto (3s)</label>
+                    </div>
                 </div>
-            </div>
-            <div class="current-screenshot">
-                <div id="screenshotPlaceholder">No screenshot taken yet</div>
-                <img id="currentScreenshot" class="hidden" alt="Current screenshot">
-                <div id="screenshotInfo" class="screenshot-info"></div>
+                <div class="screenshot-display">
+                    <div id="screenshotPlaceholder" class="screenshot-placeholder">
+                        <div class="placeholder-icon">📷</div>
+                        <div class="placeholder-text">No screenshot taken yet</div>
+                    </div>
+                    <img id="currentScreenshot" class="screenshot-image hidden" alt="Current screenshot" onclick="window.open(this.src, '_blank')">
+                    <div id="screenshotInfo" class="screenshot-info"></div>
+                </div>
             </div>
         </div>
         
@@ -522,6 +611,8 @@
         const currentScreenshot = document.getElementById('currentScreenshot');
         const screenshotPlaceholder = document.getElementById('screenshotPlaceholder');
         const screenshotInfo = document.getElementById('screenshotInfo');
+        const quickScreenshot = document.getElementById('quickScreenshot');
+        const quickScreenshotPlaceholder = document.getElementById('quickScreenshotPlaceholder');
 
         let aiState = 'stopped'; // stopped, running, paused, waiting
         let autoScreenshotInterval = null;
@@ -565,11 +656,17 @@
 
         function displayScreenshot(data) {
             if (data.screenshot) {
+                // Update main screenshot viewer
                 currentScreenshot.src = `/screenshots/${data.screenshot}`;
                 currentScreenshot.classList.remove('hidden');
                 screenshotPlaceholder.classList.add('hidden');
                 currentScreenshotData = data.screenshot;
                 downloadScreenshotBtn.disabled = false;
+                
+                // Update quick screenshot box
+                quickScreenshot.src = `/screenshots/${data.screenshot}`;
+                quickScreenshot.classList.remove('hidden');
+                quickScreenshotPlaceholder.classList.add('hidden');
                 
                 const timestamp = new Date().toLocaleString();
                 screenshotInfo.textContent = `Screenshot taken: ${timestamp}`;
@@ -605,7 +702,9 @@
             }
             
             // Auto-scroll to bottom to show new logs
-            logEntries.scrollTop = logEntries.scrollHeight;
+            requestAnimationFrame(() => {
+                logEntries.scrollTop = logEntries.scrollHeight;
+            });
         }
 
         function showStatus(message, type) {
