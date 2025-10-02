@@ -317,7 +317,7 @@ async function createKieAccount(io, email, password) {
     ];
     
     let microsoftButton = null;
-    let usedSelector = '';
+    let microsoftUsedSelector = '';
     
     for (const selector of microsoftSelectors) {
       try {
@@ -330,7 +330,7 @@ async function createKieAccount(io, email, password) {
         }
         
         if (microsoftButton) {
-          usedSelector = selector;
+          microsoftUsedSelector = selector;
           addDebugStep('Microsoft Sign-in', 'info', `Found Microsoft sign-in button with selector: ${selector}`);
           break;
         }
@@ -364,12 +364,12 @@ async function createKieAccount(io, email, password) {
       }
     } else {
       // Click the found button
-      if (usedSelector.startsWith('//')) {
+      if (microsoftUsedSelector.startsWith('//')) {
         await microsoftButton.click();
       } else {
-        await page.click(usedSelector);
+        await page.click(microsoftUsedSelector);
       }
-      addDebugStep('Microsoft Sign-in', 'success', `Clicked Microsoft sign-in button using selector: ${usedSelector}`);
+      addDebugStep('Microsoft Sign-in', 'success', `Clicked Microsoft sign-in button using selector: ${microsoftUsedSelector}`);
     }
     
     await takeScreenshot('Microsoft-Signin-Clicked', page);
