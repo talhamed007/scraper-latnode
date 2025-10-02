@@ -473,7 +473,7 @@
             <div id="logEntries"></div>
         </div>
         
-        <div id="guidanceSection" class="guidance-section hidden">
+        <div id="guidanceSection" class="guidance-section">
             <div class="main-control-line">
                 <div class="guidance-input">
                     <input type="text" id="guidanceInput" placeholder="Type your guidance for the AI (e.g., 'Click the blue button in top-right')">
@@ -705,7 +705,6 @@
             startBtn.disabled = false;
             startBtn.textContent = '🚀 Start Collaborative AI Scraper';
             status.style.display = 'none';
-            guidanceSection.classList.add('hidden');
             logs.classList.add('hidden');
             results.classList.add('hidden');
             logEntries.innerHTML = '';
@@ -788,7 +787,6 @@
             startBtn.textContent = '🤖 Starting Collaborative AI...';
             showStatus('🤖 Starting collaborative AI scraper...', 'info');
             showLogs();
-            screenshotSection.classList.remove('hidden');
             guidanceSection.classList.remove('hidden');
             
             try {
@@ -878,6 +876,9 @@
         });
 
         // Initialize
+        console.log('Initializing UI...');
+        console.log('Guidance section element:', guidanceSection);
+        console.log('AI status element:', aiStatus);
         resetUI();
     </script>
 </body>
