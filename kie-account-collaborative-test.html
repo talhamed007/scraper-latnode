@@ -407,6 +407,7 @@
             border-radius: 8px;
             padding: 15px;
             background: #f8f9fa;
+            scroll-behavior: smooth;
         }
         
         .log-entry {
@@ -618,9 +619,31 @@
         let autoScreenshotInterval = null;
         let currentScreenshotData = null;
 
+        // Robust auto-scroll function
+        function forceScrollToBottom() {
+            if (logEntries) {
+                // Multiple approaches to ensure scrolling works
+                logEntries.scrollTop = logEntries.scrollHeight;
+                
+                setTimeout(() => {
+                    logEntries.scrollTop = logEntries.scrollHeight;
+                }, 10);
+                
+                setTimeout(() => {
+                    logEntries.scrollTop = logEntries.scrollHeight;
+                }, 50);
+                
+                setTimeout(() => {
+                    logEntries.scrollTop = logEntries.scrollHeight;
+                }, 100);
+            }
+        }
+
         // Socket event listeners
         socket.on('log', (data) => {
             addLogEntry(data);
+            // Force scroll after adding log entry
+            setTimeout(() => forceScrollToBottom(), 10);
         });
 
         socket.on('screenshot', (data) => {
@@ -701,10 +724,8 @@
                 logEntry.appendChild(screenshotDiv);
             }
             
-            // Auto-scroll to bottom to show new logs
-            requestAnimationFrame(() => {
-                logEntries.scrollTop = logEntries.scrollHeight;
-            });
+            // Force scroll to bottom to show new logs
+            forceScrollToBottom();
         }
 
         function showStatus(message, type) {
