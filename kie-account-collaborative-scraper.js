@@ -9,6 +9,9 @@ let currentGuidance = null;
 let guidancePromise = null;
 let guidanceResolve = null;
 
+// Conversation history for GPT-5 memory
+let conversationHistory = [];
+
 // Initialize guidance promise
 function initializeGuidance() {
     guidancePromise = new Promise((resolve) => {
@@ -28,6 +31,13 @@ async function waitForGuidance() {
 // Set guidance from user
 function setGuidance(guidance) {
     currentGuidance = guidance;
+    
+    // Add user guidance to conversation history
+    addToConversationHistory('user', guidance, {
+        timestamp: new Date().toISOString(),
+        type: 'guidance'
+    });
+    
     if (guidanceResolve) {
         guidanceResolve(guidance);
         initializeGuidance(); // Reset for next guidance
@@ -106,6 +116,34 @@ let globalPage = null;
 // Set global page reference
 function setGlobalPage(page) {
     globalPage = page;
+}
+
+// Add message to conversation history
+function addToConversationHistory(role, content, context = {}) {
+    conversationHistory.push({
+        role: role,
+        content: content,
+        context: context,
+        timestamp: new Date().toISOString()
+    });
+    
+    // Keep only last 20 messages to avoid token limits
+    if (conversationHistory.length > 20) {
+        conversationHistory = conversationHistory.slice(-20);
+    }
+}
+
+// Get conversation history for AI
+function getConversationHistory() {
+    return conversationHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content
+    }));
+}
+
+// Clear conversation history
+function clearConversationHistory() {
+    conversationHistory = [];
 }
 
 // Enhanced AI decision making with guidance integration
@@ -217,6 +255,9 @@ Return your response as JSON with this exact format:
 - Any popups or modals
 - CAPTCHA challenges
 
+CONVERSATION HISTORY:
+${conversationHistory.length > 0 ? 'Previous instructions and context:\n' + conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n') : 'No previous conversation history.'}
+
 Provide exact coordinates and clear instructions.`;
 
         // Call OpenAI API - Using GPT-5 for decision making/guiding
@@ -236,6 +277,7 @@ Provide exact coordinates and clear instructions.`;
                         role: 'system',
                         content: systemPrompt
                     },
+                    ...getConversationHistory(), // Include conversation history
                     {
                         role: 'user',
                         content: userPrompt
@@ -255,6 +297,13 @@ Provide exact coordinates and clear instructions.`;
         
         // Log AI response
         addDebugStep('AI Decision', 'info', `AI Response: ${aiResponse}`);
+        
+        // Add AI decision to conversation history
+        addToConversationHistory('assistant', aiResponse, {
+            step: step,
+            pageTitle: pageInfo.title,
+            pageUrl: pageInfo.url
+        });
         
         if (globalIO) {
             globalIO.emit('log', {
@@ -313,6 +362,10 @@ async function createKieAccountCollaborative(io, email, password) {
     aiPaused = false;
     aiStopped = false;
     currentGuidance = null;
+    
+    // Clear conversation history for new session
+    clearConversationHistory();
+    
     initializeGuidance();
 
     let browser;
@@ -382,15 +435,35 @@ async function createKieAccountCollaborative(io, email, password) {
                 switch (aiDecision.action) {
                     case 'click':
                         await executeClick(page, aiDecision, step);
+                        // Add action result to conversation history
+                        addToConversationHistory('assistant', `Clicked: ${aiDecision.target} at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`, {
+                            action: 'click',
+                            target: aiDecision.target,
+                            coordinates: aiDecision.coordinates
+                        });
                         break;
                     case 'type':
                         await executeType(page, aiDecision, step);
+                        // Add action result to conversation history
+                        addToConversationHistory('assistant', `Typed: "${aiDecision.text}" into ${aiDecision.target}`, {
+                            action: 'type',
+                            target: aiDecision.target,
+                            text: aiDecision.text
+                        });
                         break;
                     case 'wait':
                         await executeWait(page, aiDecision, step);
+                        // Add action result to conversation history
+                        addToConversationHistory('assistant', `Waited: ${aiDecision.reasoning}`, {
+                            action: 'wait',
+                            reasoning: aiDecision.reasoning
+                        });
                         break;
                     case 'pause':
                         addDebugStep('AI Control', 'info', 'AI paused - waiting for guidance');
+                        addToConversationHistory('assistant', 'Paused for user guidance', {
+                            action: 'pause'
+                        });
                         if (globalIO) {
                             globalIO.emit('ai-status', { status: 'paused' });
                         }
@@ -398,6 +471,10 @@ async function createKieAccountCollaborative(io, email, password) {
                         break;
                     case 'success':
                         addDebugStep('Success', 'success', aiDecision.reasoning);
+                        addToConversationHistory('assistant', `Success: ${aiDecision.reasoning}`, {
+                            action: 'success',
+                            reasoning: aiDecision.reasoning
+                        });
                         if (globalIO) {
                             globalIO.emit('ai-status', { status: 'waiting' });
                         }
@@ -408,13 +485,25 @@ async function createKieAccountCollaborative(io, email, password) {
                             message: 'Account created successfully with collaborative AI assistance!'
                         };
                     case 'error':
+                        addToConversationHistory('assistant', `Error: ${aiDecision.reasoning}`, {
+                            action: 'error',
+                            reasoning: aiDecision.reasoning
+                        });
                         throw new Error(aiDecision.reasoning);
                     case 'guidance':
                         addDebugStep('Guidance', 'info', `Following user guidance: ${aiDecision.text}`);
                         await executeGuidance(page, aiDecision, step);
+                        // Add action result to conversation history
+                        addToConversationHistory('assistant', `Executed guidance: ${aiDecision.text}`, {
+                            action: 'guidance',
+                            guidance: aiDecision.text
+                        });
                         break;
                     case 'stop':
                         addDebugStep('AI Control', 'info', 'AI stopped by user');
+                        addToConversationHistory('assistant', 'Stopped by user', {
+                            action: 'stop'
+                        });
                         return {
                             success: false,
                             email: email,
@@ -423,6 +512,10 @@ async function createKieAccountCollaborative(io, email, password) {
                         };
                     default:
                         addDebugStep('AI Decision', 'warning', `Unknown action: ${aiDecision.action}`);
+                        addToConversationHistory('assistant', `Unknown action: ${aiDecision.action}`, {
+                            action: 'unknown',
+                            actionType: aiDecision.action
+                        });
                 }
             } catch (actionError) {
                 addDebugStep('Action Error', 'error', `Action failed: ${actionError.message}`);
@@ -719,5 +812,8 @@ module.exports = {
     resumeAI,
     stopAI,
     takeManualScreenshot,
-    setGlobalPage
+    setGlobalPage,
+    addToConversationHistory,
+    getConversationHistory,
+    clearConversationHistory
 };
