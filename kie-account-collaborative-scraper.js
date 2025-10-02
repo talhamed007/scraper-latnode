@@ -203,7 +203,8 @@ Return your response as JSON with this exact format:
 
 Provide exact coordinates and clear instructions.`;
 
-        // Call OpenAI API
+        // Call OpenAI API - Using GPT-5 for decision making/guiding
+        // (GPT-4o is used for visual analysis in other parts of the system)
         const { default: fetch } = await import('node-fetch');
         
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -213,7 +214,7 @@ Provide exact coordinates and clear instructions.`;
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: 'gpt-4o',
+                model: 'gpt-5',  // Using GPT-5 for guiding/decision making
                 messages: [
                     {
                         role: 'system',

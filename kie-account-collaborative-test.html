@@ -267,8 +267,13 @@
         
         .control-buttons-inline .btn {
             margin: 0;
-            padding: 8px 12px;
-            font-size: 12px;
+            padding: 10px;
+            font-size: 16px;
+            min-width: 40px;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .guidance-input input[type="text"] {
@@ -459,10 +464,10 @@
                 <div class="control-panel-inline">
                     <div id="aiStatus" class="ai-status stopped">AI Status: Stopped</div>
                     <div class="control-buttons-inline">
-                        <button id="pauseBtn" class="btn btn-pause" disabled>⏸️ Pause AI</button>
-                        <button id="resumeBtn" class="btn btn-resume" disabled>▶️ Resume AI</button>
-                        <button id="stopBtn" class="btn btn-stop" disabled>⏹️ Stop AI</button>
-                        <button id="takeScreenshotBtn" class="btn btn-screenshot" disabled>📸 Take Screenshot</button>
+                        <button id="pauseBtn" class="btn btn-pause" disabled title="Pause AI">⏸️</button>
+                        <button id="resumeBtn" class="btn btn-resume" disabled title="Resume AI">▶️</button>
+                        <button id="stopBtn" class="btn btn-stop" disabled title="Stop AI">⏹️</button>
+                        <button id="takeScreenshotBtn" class="btn btn-screenshot" disabled title="Take Screenshot">📸</button>
                     </div>
                 </div>
             </div>
@@ -599,6 +604,7 @@
                 logEntry.appendChild(screenshotDiv);
             }
             
+            // Auto-scroll to bottom to show new logs
             logEntries.scrollTop = logEntries.scrollHeight;
         }
 
