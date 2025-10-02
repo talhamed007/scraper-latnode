@@ -42,6 +42,11 @@ app.get('/kie', (req, res) => {
   res.sendFile(path.join(__dirname, 'kie.html'));
 });
 
+// Serve the KIE.ai AI-powered test page
+app.get('/kie-ai', (req, res) => {
+  res.sendFile(path.join(__dirname, 'kie-account-ai-test.html'));
+});
+
 // Serve the Recraft.ai scraper page
 app.get('/recraft', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft.html'));
@@ -3532,7 +3537,7 @@ try {
 const { scrapeRecraftSimple } = require('./recraft-simple-scraper');
 const { scrapeRecraftWithSession, getSessionStatus, cleanupSession } = require('./recraft-session-scraper');
 const { createLatenodeAccount } = require('./latenode-account-scraper');
-const { createKieAccount } = require('./kie-account-scraper');
+const { createKieAccount, createKieAccountAI } = require('./kie-account-scraper');
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -3817,6 +3822,53 @@ app.post('/api/kie-account', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Kie.ai account creation error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Kie.ai AI-Powered Account Creation Route
+app.post('/api/kie-account-ai', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    console.log('🤖 Starting AI-powered Kie.ai account creation...');
+    
+    // Set the global io instance for the scraper
+    global.io = io;
+    
+    // Get email and password from request body
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Email and password are required'
+      });
+    }
+    
+    // Pass io instance and credentials to the AI scraper function
+    const result = await createKieAccountAI(io, email, password);
+    
+    res.json({
+      ok: true,
+      success: result.success,
+      email: result.email,
+      password: result.password,
+      message: result.message
+    });
+    
+  } catch (error) {
+    console.error('❌ AI-powered Kie.ai account creation error:', error);
     res.status(500).json({
       ok: false,
       error: error.message

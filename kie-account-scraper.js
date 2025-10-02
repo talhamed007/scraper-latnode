@@ -61,6 +61,119 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// AI-powered decision making using GPT Vision
+async function getAIDecision(page, context, step) {
+  try {
+    addDebugStep('AI Decision', 'info', `Getting AI decision for: ${context}`);
+    
+    // Take screenshot
+    const screenshot = await page.screenshot({ fullPage: true });
+    const base64 = screenshot.toString('base64');
+    
+    // Get page content for additional context
+    const pageInfo = await page.evaluate(() => {
+      return {
+        title: document.title,
+        url: window.location.href,
+        bodyText: document.body.textContent.substring(0, 1000),
+        allButtons: Array.from(document.querySelectorAll('button, a, input[type="submit"]')).map(b => ({
+          text: b.textContent?.trim() || b.value || '',
+          tagName: b.tagName,
+          classes: b.className,
+          id: b.id
+        })).filter(b => b.text.length > 0)
+      };
+    });
+    
+    // Call OpenAI API
+    const { default: fetch } = await import('node-fetch');
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an AI assistant helping with web scraping for Kie.ai account creation. 
+
+SCENARIO: We are creating a Kie.ai account by:
+1. Going to https://kie.ai/
+2. Clicking "Get Started" 
+3. Looking for a sign-in popup with "Sign in with Microsoft" or "Sign in with Google" button
+4. Clicking the sign-in button
+5. Filling in email and password
+6. Completing the account creation process
+
+CURRENT STEP: ${step}
+CONTEXT: ${context}
+
+Page Information:
+- Title: ${pageInfo.title}
+- URL: ${pageInfo.url}
+- Available buttons: ${JSON.stringify(pageInfo.allButtons, null, 2)}
+
+Please analyze the screenshot and page information, then respond with a JSON object containing:
+{
+  "action": "click" | "type" | "wait" | "error" | "success",
+  "target": "button text or selector",
+  "coordinates": {"x": number, "y": number} (if clicking),
+  "text": "text to type" (if typing),
+  "reasoning": "explanation of decision",
+  "nextStep": "what to do next"
+}
+
+Be specific about what element to click and provide coordinates if possible.`
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Please analyze this screenshot and tell me what to do next for the Kie.ai account creation process.`
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/png;base64,${base64}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 500
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content.trim();
+    
+    addDebugStep('AI Decision', 'info', `AI Response: ${aiResponse}`);
+    
+    // Parse JSON response
+    try {
+      const decision = JSON.parse(aiResponse);
+      addDebugStep('AI Decision', 'success', `AI Decision: ${decision.action} - ${decision.reasoning}`);
+      return decision;
+    } catch (parseError) {
+      addDebugStep('AI Decision', 'error', `Failed to parse AI response: ${parseError.message}`);
+      return null;
+    }
+    
+  } catch (error) {
+    addDebugStep('AI Decision', 'error', `AI decision failed: ${error.message}`);
+    return null;
+  }
+}
+
 // AI-powered CAPTCHA solving using GPT Vision
 async function solveCaptchaWithAI(page) {
   try {
@@ -172,6 +285,130 @@ async function solveCaptchaWithAI(page) {
 }
 
 // Main function to create Kie.ai account
+// AI-powered Kie.ai account creation
+async function createKieAccountAI(io, email, password) {
+  let browser = null;
+  let page = null;
+  
+  try {
+    addDebugStep('AI Account Creation', 'info', 'Starting AI-powered Kie.ai account creation...');
+    
+    // Launch browser
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+      ]
+    });
+    
+    page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+    
+    // Step 1: Navigate to Kie.ai
+    addDebugStep('Navigation', 'info', 'Navigating to Kie.ai...');
+    await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
+    addDebugStep('Navigation', 'success', 'Successfully navigated to Kie.ai');
+    await takeScreenshot('Kie-Homepage', page);
+    
+    // AI Decision Loop
+    let step = 1;
+    let maxSteps = 20; // Prevent infinite loops
+    let currentContext = "We're on the Kie.ai homepage and need to start the account creation process";
+    
+    while (step <= maxSteps) {
+      addDebugStep('AI Loop', 'info', `Step ${step}: Getting AI decision...`);
+      
+      const aiDecision = await getAIDecision(page, currentContext, step);
+      
+      if (!aiDecision) {
+        addDebugStep('AI Loop', 'error', 'AI decision failed, falling back to manual process');
+        break;
+      }
+      
+      addDebugStep('AI Loop', 'info', `AI wants to: ${aiDecision.action} - ${aiDecision.reasoning}`);
+      
+      try {
+        switch (aiDecision.action) {
+          case 'click':
+            if (aiDecision.coordinates) {
+              // Click at specific coordinates
+              await page.mouse.click(aiDecision.coordinates.x, aiDecision.coordinates.y);
+              addDebugStep('AI Action', 'success', `Clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`);
+            } else if (aiDecision.target) {
+              // Click by selector or text
+              await page.click(aiDecision.target);
+              addDebugStep('AI Action', 'success', `Clicked: ${aiDecision.target}`);
+            }
+            break;
+            
+          case 'type':
+            if (aiDecision.text && aiDecision.target) {
+              await page.type(aiDecision.target, aiDecision.text, { delay: 100 });
+              addDebugStep('AI Action', 'success', `Typed: ${aiDecision.text} into ${aiDecision.target}`);
+            }
+            break;
+            
+          case 'wait':
+            await sleep(3000);
+            addDebugStep('AI Action', 'info', 'Waited as requested by AI');
+            break;
+            
+          case 'success':
+            addDebugStep('AI Action', 'success', 'AI reports success!');
+            return {
+              success: true,
+              email: email,
+              password: password,
+              message: 'Account created successfully with AI assistance'
+            };
+            
+          case 'error':
+            addDebugStep('AI Action', 'error', `AI reports error: ${aiDecision.reasoning}`);
+            throw new Error(`AI detected error: ${aiDecision.reasoning}`);
+        }
+        
+        // Take screenshot after action
+        await takeScreenshot(`AI-Step-${step}`, page);
+        
+        // Update context for next step
+        currentContext = aiDecision.nextStep || "Continue with the next step in the account creation process";
+        step++;
+        
+        // Small delay between steps
+        await sleep(1000);
+        
+      } catch (actionError) {
+        addDebugStep('AI Action', 'error', `Action failed: ${actionError.message}`);
+        // Try to continue with next step
+        step++;
+      }
+    }
+    
+    addDebugStep('AI Loop', 'warning', 'Reached maximum steps, falling back to manual process');
+    
+    // Fallback to manual process if AI loop completes
+    return await createKieAccount(io, email, password);
+    
+  } catch (error) {
+    addDebugStep('AI Account Creation', 'error', `AI account creation failed: ${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      message: 'AI-powered account creation failed'
+    };
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
 async function createKieAccount(io, email, password) {
   let browser = null;
   
@@ -791,4 +1028,4 @@ async function createKieAccount(io, email, password) {
   }
 }
 
-module.exports = { createKieAccount };
+module.exports = { createKieAccount, createKieAccountAI };
