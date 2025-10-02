@@ -3532,6 +3532,7 @@ try {
 const { scrapeRecraftSimple } = require('./recraft-simple-scraper');
 const { scrapeRecraftWithSession, getSessionStatus, cleanupSession } = require('./recraft-session-scraper');
 const { createLatenodeAccount } = require('./latenode-account-scraper');
+const { createKieAccount } = require('./kie-account-scraper');
 app.post('/api/recraft-live', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -3731,6 +3732,10 @@ app.get('/latenode-account', (req, res) => {
   res.sendFile(path.join(__dirname, 'latenode-account-test.html'));
 });
 
+app.get('/kie-account', (req, res) => {
+  res.sendFile(path.join(__dirname, 'kie-account-test.html'));
+});
+
 // Latenode Account Creation API
 app.post('/api/latenode-account', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -3765,6 +3770,53 @@ app.post('/api/latenode-account', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Latenode account creation error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Kie.ai Account Creation Route
+app.post('/api/kie-account', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    console.log('🚀 Starting Kie.ai account creation...');
+    
+    // Set the global io instance for the scraper
+    global.io = io;
+    
+    // Get email and password from request body
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Email and password are required'
+      });
+    }
+    
+    // Pass io instance and credentials to the scraper function
+    const result = await createKieAccount(io, email, password);
+    
+    res.json({
+      ok: true,
+      success: result.success,
+      email: result.email,
+      password: result.password,
+      message: result.message
+    });
+    
+  } catch (error) {
+    console.error('❌ Kie.ai account creation error:', error);
     res.status(500).json({
       ok: false,
       error: error.message

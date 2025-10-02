@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kie.ai Account Creation</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+            box-sizing: border-box;
+        }
+        
+        input[type="email"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .results h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .result-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .logs {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        
+        .log-entry {
+            padding: 10px 15px;
+            border-bottom: 1px solid #e1e5e9;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-entry.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .log-entry.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .log-entry.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .log-entry.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .screenshots {
+            margin-top: 20px;
+        }
+        
+        .screenshot {
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        .screenshot img {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .screenshot-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .description {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .description h3 {
+            margin-top: 0;
+            color: #1976d2;
+        }
+        
+        .description ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .description li {
+            margin: 5px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Kie.ai Account Creation</h1>
+        
+        <div class="description">
+            <h3>📧 Account Creation Process</h3>
+            <p>This scraper will automatically:</p>
+            <ul>
+                <li>Navigate to Kie.ai and click "Get Started"</li>
+                <li>Sign in with Microsoft using your credentials</li>
+                <li>Handle all Microsoft authentication popups</li>
+                <li>Solve CAPTCHA challenges using AI vision</li>
+                <li>Complete account setup and reach dashboard</li>
+                <li>Provide real-time logging of the entire process</li>
+            </ul>
+        </div>
+        
+        <form id="accountForm">
+            <div class="form-group">
+                <label for="email">📧 Email Address (Required):</label>
+                <input type="email" id="email" name="email" required placeholder="Enter your Microsoft email address">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">🔑 Password (Required):</label>
+                <input type="password" id="password" name="password" required placeholder="Enter your Microsoft password">
+            </div>
+            
+            <button type="submit" class="btn" id="createBtn">
+                🚀 Start Account Creation
+            </button>
+        </form>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Creating Kie.ai account...</p>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div id="results" class="results" style="display: none;">
+            <h3>📊 Account Details</h3>
+            <div id="resultContent"></div>
+        </div>
+        
+        <div class="logs" id="logs">
+            <div class="log-entry info">
+                <strong>Ready</strong> System: Waiting for account creation to start...
+            </div>
+        </div>
+        
+        <div class="screenshots" id="screenshots"></div>
+    </div>
+
+    <script>
+        const socket = io();
+        const form = document.getElementById('accountForm');
+        const createBtn = document.getElementById('createBtn');
+        const loading = document.getElementById('loading');
+        const status = document.getElementById('status');
+        const results = document.getElementById('results');
+        const resultContent = document.getElementById('resultContent');
+        const logs = document.getElementById('logs');
+        const screenshots = document.getElementById('screenshots');
+        
+        // Socket.IO event listeners
+        socket.on('debugStep', (data) => {
+            addLogEntry(data);
+        });
+        
+        function addLogEntry(data) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${data.type}`;
+            
+            const timestamp = data.timestamp || new Date().toLocaleString();
+            const message = data.error ? `${data.message} - Error: ${data.error}` : data.message;
+            
+            logEntry.innerHTML = `
+                <strong>${data.step}</strong> ${message}
+                <br><small>${timestamp}</small>
+            `;
+            
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+            
+            // Add screenshot if available
+            if (data.screenshot) {
+                addScreenshot(data.screenshot, data.step);
+            }
+        }
+        
+        function addScreenshot(filename, step) {
+            const screenshotDiv = document.createElement('div');
+            screenshotDiv.className = 'screenshot';
+            
+            screenshotDiv.innerHTML = `
+                <div class="screenshot-title">${step}</div>
+                <img src="/screenshots/${filename}" alt="${step}" onerror="this.style.display='none'">
+            `;
+            
+            screenshots.appendChild(screenshotDiv);
+        }
+        
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+        
+        function hideStatus() {
+            status.style.display = 'none';
+        }
+        
+        function showResults(data) {
+            resultContent.innerHTML = `
+                <div class="result-item">
+                    <strong>📧 Email:</strong> ${data.email}
+                </div>
+                <div class="result-item">
+                    <strong>🔑 Password:</strong> ${data.password}
+                </div>
+                <div class="result-item">
+                    <strong>✅ Status:</strong> ${data.message}
+                </div>
+            `;
+            results.style.display = 'block';
+        }
+        
+        function resetUI() {
+            hideStatus();
+            results.style.display = 'none';
+            logs.innerHTML = '<div class="log-entry info"><strong>Ready</strong> System: Waiting for account creation to start...</div>';
+            screenshots.innerHTML = '';
+        }
+        
+        // Form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (!email || !password) {
+                showStatus('Please enter both email and password', 'error');
+                return;
+            }
+            
+            // Disable form and show loading
+            createBtn.disabled = true;
+            createBtn.textContent = 'Creating Account...';
+            loading.style.display = 'block';
+            resetUI();
+            
+            try {
+                const response = await fetch('/api/kie-account', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus('Account created successfully!', 'success');
+                    showResults(data);
+                } else {
+                    showStatus(`Account creation failed: ${data.error}`, 'error');
+                }
+                
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                addLogEntry({
+                    step: 'Error',
+                    type: 'error',
+                    message: error.message,
+                    timestamp: new Date().toLocaleString()
+                });
+            } finally {
+                // Re-enable form
+                createBtn.disabled = false;
+                createBtn.textContent = '🚀 Start Account Creation';
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
