@@ -56,7 +56,102 @@ async function takeScreenshot(name, page) {
   }
 }
 
-// Helper function to sleep
+// Human-like mouse movement and behavior functions
+async function humanLikeMouseMove(page, fromX, fromY, toX, toY) {
+  const steps = Math.floor(Math.random() * 10) + 5; // 5-15 steps
+  const stepDelay = Math.random() * 50 + 20; // 20-70ms between steps
+  
+  for (let i = 0; i <= steps; i++) {
+    const progress = i / steps;
+    // Add some randomness to the path
+    const randomOffsetX = (Math.random() - 0.5) * 20;
+    const randomOffsetY = (Math.random() - 0.5) * 20;
+    
+    const currentX = fromX + (toX - fromX) * progress + randomOffsetX;
+    const currentY = fromY + (toY - fromY) * progress + randomOffsetY;
+    
+    await page.mouse.move(currentX, currentY);
+    await page.waitForTimeout(stepDelay);
+  }
+}
+
+async function humanLikeClick(page, x, y, element = null) {
+  // Move mouse to element first if provided
+  if (element) {
+    const box = await element.boundingBox();
+    if (box) {
+      const centerX = box.x + box.width / 2;
+      const centerY = box.y + box.height / 2;
+      await humanLikeMouseMove(page, 0, 0, centerX, centerY);
+      await page.waitForTimeout(Math.random() * 200 + 100); // 100-300ms pause
+    }
+  } else if (x && y) {
+    await humanLikeMouseMove(page, 0, 0, x, y);
+    await page.waitForTimeout(Math.random() * 200 + 100);
+  }
+  
+  // Click with slight delay
+  await page.mouse.click(x || 0, y || 0, { 
+    delay: Math.random() * 50 + 50 // 50-100ms delay
+  });
+}
+
+async function humanLikeType(page, selector, text, options = {}) {
+  const element = await page.$(selector);
+  if (!element) {
+    throw new Error(`Element not found: ${selector}`);
+  }
+  
+  // Focus the element
+  await element.focus();
+  await page.waitForTimeout(Math.random() * 100 + 50);
+  
+  // Clear existing text
+  await element.click({ clickCount: 3 }); // Select all
+  await page.waitForTimeout(Math.random() * 50 + 25);
+  
+  // Type character by character with human-like delays
+  for (let i = 0; i < text.length; i++) {
+    await element.type(text[i], { 
+      delay: Math.random() * 100 + 50 // 50-150ms per character
+    });
+    
+    // Occasional longer pauses (like human thinking)
+    if (Math.random() < 0.1) {
+      await page.waitForTimeout(Math.random() * 500 + 200);
+    }
+  }
+  
+  // Trigger events to simulate real typing
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (el) {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event('blur', { bubbles: true }));
+    }
+  }, selector);
+}
+
+async function humanLikeScroll(page, direction = 'down', distance = 300) {
+  const scrollSteps = Math.floor(Math.random() * 5) + 3; // 3-8 steps
+  const stepDistance = distance / scrollSteps;
+  const stepDelay = Math.random() * 100 + 50; // 50-150ms between steps
+  
+  for (let i = 0; i < scrollSteps; i++) {
+    await page.mouse.wheel({ 
+      deltaY: direction === 'down' ? stepDistance : -stepDistance 
+    });
+    await page.waitForTimeout(stepDelay);
+  }
+}
+
+async function randomHumanDelay(min = 500, max = 2000) {
+  const delay = Math.random() * (max - min) + min;
+  await page.waitForTimeout(delay);
+}
+
+// Sleep function for delays
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -360,6 +455,9 @@ async function createKieAccountAI(io, email, password) {
     addDebugStep('Navigation', 'info', 'Navigating to Kie.ai...');
     await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
     addDebugStep('Navigation', 'success', 'Successfully navigated to Kie.ai');
+    
+    // Human-like behavior: random delay after page load
+    await randomHumanDelay(1000, 3000);
     await takeScreenshot('Kie-Homepage', page);
     
     // AI Decision Loop
@@ -407,9 +505,9 @@ async function createKieAccountAI(io, email, password) {
         switch (aiDecision.action) {
           case 'click':
             if (aiDecision.coordinates) {
-              // Click at specific coordinates
-              await page.mouse.click(aiDecision.coordinates.x, aiDecision.coordinates.y);
-              addDebugStep('AI Action', 'success', `Clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`);
+              // Human-like click at specific coordinates
+              await humanLikeClick(page, aiDecision.coordinates.x, aiDecision.coordinates.y);
+              addDebugStep('AI Action', 'success', `Human-like clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`);
               
               // Emit click action with screenshot
               const clickScreenshot = await takeScreenshot(`AI-Click-${step}`, page);
@@ -417,15 +515,20 @@ async function createKieAccountAI(io, email, password) {
                 globalIO.emit('log', {
                   step: 'AI Action',
                   type: 'success',
-                  message: `Clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`,
+                  message: `Human-like clicked at coordinates (${aiDecision.coordinates.x}, ${aiDecision.coordinates.y})`,
                   timestamp: new Date().toLocaleString(),
                   screenshot: clickScreenshot
                 });
               }
             } else if (aiDecision.target) {
-              // Click by selector or text
-              await page.click(aiDecision.target);
-              addDebugStep('AI Action', 'success', `Clicked: ${aiDecision.target}`);
+              // Human-like click by selector
+              const element = await page.$(aiDecision.target);
+              if (element) {
+                await humanLikeClick(page, null, null, element);
+              } else {
+                await page.click(aiDecision.target);
+              }
+              addDebugStep('AI Action', 'success', `Human-like clicked: ${aiDecision.target}`);
               
               // Emit click action with screenshot
               const clickScreenshot = await takeScreenshot(`AI-Click-${step}`, page);
@@ -433,7 +536,7 @@ async function createKieAccountAI(io, email, password) {
                 globalIO.emit('log', {
                   step: 'AI Action',
                   type: 'success',
-                  message: `Clicked: ${aiDecision.target}`,
+                  message: `Human-like clicked: ${aiDecision.target}`,
                   timestamp: new Date().toLocaleString(),
                   screenshot: clickScreenshot
                 });
@@ -443,8 +546,8 @@ async function createKieAccountAI(io, email, password) {
             
           case 'type':
             if (aiDecision.text && aiDecision.target) {
-              await page.type(aiDecision.target, aiDecision.text, { delay: 100 });
-              addDebugStep('AI Action', 'success', `Typed: ${aiDecision.text} into ${aiDecision.target}`);
+              await humanLikeType(page, aiDecision.target, aiDecision.text);
+              addDebugStep('AI Action', 'success', `Human-like typed: ${aiDecision.text} into ${aiDecision.target}`);
               
               // Emit type action with screenshot
               const typeScreenshot = await takeScreenshot(`AI-Type-${step}`, page);
@@ -461,8 +564,8 @@ async function createKieAccountAI(io, email, password) {
             break;
             
           case 'wait':
-            await sleep(3000);
-            addDebugStep('AI Action', 'info', 'Waited as requested by AI');
+            await randomHumanDelay(1000, 3000);
+            addDebugStep('AI Action', 'info', 'Human-like waited as requested by AI');
             
             // Emit wait action with screenshot
             const waitScreenshot = await takeScreenshot(`AI-Wait-${step}`, page);
@@ -640,6 +743,9 @@ async function createKieAccount(io, email, password) {
     // Step 1: Navigate to Kie.ai
     addDebugStep('Navigation', 'info', 'Navigating to Kie.ai...');
     await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
+    
+    // Human-like behavior: random delay after page load
+    await randomHumanDelay(1000, 3000);
     await takeScreenshot('Kie-Homepage', page);
     
     // Step 2: Click "Get Started" button
