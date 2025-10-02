@@ -331,33 +331,110 @@ async function createKieAccount(io, email, password) {
     // Step 5: Wait for Microsoft login popup to appear and load
     addDebugStep('Microsoft Login Popup', 'info', 'Waiting for Microsoft login popup to appear...');
     
-    // Wait for Microsoft login page/popup to load
-    await page.waitForFunction(() => {
-      // Check for Microsoft login specific elements
-      const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
-      const hasMicrosoftLogin = microsoftElements.length > 0;
+    try {
+      // Wait for Microsoft login page/popup to load
+      await page.waitForFunction(() => {
+        // Check for Microsoft login specific elements
+        const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
+        const hasMicrosoftLogin = microsoftElements.length > 0;
+        
+        // Also check for Microsoft login page indicators
+        const microsoftPageIndicators = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]');
+        const hasMicrosoftPage = microsoftPageIndicators.length > 0;
+        
+        return hasMicrosoftLogin || hasMicrosoftPage;
+      }, { timeout: 15000 });
       
-      // Also check for Microsoft login page indicators
-      const microsoftPageIndicators = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]');
-      const hasMicrosoftPage = microsoftPageIndicators.length > 0;
+      addDebugStep('Microsoft Login Popup', 'success', 'Microsoft login popup detected, waiting for full load...');
       
-      return hasMicrosoftLogin || hasMicrosoftPage;
-    }, { timeout: 15000 });
-    
-    addDebugStep('Microsoft Login Popup', 'success', 'Microsoft login popup detected, waiting for full load...');
-    
-    // Additional wait for content to fully load
-    await sleep(3000);
-    
-    // Take screenshot of the Microsoft login popup
-    await takeScreenshot('Microsoft-Login-Popup', page);
+      // Additional wait for content to fully load
+      await sleep(3000);
+      
+      // Take screenshot of the Microsoft login popup
+      await takeScreenshot('Microsoft-Login-Popup', page);
+      
+    } catch (error) {
+      addDebugStep('Microsoft Login Popup', 'error', `Microsoft login popup wait failed: ${error.message}`);
+      
+      // Take screenshot to see what's happening after timeout
+      await takeScreenshot('Microsoft-Login-Timeout', page);
+      
+      // Try to continue anyway - maybe the popup is there but our detection failed
+      addDebugStep('Microsoft Login Popup', 'info', 'Attempting to continue despite timeout...');
+    }
     
     // Step 6: Enter email
     addDebugStep('Email Entry', 'info', 'Entering email address...');
-    await page.waitForSelector('input[name="loginfmt"], input[id="i0116"]', { timeout: 10000 });
-    await page.type('input[name="loginfmt"], input[id="i0116"]', email, { delay: 100 });
-    addDebugStep('Email Entry', 'success', 'Email entered successfully');
-    await takeScreenshot('Email-Entered', page);
+    
+    try {
+      // Try multiple selectors for email field
+      const emailSelectors = [
+        'input[name="loginfmt"]',
+        'input[id="i0116"]',
+        'input[type="email"]',
+        'input[placeholder*="email" i]',
+        'input[placeholder*="Email" i]'
+      ];
+      
+      let emailField = null;
+      let usedEmailSelector = '';
+      
+      for (const selector of emailSelectors) {
+        try {
+          emailField = await page.waitForSelector(selector, { timeout: 3000 });
+          if (emailField) {
+            usedEmailSelector = selector;
+            addDebugStep('Email Entry', 'info', `Found email field with selector: ${selector}`);
+            break;
+          }
+        } catch (e) {
+          addDebugStep('Email Entry', 'info', `Email selector ${selector} failed: ${e.message}`);
+        }
+      }
+      
+      if (!emailField) {
+        // Fallback: try to find by attributes using evaluate
+        addDebugStep('Email Entry', 'info', 'Trying fallback method to find email field...');
+        
+        const emailFieldFound = await page.evaluate((email) => {
+          const inputs = Array.from(document.querySelectorAll('input'));
+          const emailInput = inputs.find(input => 
+            input.type === 'email' || 
+            input.name === 'loginfmt' || 
+            input.id === 'i0116' ||
+            input.placeholder && input.placeholder.toLowerCase().includes('email')
+          );
+          
+          if (emailInput) {
+            emailInput.focus();
+            emailInput.value = email;
+            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+            emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          }
+          return false;
+        }, email);
+        
+        if (emailFieldFound) {
+          addDebugStep('Email Entry', 'success', 'Email entered using fallback method');
+        } else {
+          throw new Error('Could not find email field with any method');
+        }
+      } else {
+        await page.type(usedEmailSelector, email, { delay: 100 });
+        addDebugStep('Email Entry', 'success', `Email entered using selector: ${usedEmailSelector}`);
+      }
+      
+      await takeScreenshot('Email-Entered', page);
+      
+    } catch (error) {
+      addDebugStep('Email Entry', 'error', `Email entry failed: ${error.message}`);
+      
+      // Take screenshot to see what's happening
+      await takeScreenshot('Email-Entry-Failed', page);
+      
+      throw error;
+    }
     
     // Click Next button
     addDebugStep('Email Entry', 'info', 'Clicking Next button...');
