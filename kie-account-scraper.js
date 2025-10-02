@@ -278,11 +278,106 @@ async function createKieAccount(io, email, password) {
     
     await takeScreenshot('Get-Started-Clicked', page);
     
-    // Step 3: Click "Sign in with Microsoft" button
+    // Step 3: Wait for popup to appear and load fully
+    addDebugStep('Popup Wait', 'info', 'Waiting for popup to appear after Get Started click...');
+    
+    // Wait for any popup/modal to appear
+    await page.waitForFunction(() => {
+      // Check for common popup indicators
+      const modals = document.querySelectorAll('[role="dialog"], [role="modal"], .modal, .popup, .overlay');
+      const hasVisibleModal = Array.from(modals).some(modal => {
+        const style = window.getComputedStyle(modal);
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+      });
+      
+      // Also check for Microsoft sign-in specific elements
+      const microsoftElements = document.querySelectorAll('button:contains("Sign in with Microsoft"), a:contains("Sign in with Microsoft"), [class*="microsoft"], [class*="signin"]');
+      const hasMicrosoftElements = microsoftElements.length > 0;
+      
+      return hasVisibleModal || hasMicrosoftElements;
+    }, { timeout: 15000 });
+    
+    addDebugStep('Popup Wait', 'success', 'Popup detected, waiting for full load...');
+    
+    // Additional wait for content to fully load
+    await sleep(3000);
+    
+    // Take screenshot of the popup
+    await takeScreenshot('Popup-Appeared', page);
+    
+    // Step 4: Click "Sign in with Microsoft" button
     addDebugStep('Microsoft Sign-in', 'info', 'Looking for Sign in with Microsoft button...');
-    await page.waitForSelector('button:has-text("Sign in with Microsoft"), a:has-text("Sign in with Microsoft")', { timeout: 10000 });
-    await page.click('button:has-text("Sign in with Microsoft"), a:has-text("Sign in with Microsoft")');
-    addDebugStep('Microsoft Sign-in', 'success', 'Clicked Sign in with Microsoft button');
+    
+    // Try multiple selectors for Microsoft sign-in button
+    const microsoftSelectors = [
+      'button:has-text("Sign in with Microsoft")',
+      'a:has-text("Sign in with Microsoft")',
+      'button:contains("Sign in with Microsoft")',
+      'a:contains("Sign in with Microsoft")',
+      '//button[contains(text(), "Sign in with Microsoft")]',
+      '//a[contains(text(), "Sign in with Microsoft")]',
+      '[class*="microsoft"] button',
+      '[class*="signin"] button',
+      'button[class*="microsoft"]',
+      'a[class*="microsoft"]'
+    ];
+    
+    let microsoftButton = null;
+    let usedSelector = '';
+    
+    for (const selector of microsoftSelectors) {
+      try {
+        if (selector.startsWith('//')) {
+          // XPath selector
+          microsoftButton = await page.waitForXPath(selector, { timeout: 5000 });
+        } else {
+          // CSS selector
+          microsoftButton = await page.waitForSelector(selector, { timeout: 5000 });
+        }
+        
+        if (microsoftButton) {
+          usedSelector = selector;
+          addDebugStep('Microsoft Sign-in', 'info', `Found Microsoft sign-in button with selector: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        // Continue to next selector
+        addDebugStep('Microsoft Sign-in', 'info', `Selector ${selector} failed: ${e.message}`);
+      }
+    }
+    
+    if (!microsoftButton) {
+      // Fallback: try to find by text content using evaluate
+      addDebugStep('Microsoft Sign-in', 'info', 'Trying fallback method to find Microsoft sign-in button...');
+      
+      const buttonFound = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, a'));
+        const microsoftBtn = buttons.find(btn => 
+          btn.textContent && btn.textContent.trim().toLowerCase().includes('sign in with microsoft')
+        );
+        
+        if (microsoftBtn) {
+          microsoftBtn.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (buttonFound) {
+        addDebugStep('Microsoft Sign-in', 'success', 'Clicked Microsoft sign-in button using fallback method');
+      } else {
+        throw new Error('Could not find Sign in with Microsoft button with any method');
+      }
+    } else {
+      // Click the found button
+      if (usedSelector.startsWith('//')) {
+        await microsoftButton.click();
+      } else {
+        await page.click(usedSelector);
+      }
+      addDebugStep('Microsoft Sign-in', 'success', `Clicked Microsoft sign-in button using selector: ${usedSelector}`);
+    }
+    
     await takeScreenshot('Microsoft-Signin-Clicked', page);
     
     // Step 4: Enter email
