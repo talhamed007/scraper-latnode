@@ -29,6 +29,14 @@ function addDebugStep(step, type, message, screenshot = null, error = null) {
 // Helper function to take screenshots
 async function takeScreenshot(name, page) {
   try {
+    // Check if page is still accessible before taking screenshot
+    try {
+      await page.evaluate(() => document.title);
+    } catch (e) {
+      addDebugStep('Screenshot', 'warning', `Page not accessible for screenshot ${name}: ${e.message}`);
+      return null;
+    }
+    
     const timestamp = Date.now();
     const filename = `kie-account-${timestamp}-${name}.png`;
     const screenshotPath = path.join(__dirname, 'screenshots', filename);
@@ -306,53 +314,79 @@ async function createKieAccount(io, email, password) {
     // Step 4: Click "Sign in with Google" button (using fallback method directly)
     addDebugStep('Google Sign-in', 'info', 'Looking for Sign in with Google button using fallback method...');
     
-    // Use fallback method with human-like mouse movement
-    const buttonFound = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
-      const googleBtn = buttons.find(btn => 
-        btn.textContent && (
-          btn.textContent.trim().toLowerCase().includes('inloggen met google') ||
-          btn.textContent.trim().toLowerCase().includes('sign in with google') ||
-          btn.textContent.trim().toLowerCase().includes('continue with google') ||
-          btn.textContent.trim().toLowerCase().includes('login with google')
-        )
-      );
-      
-      if (googleBtn) {
-        // Get button position for human-like movement
-        const rect = googleBtn.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
+    try {
+      // Use fallback method with human-like mouse movement
+      const buttonFound = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+        const googleBtn = buttons.find(btn => 
+          btn.textContent && (
+            btn.textContent.trim().toLowerCase().includes('inloggen met google') ||
+            btn.textContent.trim().toLowerCase().includes('sign in with google') ||
+            btn.textContent.trim().toLowerCase().includes('continue with google') ||
+            btn.textContent.trim().toLowerCase().includes('login with google')
+          )
+        );
         
-        // Store position for mouse movement
-        window.googleButtonPosition = { x: centerX, y: centerY };
-        return true;
+        if (googleBtn) {
+          // Get button position for human-like movement
+          const rect = googleBtn.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          
+          // Store position for mouse movement
+          window.googleButtonPosition = { x: centerX, y: centerY };
+          return true;
+        }
+        return false;
+      });
+      
+      if (buttonFound) {
+        // Human-like mouse movement to the button
+        const buttonPos = await page.evaluate(() => window.googleButtonPosition);
+        
+        // Move mouse to button with human-like path
+        await page.mouse.move(buttonPos.x - 50, buttonPos.y - 20, { steps: 10 });
+        await sleep(200);
+        await page.mouse.move(buttonPos.x - 20, buttonPos.y - 10, { steps: 5 });
+        await sleep(100);
+        await page.mouse.move(buttonPos.x, buttonPos.y, { steps: 3 });
+        await sleep(300);
+        
+        // Click the button
+        await page.mouse.click(buttonPos.x, buttonPos.y);
+        
+        addDebugStep('Google Sign-in', 'success', 'Clicked Google sign-in button with human-like movement');
+        
+        // Take screenshot immediately after clicking
+        await takeScreenshot('Google-Signin-Clicked', page);
+        
+        // Wait a bit for any redirects or new windows
+        await sleep(2000);
+        
+        // Check if page is still accessible
+        try {
+          await page.evaluate(() => document.title);
+          addDebugStep('Google Sign-in', 'info', 'Page is still accessible after Google sign-in click');
+        } catch (e) {
+          addDebugStep('Google Sign-in', 'warning', 'Page became inaccessible after Google sign-in click - this is normal for redirects');
+        }
+        
+      } else {
+        throw new Error('Could not find Sign in with Google button with fallback method');
       }
-      return false;
-    });
-    
-    if (buttonFound) {
-      // Human-like mouse movement to the button
-      const buttonPos = await page.evaluate(() => window.googleButtonPosition);
       
-      // Move mouse to button with human-like path
-      await page.mouse.move(buttonPos.x - 50, buttonPos.y - 20, { steps: 10 });
-      await sleep(200);
-      await page.mouse.move(buttonPos.x - 20, buttonPos.y - 10, { steps: 5 });
-      await sleep(100);
-      await page.mouse.move(buttonPos.x, buttonPos.y, { steps: 3 });
-      await sleep(300);
+    } catch (error) {
+      addDebugStep('Google Sign-in', 'error', `Google sign-in failed: ${error.message}`);
       
-      // Click the button
-      await page.mouse.click(buttonPos.x, buttonPos.y);
+      // Try to take screenshot even if there's an error
+      try {
+        await takeScreenshot('Google-Signin-Error', page);
+      } catch (screenshotError) {
+        addDebugStep('Google Sign-in', 'error', `Screenshot failed: ${screenshotError.message}`);
+      }
       
-      addDebugStep('Google Sign-in', 'success', 'Clicked Google sign-in button with human-like movement');
-    } else {
-      throw new Error('Could not find Sign in with Google button with fallback method');
+      throw error;
     }
-    
-    
-    await takeScreenshot('Google-Signin-Clicked', page);
     
     // Step 5: Wait for Google login popup to appear and load
     addDebugStep('Google Login Popup', 'info', 'Waiting for Google login popup to appear...');
@@ -397,6 +431,15 @@ async function createKieAccount(io, email, password) {
     addDebugStep('Email Entry', 'info', 'Entering email address...');
     
     try {
+      // First check if page is still accessible
+      try {
+        await page.evaluate(() => document.title);
+        addDebugStep('Email Entry', 'info', 'Page is accessible, proceeding with email entry');
+      } catch (e) {
+        addDebugStep('Email Entry', 'error', 'Page is not accessible - session may have closed');
+        throw new Error('Page session closed - cannot proceed with email entry');
+      }
+      
       // Try multiple selectors for email field (Google login)
       const emailSelectors = [
         'input[type="email"]',
@@ -429,64 +472,83 @@ async function createKieAccount(io, email, password) {
         // Fallback: try to find by attributes using evaluate
         addDebugStep('Email Entry', 'info', 'Trying fallback method to find email field...');
         
-        const emailFieldFound = await page.evaluate((email) => {
-          const inputs = Array.from(document.querySelectorAll('input'));
-          const emailInput = inputs.find(input => 
-            input.type === 'email' || 
-            input.name === 'loginfmt' || 
-            input.id === 'i0116' ||
-            input.placeholder && input.placeholder.toLowerCase().includes('email')
-          );
+        try {
+          const emailFieldFound = await page.evaluate((email) => {
+            const inputs = Array.from(document.querySelectorAll('input'));
+            const emailInput = inputs.find(input => 
+              input.type === 'email' || 
+              input.name === 'loginfmt' || 
+              input.id === 'i0116' ||
+              input.placeholder && input.placeholder.toLowerCase().includes('email')
+            );
+            
+            if (emailInput) {
+              emailInput.focus();
+              emailInput.value = email;
+              emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+              emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+              return true;
+            }
+            return false;
+          }, email);
           
-          if (emailInput) {
-            emailInput.focus();
-            emailInput.value = email;
-            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-            emailInput.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
+          if (emailFieldFound) {
+            addDebugStep('Email Entry', 'success', 'Email entered using fallback method');
+          } else {
+            throw new Error('Could not find email field with any method');
           }
-          return false;
-        }, email);
-        
-        if (emailFieldFound) {
-          addDebugStep('Email Entry', 'success', 'Email entered using fallback method');
-        } else {
-          throw new Error('Could not find email field with any method');
+        } catch (e) {
+          addDebugStep('Email Entry', 'error', `Fallback method failed: ${e.message}`);
+          throw e;
         }
       } else {
         // Human-like mouse movement to email field
-        const emailFieldRect = await page.evaluate((selector) => {
-          const field = document.querySelector(selector);
-          if (field) {
-            const rect = field.getBoundingClientRect();
-            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-          }
-          return null;
-        }, usedEmailSelector);
-        
-        if (emailFieldRect) {
-          // Move mouse to email field with human-like path
-          await page.mouse.move(emailFieldRect.x - 30, emailFieldRect.y - 10, { steps: 8 });
-          await sleep(150);
-          await page.mouse.move(emailFieldRect.x, emailFieldRect.y, { steps: 3 });
-          await sleep(200);
+        try {
+          const emailFieldRect = await page.evaluate((selector) => {
+            const field = document.querySelector(selector);
+            if (field) {
+              const rect = field.getBoundingClientRect();
+              return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            }
+            return null;
+          }, usedEmailSelector);
           
-          // Click to focus the field
-          await page.mouse.click(emailFieldRect.x, emailFieldRect.y);
-          await sleep(100);
+          if (emailFieldRect) {
+            // Move mouse to email field with human-like path
+            await page.mouse.move(emailFieldRect.x - 30, emailFieldRect.y - 10, { steps: 8 });
+            await sleep(150);
+            await page.mouse.move(emailFieldRect.x, emailFieldRect.y, { steps: 3 });
+            await sleep(200);
+            
+            // Click to focus the field
+            await page.mouse.click(emailFieldRect.x, emailFieldRect.y);
+            await sleep(100);
+          }
+          
+          await page.type(usedEmailSelector, email, { delay: 100 });
+          addDebugStep('Email Entry', 'success', `Email entered using selector: ${usedEmailSelector}`);
+        } catch (e) {
+          addDebugStep('Email Entry', 'error', `Mouse movement or typing failed: ${e.message}`);
+          throw e;
         }
-        
-        await page.type(usedEmailSelector, email, { delay: 100 });
-        addDebugStep('Email Entry', 'success', `Email entered using selector: ${usedEmailSelector}`);
       }
       
-      await takeScreenshot('Email-Entered', page);
+      // Take screenshot after successful email entry
+      try {
+        await takeScreenshot('Email-Entered', page);
+      } catch (screenshotError) {
+        addDebugStep('Email Entry', 'warning', `Screenshot failed: ${screenshotError.message}`);
+      }
       
     } catch (error) {
       addDebugStep('Email Entry', 'error', `Email entry failed: ${error.message}`);
       
-      // Take screenshot to see what's happening
-      await takeScreenshot('Email-Entry-Failed', page);
+      // Try to take screenshot even if there's an error
+      try {
+        await takeScreenshot('Email-Entry-Failed', page);
+      } catch (screenshotError) {
+        addDebugStep('Email Entry', 'error', `Screenshot failed: ${screenshotError.message}`);
+      }
       
       throw error;
     }
