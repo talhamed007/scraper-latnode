@@ -2074,71 +2074,71 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           addDebugStep('Credits Check', 'warning', 'Error hovering over progress circle', null, hoverError.message);
         }
         
-        // Look for credits information in the tooltip
+        // Look for credits information in the progress circle
         const creditsInfo = await page.evaluate(() => {
-          // First try to find the tooltip that appears on hover
-          const tooltipSelectors = [
-            '[class*="tooltip"]',
-            '[class*="popover"]',
-            '[class*="ant-tooltip"]',
-            '[class*="ant-popover"]',
-            '[role="tooltip"]',
-            '[data-testid*="tooltip"]',
-            '[aria-describedby]'
+          // Method 1: Look for the progress circle percentage text
+          const progressTextSelectors = [
+            '.ant-progress-text',
+            'span.ant-progress-text',
+            '.ant-progress .ant-progress-text',
+            '[class*="progress-text"]'
           ];
           
-          for (const selector of tooltipSelectors) {
-            const tooltip = document.querySelector(selector);
-            if (tooltip) {
-              const text = tooltip.innerText || tooltip.textContent || '';
-              if (text.includes('Plug&Play') || text.includes('Jetons') || text.includes('Credits') || text.includes('0.95/0')) {
+          for (const selector of progressTextSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const text = (element.innerText || element.textContent || '').trim();
+              // Look for percentage pattern (e.g., "100%", "99%", "50%")
+              if (/^\d+%$/.test(text)) {
                 return {
                   found: true,
                   selector: selector,
-                  text: text.trim(),
-                  html: tooltip.outerHTML,
-                  source: 'tooltip'
+                  text: text,
+                  html: element.outerHTML,
+                  source: 'progress-circle'
                 };
               }
             }
           }
           
-          // Try to find credits in any visible element after hover
+          // Method 2: Look for progress circle container and extract text
+          const progressCircleSelectors = [
+            '.ant-progress-circle',
+            '.ant-progress.ant-progress-circle',
+            '[class*="progress-circle"]'
+          ];
+          
+          for (const selector of progressCircleSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const text = (element.innerText || element.textContent || '').trim();
+              // Look for percentage pattern
+              const percentageMatch = text.match(/(\d+%)/);
+              if (percentageMatch) {
+                return {
+                  found: true,
+                  selector: selector,
+                  text: percentageMatch[1],
+                  html: element.outerHTML,
+                  source: 'progress-circle-container'
+                };
+              }
+            }
+          }
+          
+          // Method 3: Look for any element containing percentage
           const allElements = document.querySelectorAll('*');
           for (const element of allElements) {
-            const text = (element.innerText || element.textContent || '').toLowerCase();
-            if (text.includes('plug&play') || text.includes('jetons') || text.includes('credits') || text.includes('0.95/0')) {
+            const text = (element.innerText || element.textContent || '').trim();
+            // Look for percentage pattern that's not a date
+            if (/^\d+%$/.test(text) && !text.includes('/') && !text.includes('-')) {
               return {
                 found: true,
                 selector: element.tagName.toLowerCase(),
-                text: element.innerText || element.textContent || '',
+                text: text,
                 html: element.outerHTML,
-                source: 'element'
+                source: 'percentage-search'
               };
-            }
-          }
-          
-          // Fallback: try the original selectors
-          const selectors = [
-            '.credits_xXoSG',
-            '[class*="credits"]',
-            '[class*="jetons"]',
-            '[class*="tokens"]'
-          ];
-          
-          for (const selector of selectors) {
-            const element = document.querySelector(selector);
-            if (element) {
-              const text = element.innerText || element.textContent || '';
-              if (text.includes('Plug&Play') || text.includes('Jetons') || text.includes('Credits')) {
-                return {
-                  found: true,
-                  selector: selector,
-                  text: text.trim(),
-                  html: element.outerHTML,
-                  source: 'fallback'
-                };
-              }
             }
           }
           
@@ -2149,8 +2149,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           addDebugStep('Credits Check', 'success', `Credits found: ${creditsInfo.text}`);
           addDebugStep('Credits Check', 'info', `Using selector: ${creditsInfo.selector} (source: ${creditsInfo.source})`);
           
-          // Extract the credit value (e.g., "0.95/0")
-          const creditMatch = creditsInfo.text.match(/(\d+\.?\d*\/\d+\.?\d*)/);
+          // Extract the credit percentage (e.g., "100%", "99%")
+          const creditMatch = creditsInfo.text.match(/(\d+%)/);
           if (creditMatch) {
             const credits = creditMatch[1];
             addDebugStep('Credits Check', 'success', `Credits extracted: ${credits}`);
@@ -2158,7 +2158,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
             // Store credits for return
             global.credits = credits;
           } else {
-            addDebugStep('Credits Check', 'warning', 'Could not extract credit numbers from text');
+            addDebugStep('Credits Check', 'warning', 'Could not extract credit percentage from text');
             global.credits = creditsInfo.text;
           }
           
