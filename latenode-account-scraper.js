@@ -1641,8 +1641,65 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         // Wait for page to fully load
         await sleep(3000);
         
-        // Look for the import button
-        const importButton = await page.$('button:has-text("Importer"), button[title*="Importer"], button:has-text("Importer un dossier")');
+        // Look for the import button using proper Puppeteer selectors
+        let importButton = null;
+        
+        // Try multiple selectors for the import button
+        const importSelectors = [
+          'button[title*="Importer"]',
+          'button[title*="importer"]',
+          'button:has-text("Importer")',
+          'button:has-text("importer")',
+          'button:has-text("Import")',
+          'button:has-text("import")',
+          'button:has-text("Importer un dossier")',
+          'button:has-text("Importer un scénario")',
+          '[class*="import"] button',
+          '[class*="upload"] button',
+          'button[class*="import"]',
+          'button[class*="upload"]'
+        ];
+        
+        for (const selector of importSelectors) {
+          try {
+            importButton = await page.$(selector);
+            if (importButton) {
+              addDebugStep('File Upload', 'info', `Found import button with selector: ${selector}`);
+              break;
+            }
+          } catch (e) {
+            // Try next selector
+            continue;
+          }
+        }
+        
+        // If no button found with selectors, try XPath
+        if (!importButton) {
+          try {
+            const xpathSelectors = [
+              '//button[contains(text(), "Importer")]',
+              '//button[contains(text(), "importer")]',
+              '//button[contains(text(), "Import")]',
+              '//button[contains(text(), "import")]',
+              '//button[contains(text(), "Importer un dossier")]',
+              '//button[contains(text(), "Importer un scénario")]',
+              '//*[contains(@class, "import")]//button',
+              '//*[contains(@class, "upload")]//button'
+            ];
+            
+            for (const xpath of xpathSelectors) {
+              const elements = await page.$x(xpath);
+              if (elements.length > 0) {
+                importButton = elements[0];
+                addDebugStep('File Upload', 'info', `Found import button with XPath: ${xpath}`);
+                break;
+              }
+            }
+          } catch (e) {
+            addDebugStep('File Upload', 'warning', 'XPath search failed', null, e.message);
+          }
+        }
+        
         if (importButton) {
           addDebugStep('File Upload', 'info', 'Found import button, clicking...');
           await importButton.click();
@@ -1696,7 +1753,86 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           await sleep(3000);
           
         } else {
-          addDebugStep('File Upload', 'warning', 'Import button not found, skipping file upload');
+          // Last resort: try to find import button using page.evaluate()
+          addDebugStep('File Upload', 'info', 'Trying to find import button using page.evaluate()...');
+          
+          try {
+            const buttonFound = await page.evaluate(() => {
+              // Look for buttons with import-related text
+              const buttons = document.querySelectorAll('button, [role="button"], a[role="button"]');
+              
+              for (const button of buttons) {
+                const text = (button.innerText || button.textContent || '').toLowerCase();
+                const title = (button.title || '').toLowerCase();
+                const className = (button.className || '').toLowerCase();
+                
+                if (text.includes('importer') || text.includes('import') || 
+                    title.includes('importer') || title.includes('import') ||
+                    className.includes('import') || className.includes('upload')) {
+                  button.click();
+                  return true;
+                }
+              }
+              
+              return false;
+            });
+            
+            if (buttonFound) {
+              addDebugStep('File Upload', 'success', 'Found and clicked import button using page.evaluate()');
+              await sleep(2000);
+              
+              // Wait for file input to appear
+              await page.waitForSelector('input[type="file"]', { timeout: 10000 });
+              addDebugStep('File Upload', 'info', 'File input found, preparing to upload JSON...');
+              
+              // Upload the JSON file from the hosted URL
+              const jsonFileUrl = 'https://scraper-latnode-production.up.railway.app/files/latenode-scenario.json';
+              
+              await page.evaluate(async (url) => {
+                try {
+                  // Fetch the JSON file
+                  const response = await fetch(url);
+                  if (!response.ok) {
+                    throw new Error(`Failed to fetch JSON file: ${response.status}`);
+                  }
+                  
+                  const jsonContent = await response.text();
+                  const blob = new Blob([jsonContent], { type: 'application/json' });
+                  const file = new File([blob], 'latenode-scenario.json', { type: 'application/json' });
+                  
+                  // Find the file input
+                  const fileInput = document.querySelector('input[type="file"]');
+                  if (fileInput) {
+                    // Create a DataTransfer object
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    fileInput.files = dataTransfer.files;
+                    
+                    // Trigger the change event
+                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    console.log('JSON file uploaded successfully');
+                    return true;
+                  } else {
+                    throw new Error('File input not found');
+                  }
+                } catch (error) {
+                  console.error('Error uploading JSON file:', error);
+                  return false;
+                }
+              }, jsonFileUrl);
+              
+              addDebugStep('File Upload', 'success', 'JSON scenario file uploaded successfully!');
+              await takeScreenshot('JSON-File-Uploaded', page);
+              
+              // Wait a bit for the upload to process
+              await sleep(3000);
+            } else {
+              addDebugStep('File Upload', 'warning', 'Import button not found, skipping file upload');
+            }
+          } catch (evaluateError) {
+            addDebugStep('File Upload', 'warning', 'page.evaluate() method also failed', null, evaluateError.message);
+          }
         }
         
       } catch (uploadError) {
