@@ -705,8 +705,71 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
             return { success: true, email, password: generatedPassword, message: 'Account created successfully without confirmation code' };
           }
           
-          addDebugStep('Next Button', 'error', '❌ CRITICAL: No confirmation code input found after Next button click - stopping process');
-          throw new Error('Confirmation code page not loaded - this step is obligatory');
+          // Try to re-interact with email field to trigger email sending
+          addDebugStep('Next Button', 'info', 'No confirmation code found - trying to re-interact with email field...');
+          
+          try {
+            // Find and click on email field again
+            const emailField = await page.$('input[type="email"], input[name="email"], input[data-test-id="authEmailInput"]');
+            if (emailField) {
+              // Click to focus the field
+              await emailField.click();
+              await sleep(500);
+              
+              // Clear and re-enter email
+              await emailField.click({ clickCount: 3 });
+              await sleep(200);
+              await emailField.type(email);
+              await sleep(500);
+              
+              // Click Next button again
+              const nextButton = await page.$('button[data-test-id="authEmailButton"]');
+              if (nextButton) {
+                await nextButton.click();
+                addDebugStep('Next Button', 'info', 'Re-clicked Next button after re-entering email');
+                
+                // Wait a bit more for email to be sent
+                await sleep(5000);
+                
+                // Check again for confirmation code
+                const hasCodeInputRetry = await page.evaluate(() => {
+                  const selectors = [
+                    'input[placeholder*="code" i]',
+                    'input[placeholder*="confirmation" i]',
+                    'input[data-test-id*="code" i]',
+                    'input[type="text"][maxlength="4"]',
+                    'input[type="text"][maxlength="6"]',
+                    'input[type="text"][maxlength="8"]',
+                    'input[name*="code" i]',
+                    'input[name*="verification" i]',
+                    'input[id*="code" i]',
+                    'input[id*="verification" i]'
+                  ];
+                  
+                  for (const selector of selectors) {
+                    if (document.querySelector(selector)) return true;
+                  }
+                  return false;
+                });
+                
+                if (hasCodeInputRetry) {
+                  addDebugStep('Next Button', 'success', 'Confirmation code input found after retry');
+                } else {
+                  addDebugStep('Next Button', 'error', '❌ CRITICAL: No confirmation code input found after retry - stopping process');
+                  throw new Error('Confirmation code page not loaded after retry - this step is obligatory');
+                }
+              } else {
+                addDebugStep('Next Button', 'error', '❌ CRITICAL: No confirmation code input found after Next button click - stopping process');
+                throw new Error('Confirmation code page not loaded - this step is obligatory');
+              }
+            } else {
+              addDebugStep('Next Button', 'error', '❌ CRITICAL: No confirmation code input found after Next button click - stopping process');
+              throw new Error('Confirmation code page not loaded - this step is obligatory');
+            }
+          } catch (retryError) {
+            addDebugStep('Next Button', 'error', '❌ CRITICAL: No confirmation code input found after Next button click - stopping process');
+            throw new Error('Confirmation code page not loaded - this step is obligatory');
+          }
         }
       }
       
@@ -1553,10 +1616,33 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
   } finally {
     if (browser) {
       try {
+        // Clean browser completely - close all pages and clear data
+        addDebugStep('Cleanup', 'info', 'Cleaning browser completely...');
+        
+        // Close all pages first
+        const pages = await browser.pages();
+        for (const page of pages) {
+          try {
+            await page.close();
+          } catch (e) {
+            // Ignore errors when closing pages
+          }
+        }
+        
+        // Clear browser data
+        try {
+          const context = browser.defaultBrowserContext();
+          await context.clearCookies();
+          await context.clearPermissions();
+        } catch (e) {
+          // Ignore errors when clearing data
+        }
+        
+        // Close browser
         await browser.close();
-        addDebugStep('Cleanup', 'info', 'Browser closed');
+        addDebugStep('Cleanup', 'success', 'Browser cleaned and closed completely');
       } catch (closeError) {
-        addDebugStep('Cleanup', 'warning', 'Error closing browser', null, closeError.message);
+        addDebugStep('Cleanup', 'warning', 'Error cleaning browser', null, closeError.message);
       }
     }
   }

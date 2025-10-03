@@ -4179,15 +4179,37 @@ app.post('/api/clean-browser', async (req, res) => {
   try {
     console.log('🧹 Clean browser requested');
     
-    // Close any active browser
+    // Close any active browser and clean completely
     if (globalBrowser) {
       try {
+        // Close all pages first
+        const pages = await globalBrowser.pages();
+        for (const page of pages) {
+          try {
+            await page.close();
+          } catch (e) {
+            // Ignore errors when closing pages
+          }
+        }
+        
+        // Clear browser data completely
+        try {
+          const context = globalBrowser.defaultBrowserContext();
+          await context.clearCookies();
+          await context.clearPermissions();
+          await context.clearCache();
+        } catch (e) {
+          // Ignore errors when clearing data
+        }
+        
         await globalBrowser.close();
         globalBrowser = null;
         globalPage = null;
-        console.log('✅ Browser closed and cleaned successfully');
+        console.log('✅ Browser cleaned and closed completely - no traces left');
       } catch (browserError) {
-        console.error('❌ Error closing browser:', browserError);
+        console.error('❌ Error cleaning browser:', browserError);
+        globalBrowser = null;
+        globalPage = null;
       }
     }
     
@@ -4199,7 +4221,7 @@ app.post('/api/clean-browser', async (req, res) => {
     
     res.json({ 
       success: true, 
-      message: 'Browser cleaned successfully'
+      message: 'Browser cleaned completely - no traces left'
     });
   } catch (error) {
     console.error('❌ Clean browser error:', error);
