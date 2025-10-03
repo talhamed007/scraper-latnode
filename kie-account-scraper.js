@@ -154,7 +154,11 @@ async function humanLikeScroll(page, direction = 'down', distance = 300) {
   }
 }
 
-async function randomHumanDelay(min = 500, max = 2000) {
+async function randomHumanDelay(page, min = 500, max = 2000) {
+  if (!page) {
+    console.warn('No page instance available for randomHumanDelay. Skipping human-like delay.');
+    return;
+  }
   const delay = Math.random() * (max - min) + min;
   await page.waitForTimeout(delay);
 }
@@ -465,7 +469,7 @@ async function createKieAccountAI(io, email, password) {
     addDebugStep('Navigation', 'success', 'Successfully navigated to Kie.ai');
     
     // Human-like behavior: random delay after page load
-    await randomHumanDelay(1000, 3000);
+    await randomHumanDelay(page, 1000, 3000);
     
     const homepageScreenshot = await takeScreenshot('Kie-Homepage', page);
     addDebugStep('Navigation', 'info', `Homepage screenshot: ${homepageScreenshot || 'Failed to take screenshot'}`);
@@ -580,7 +584,7 @@ async function createKieAccountAI(io, email, password) {
             break;
             
           case 'wait':
-            await randomHumanDelay(1000, 3000);
+            await randomHumanDelay(page, 1000, 3000);
             addDebugStep('AI Action', 'info', 'Human-like waited as requested by AI');
             
             // Take screenshot after wait action
@@ -787,7 +791,7 @@ async function createKieAccount(io, email, password) {
     addDebugStep('Navigation', 'success', 'Successfully navigated to Kie.ai');
     
     // Human-like behavior: random delay after page load
-    await randomHumanDelay(1000, 3000);
+    await randomHumanDelay(page, 1000, 3000);
     
     // Debug: Check page variable before screenshot
     console.log('DEBUG: page variable before takeScreenshot:', typeof page, page);
@@ -1280,16 +1284,16 @@ async function createKieAccount(io, email, password) {
             
             // Human-like mouse movement to field
             await humanLikeMouseMove(page, 0, 0, centerX, centerY);
-            await randomHumanDelay(200, 500);
+            await randomHumanDelay(page, 200, 500);
           }
           
           // Click to focus the field
           await emailField.click();
-          await randomHumanDelay(100, 300);
+          await randomHumanDelay(page, 100, 300);
           
           // Clear any existing text
           await emailField.click({ clickCount: 3 });
-          await randomHumanDelay(50, 150);
+          await randomHumanDelay(page, 50, 150);
           
           // Use human-like typing
           await humanLikeType(page, usedEmailSelector, email);
@@ -1312,7 +1316,7 @@ async function createKieAccount(io, email, password) {
           }, usedEmailSelector);
           
           // Wait a bit for validation
-          await randomHumanDelay(500, 1000);
+          await randomHumanDelay(page, 500, 1000);
           
         } catch (e) {
           addDebugStep('Email Entry', 'error', `Human-like email entry failed: ${e.message}`);
