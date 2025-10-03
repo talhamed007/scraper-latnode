@@ -10,8 +10,69 @@ async function extractCodeWithDOMAnalysis(page) {
   let confirmationCode = null;
   
   try {
-    // Method 1: Look for span with font-size:48px (the exact pattern from the image)
-    addDebugStep('Code Extraction', 'info', 'Method 1: Looking for span with font-size:48px...');
+    // Method 1: Look specifically in the shadow DOM content area (most specific)
+    addDebugStep('Code Extraction', 'info', 'Method 1: Looking in shadow DOM content area...');
+    
+    const codeFromShadowDOM = await page.evaluate(() => {
+      // Look for the specific content div with shadow DOM
+      const contentDiv = document.querySelector('div.content.show#content');
+      if (contentDiv) {
+        // Check if there's a shadow root
+        const shadowRoot = contentDiv.shadowRoot;
+        if (shadowRoot) {
+          // Look for the exact pattern: "Confirmation code:" followed by span with font-size:48px
+          const text = shadowRoot.textContent || shadowRoot.innerText || '';
+          if (text.includes('Confirmation code:')) {
+            // Look for span with font-size:48px
+            const spans = shadowRoot.querySelectorAll('span[style*="font-size:48px"]');
+            for (const span of spans) {
+              const code = span.textContent || span.innerText || '';
+              if (/^\d{4}$/.test(code)) {
+                return { code: code.trim(), method: 'shadow-dom-48px-span' };
+              }
+            }
+            
+            // Fallback: look for any 4-digit number in the shadow DOM
+            const matches = text.match(/\b\d{4}\b/g);
+            if (matches && matches.length > 0) {
+              // Filter out years and timestamp numbers
+              const validCodes = matches.filter(code => {
+                return !['2025', '2024', '2023', '2022', '2021', '2020'].includes(code) &&
+                       !code.startsWith('18') && !code.startsWith('19') && !code.startsWith('20') &&
+                       !code.startsWith('21') && !code.startsWith('22') && !code.startsWith('23');
+              });
+              
+              if (validCodes.length > 0) {
+                return { code: validCodes[0], method: 'shadow-dom-4-digit' };
+              }
+            }
+          }
+        } else {
+          // If no shadow root, look in the content div itself
+          const text = contentDiv.textContent || contentDiv.innerText || '';
+          if (text.includes('Confirmation code:')) {
+            // Look for span with font-size:48px
+            const spans = contentDiv.querySelectorAll('span[style*="font-size:48px"]');
+            for (const span of spans) {
+              const code = span.textContent || span.innerText || '';
+              if (/^\d{4}$/.test(code)) {
+                return { code: code.trim(), method: 'content-div-48px-span' };
+              }
+            }
+          }
+        }
+      }
+      return null;
+    });
+    
+    if (codeFromShadowDOM) {
+      confirmationCode = codeFromShadowDOM.code;
+      addDebugStep('Code Extraction', 'success', `✅ Method 1 SUCCESS: Found code in shadow DOM: ${confirmationCode}`);
+      return confirmationCode;
+    }
+    
+    // Method 2: Look for span with font-size:48px (the exact pattern from the image)
+    addDebugStep('Code Extraction', 'info', 'Method 2: Looking for span with font-size:48px...');
     
     const codeFromSpan = await page.evaluate(() => {
       const spans = document.querySelectorAll('span[style*="font-size:48px"]');
@@ -114,22 +175,61 @@ async function extractCodeWithDOMAnalysis(page) {
       return confirmationCode;
     }
     
-    // Method 4: Look for any 4-digit number in the email body
-    addDebugStep('Code Extraction', 'info', 'Method 4: Looking for any 4-digit number...');
+    // Method 4: Look for 4-digit numbers in email content (avoiding timestamps/years)
+    addDebugStep('Code Extraction', 'info', 'Method 4: Looking for 4-digit numbers in email content...');
     
-    const codeFromAnyNumber = await page.evaluate(() => {
-      const text = document.body.textContent || document.body.innerText || '';
-      const matches = text.match(/\b\d{4}\b/g);
-      if (matches && matches.length > 0) {
-        // Return the first 4-digit number found
-        return { code: matches[0], method: 'any-4-digit' };
+    const codeFromEmailContent = await page.evaluate(() => {
+      // Look specifically in email content areas, not the entire page
+      const emailSelectors = [
+        '.detail-box',
+        '.detail',
+        '.email-content',
+        '.message-content',
+        '[class*="email"]',
+        '[class*="message"]',
+        'table',
+        'td',
+        'div[style*="font-family"]'
+      ];
+      
+      for (const selector of emailSelectors) {
+        const elements = document.querySelectorAll(selector);
+        for (const element of elements) {
+          const text = element.textContent || element.innerText || '';
+          
+          // Skip if it contains timestamp patterns or year patterns
+          if (text.includes('2025') || text.includes('2024') || text.includes('2023') || 
+              text.includes('18:') || text.includes('19:') || text.includes('20:') ||
+              text.includes('21:') || text.includes('22:') || text.includes('23:') ||
+              text.includes('Code Extraction:') || text.includes('Method') ||
+              text.includes('SUCCESS:') || text.includes('ERROR:')) {
+            continue;
+          }
+          
+          // Look for 4-digit numbers that are likely confirmation codes
+          const matches = text.match(/\b\d{4}\b/g);
+          if (matches && matches.length > 0) {
+            // Filter out common years and timestamp numbers
+            const validCodes = matches.filter(code => {
+              const num = parseInt(code);
+              return num >= 1000 && num <= 9999 && 
+                     !['2025', '2024', '2023', '2022', '2021', '2020'].includes(code) &&
+                     !code.startsWith('18') && !code.startsWith('19') && !code.startsWith('20') &&
+                     !code.startsWith('21') && !code.startsWith('22') && !code.startsWith('23');
+            });
+            
+            if (validCodes.length > 0) {
+              return { code: validCodes[0], method: 'email-content-4-digit' };
+            }
+          }
+        }
       }
       return null;
     });
     
-    if (codeFromAnyNumber) {
-      confirmationCode = codeFromAnyNumber.code;
-      addDebugStep('Code Extraction', 'success', `✅ Method 4 SUCCESS: Found code as 4-digit number: ${confirmationCode}`);
+    if (codeFromEmailContent) {
+      confirmationCode = codeFromEmailContent.code;
+      addDebugStep('Code Extraction', 'success', `✅ Method 4 SUCCESS: Found code in email content: ${confirmationCode}`);
       return confirmationCode;
     }
     
@@ -143,7 +243,18 @@ async function extractCodeWithDOMAnalysis(page) {
         if (text.includes('Confirmation code:')) {
           const matches = text.match(/\b\d{4}\b/g);
           if (matches && matches.length > 0) {
-            return { code: matches[0], method: 'table-structure' };
+            // Filter out years and timestamp numbers
+            const validCodes = matches.filter(code => {
+              const num = parseInt(code);
+              return num >= 1000 && num <= 9999 && 
+                     !['2025', '2024', '2023', '2022', '2021', '2020'].includes(code) &&
+                     !code.startsWith('18') && !code.startsWith('19') && !code.startsWith('20') &&
+                     !code.startsWith('21') && !code.startsWith('22') && !code.startsWith('23');
+            });
+            
+            if (validCodes.length > 0) {
+              return { code: validCodes[0], method: 'table-structure' };
+            }
           }
         }
       }
@@ -155,6 +266,7 @@ async function extractCodeWithDOMAnalysis(page) {
       addDebugStep('Code Extraction', 'success', `✅ Method 5 SUCCESS: Found code in table: ${confirmationCode}`);
       return confirmationCode;
     }
+    
     
     addDebugStep('Code Extraction', 'error', '❌ All DOM extraction methods failed');
     return null;
