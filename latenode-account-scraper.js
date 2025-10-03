@@ -2,91 +2,167 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// Image analysis function using ChatGPT Vision API
-// Updated to use OpenAI API key from environment variables
-async function extractCodeWithImageAnalysis(page) {
-  addDebugStep('Image Analysis', 'info', 'Taking screenshot of email content...');
+// Genius DOM extraction function - no AI needed!
+// Extracts confirmation code using multiple robust methods
+async function extractCodeWithDOMAnalysis(page) {
+  addDebugStep('Code Extraction', 'info', 'Using genius DOM extraction methods...');
   
-  // Take a screenshot of the email area
-  const screenshotPath = `latenode-account-${Date.now()}-email-screenshot.png`;
-  await page.screenshot({ 
-    path: screenshotPath, 
-    fullPage: true 
-  });
+  let confirmationCode = null;
   
-  addDebugStep('Image Analysis', 'info', `Screenshot saved: ${screenshotPath}`);
-  
-  // Read the image file and convert to base64
-  const imageBuffer = fs.readFileSync(screenshotPath);
-  const base64Image = imageBuffer.toString('base64');
-  
-  // Send to ChatGPT Vision API
-  addDebugStep('Image Analysis', 'info', 'Sending image to ChatGPT Vision API...');
-  
-  // Check if API key is available
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY environment variable is not set');
-  }
-  
-  addDebugStep('Image Analysis', 'info', 'Environment variables loaded successfully');
-  
-  addDebugStep('Image Analysis', 'info', `API Key found: ${apiKey.substring(0, 10)}...`);
-  
-  // Dynamic import for node-fetch (ES module)
-  const { default: fetch } = await import('node-fetch');
-  
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Look at this email screenshot and extract the 4-digit confirmation code. The code should be a large, prominent number in the email body. Return only the 4-digit number, nothing else.'
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${base64Image}`
+  try {
+    // Method 1: Look for span with font-size:48px (the exact pattern from the image)
+    addDebugStep('Code Extraction', 'info', 'Method 1: Looking for span with font-size:48px...');
+    
+    const codeFromSpan = await page.evaluate(() => {
+      const spans = document.querySelectorAll('span[style*="font-size:48px"]');
+      for (const span of spans) {
+        const text = span.textContent || span.innerText || '';
+        const code = text.trim();
+        if (/^\d{4}$/.test(code)) {
+          return { code, method: '48px-span' };
+        }
+      }
+      return null;
+    });
+    
+    if (codeFromSpan) {
+      confirmationCode = codeFromSpan.code;
+      addDebugStep('Code Extraction', 'success', `✅ Method 1 SUCCESS: Found code in 48px span: ${confirmationCode}`);
+      return confirmationCode;
+    }
+    
+    // Method 2: Look for "Confirmation code:" text and get the next element
+    addDebugStep('Code Extraction', 'info', 'Method 2: Looking for "Confirmation code:" text...');
+    
+    const codeFromText = await page.evaluate(() => {
+      const walker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+      
+      let node;
+      while (node = walker.nextNode()) {
+        if (node.textContent.includes('Confirmation code:')) {
+          // Look for the next sibling element or parent's next sibling
+          let parent = node.parentElement;
+          while (parent) {
+            // Check if parent has a span with large font size
+            const spans = parent.querySelectorAll('span');
+            for (const span of spans) {
+              const style = span.getAttribute('style') || '';
+              if (style.includes('font-size:48px') || style.includes('font-size: 48px')) {
+                const text = span.textContent || span.innerText || '';
+                const code = text.trim();
+                if (/^\d{4}$/.test(code)) {
+                  return { code, method: 'confirmation-text-sibling' };
+                }
               }
             }
-          ]
+            
+            // Check next sibling
+            const nextSibling = parent.nextElementSibling;
+            if (nextSibling) {
+              const spans = nextSibling.querySelectorAll('span');
+              for (const span of spans) {
+                const text = span.textContent || span.innerText || '';
+                const code = text.trim();
+                if (/^\d{4}$/.test(code)) {
+                  return { code, method: 'confirmation-text-next-sibling' };
+                }
+              }
+            }
+            
+            parent = parent.parentElement;
+          }
         }
-      ],
-      max_tokens: 10
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+      }
+      return null;
+    });
+    
+    if (codeFromText) {
+      confirmationCode = codeFromText.code;
+      addDebugStep('Code Extraction', 'success', `✅ Method 2 SUCCESS: Found code after "Confirmation code:" text: ${confirmationCode}`);
+      return confirmationCode;
+    }
+    
+    // Method 3: Look for any span with large font size containing 4 digits
+    addDebugStep('Code Extraction', 'info', 'Method 3: Looking for large font spans...');
+    
+    const codeFromLargeSpan = await page.evaluate(() => {
+      const spans = document.querySelectorAll('span');
+      for (const span of spans) {
+        const style = span.getAttribute('style') || '';
+        const text = span.textContent || span.innerText || '';
+        const code = text.trim();
+        
+        // Check if it's a large font size and contains 4 digits
+        if ((style.includes('font-size:48px') || style.includes('font-size: 48px') || 
+             style.includes('font-size:36px') || style.includes('font-size: 36px') ||
+             style.includes('font-size:32px') || style.includes('font-size: 32px')) &&
+            /^\d{4}$/.test(code)) {
+          return { code, method: 'large-font-span' };
+        }
+      }
+      return null;
+    });
+    
+    if (codeFromLargeSpan) {
+      confirmationCode = codeFromLargeSpan.code;
+      addDebugStep('Code Extraction', 'success', `✅ Method 3 SUCCESS: Found code in large font span: ${confirmationCode}`);
+      return confirmationCode;
+    }
+    
+    // Method 4: Look for any 4-digit number in the email body
+    addDebugStep('Code Extraction', 'info', 'Method 4: Looking for any 4-digit number...');
+    
+    const codeFromAnyNumber = await page.evaluate(() => {
+      const text = document.body.textContent || document.body.innerText || '';
+      const matches = text.match(/\b\d{4}\b/g);
+      if (matches && matches.length > 0) {
+        // Return the first 4-digit number found
+        return { code: matches[0], method: 'any-4-digit' };
+      }
+      return null;
+    });
+    
+    if (codeFromAnyNumber) {
+      confirmationCode = codeFromAnyNumber.code;
+      addDebugStep('Code Extraction', 'success', `✅ Method 4 SUCCESS: Found code as 4-digit number: ${confirmationCode}`);
+      return confirmationCode;
+    }
+    
+    // Method 5: Look for table structure (email is often in tables)
+    addDebugStep('Code Extraction', 'info', 'Method 5: Looking in table structure...');
+    
+    const codeFromTable = await page.evaluate(() => {
+      const tables = document.querySelectorAll('table');
+      for (const table of tables) {
+        const text = table.textContent || table.innerText || '';
+        if (text.includes('Confirmation code:')) {
+          const matches = text.match(/\b\d{4}\b/g);
+          if (matches && matches.length > 0) {
+            return { code: matches[0], method: 'table-structure' };
+          }
+        }
+      }
+      return null;
+    });
+    
+    if (codeFromTable) {
+      confirmationCode = codeFromTable.code;
+      addDebugStep('Code Extraction', 'success', `✅ Method 5 SUCCESS: Found code in table: ${confirmationCode}`);
+      return confirmationCode;
+    }
+    
+    addDebugStep('Code Extraction', 'error', '❌ All DOM extraction methods failed');
+    return null;
+    
+  } catch (extractionError) {
+    addDebugStep('Code Extraction', 'error', 'Error in DOM extraction methods', null, extractionError.message);
+    return null;
   }
-  
-  const data = await response.json();
-  const extractedCode = data.choices[0].message.content.trim();
-  
-  // Validate the extracted code
-  if (!/^\d{4}$/.test(extractedCode)) {
-    throw new Error(`Invalid code format: ${extractedCode}`);
-  }
-  
-  addDebugStep('Image Analysis', 'success', `ChatGPT extracted code: ${extractedCode}`);
-  
-  // Clean up the screenshot file
-  try {
-    fs.unlinkSync(screenshotPath);
-  } catch (e) {
-    // Ignore cleanup errors
-  }
-  
-  return extractedCode;
 }
 
 // === Latenode / TempMail100 confirmation code extractor ======================
@@ -1162,15 +1238,19 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
       addDebugStep('Code Extraction', 'info', 'Modal debug info:', null, JSON.stringify(modalDebugInfo, null, 2));
       
-      // Extract confirmation code using image analysis
-      addDebugStep('Code Extraction', 'info', 'Taking screenshot of email and analyzing with AI...');
+      // Extract confirmation code using genius DOM analysis
+      addDebugStep('Code Extraction', 'info', 'Using genius DOM extraction methods...');
       try {
-        confirmationCode = await extractCodeWithImageAnalysis(tempMailPage);
-        addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted via image analysis: ${confirmationCode}`);
+        confirmationCode = await extractCodeWithDOMAnalysis(tempMailPage);
+        if (confirmationCode) {
+          addDebugStep('Code Extraction', 'success', `✅ Confirmation code extracted via DOM analysis: ${confirmationCode}`);
+        } else {
+          addDebugStep('Code Extraction', 'error', `❌ DOM extraction failed - no code found`);
+        }
       } catch (error) {
-        addDebugStep('Code Extraction', 'error', `❌ Image analysis failed: ${error.message}`);
-        // Fallback to DOM extraction
-        addDebugStep('Code Extraction', 'info', 'Falling back to DOM extraction...');
+        addDebugStep('Code Extraction', 'error', `❌ DOM extraction failed: ${error.message}`);
+        // Fallback to basic text search
+        addDebugStep('Code Extraction', 'info', 'Falling back to basic text search...');
         try {
           confirmationCode = await extractCodeTempmail100(tempMailPage, { 
             timeout: 30000,
