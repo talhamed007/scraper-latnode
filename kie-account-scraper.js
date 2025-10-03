@@ -467,18 +467,8 @@ async function createKieAccountAI(io, email, password) {
     // Human-like behavior: random delay after page load
     await randomHumanDelay(1000, 3000);
     
-    // Verify page is still available before taking screenshot
-    if (!page) {
-      throw new Error('Page became undefined after navigation - this should not happen');
-    }
-    
     const homepageScreenshot = await takeScreenshot('Kie-Homepage', page);
     addDebugStep('Navigation', 'info', `Homepage screenshot: ${homepageScreenshot || 'Failed to take screenshot'}`);
-    
-    // Verify page is still available after screenshot
-    if (!page) {
-      throw new Error('Page became undefined after taking homepage screenshot');
-    }
     
     // AI Decision Loop
     let step = 1;
@@ -486,11 +476,6 @@ async function createKieAccountAI(io, email, password) {
     let currentContext = "We're on the Kie.ai homepage and need to start the account creation process";
     
     while (step <= maxSteps) {
-      // Verify page is still available at the start of each AI step
-      if (!page) {
-        throw new Error(`Page became undefined at AI step ${step} - this should not happen`);
-      }
-      
       addDebugStep('AI Loop', 'info', `Step ${step}: Getting AI decision...`);
       
       // Emit AI loop step with screenshot
@@ -800,26 +785,17 @@ async function createKieAccount(io, email, password) {
     // Human-like behavior: random delay after page load
     await randomHumanDelay(1000, 3000);
     
-    // Verify page is still available before taking screenshot
-    if (!page) {
-      throw new Error('Page became undefined after navigation in regular function - this should not happen');
-    }
+    // Debug: Check page variable before screenshot
+    console.log('DEBUG: page variable before takeScreenshot:', typeof page, page);
     
     const homepageScreenshot = await takeScreenshot('Kie-Homepage', page);
     addDebugStep('Navigation', 'info', `Homepage screenshot: ${homepageScreenshot || 'Failed to take screenshot'}`);
     
-    // Verify page is still available after screenshot
-    if (!page) {
-      throw new Error('Page became undefined after taking homepage screenshot in regular function');
-    }
-    
     // Step 2: Click "Get Started" button
     addDebugStep('Get Started', 'info', 'Looking for Get Started button...');
     
-    // Verify page is still available before Get Started click
-    if (!page) {
-      throw new Error('Page became undefined before Get Started click - this should not happen');
-    }
+    // Debug: Check page variable before Get Started click
+    console.log('DEBUG: page variable before Get Started click:', typeof page, page);
     
     // Wait for the page to be fully loaded
     await sleep(3000);
@@ -1473,11 +1449,6 @@ async function createKieAccount(io, email, password) {
     
     // Step 14: Wait for dashboard
     addDebugStep('Dashboard', 'info', 'Waiting for dashboard...');
-    
-    // Verify page is still available
-    if (!page) {
-      throw new Error('Page is undefined when trying to wait for dashboard');
-    }
     
     await page.waitForFunction(() => {
       const url = window.location.href;
