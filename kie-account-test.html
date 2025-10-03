@@ -64,13 +64,13 @@
             background: linear-gradient(45deg, #667eea, #764ba2);
             color: white;
             border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 18px;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
-            width: 100%;
+            width: auto;
             margin-top: 10px;
         }
         
@@ -98,8 +98,10 @@
             flex-shrink: 0;
             white-space: nowrap;
             min-width: auto;
-            padding: 8px 12px;
-            font-size: 14px;
+            padding: 6px 10px;
+            font-size: 12px;
+            width: auto;
+            max-width: 120px;
         }
         
         .status {
@@ -309,7 +311,7 @@
                 </div>
             </div>
             
-            <button type="submit" class="btn" id="createBtn">
+            <button type="submit" class="btn" id="createBtn" style="width: auto; max-width: 200px; margin: 0 auto; display: block;">
                 🚀 Start Account Creation
             </button>
         </form>
