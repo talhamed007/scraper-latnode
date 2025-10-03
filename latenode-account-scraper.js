@@ -1854,6 +1854,86 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         addDebugStep('File Upload', 'warning', 'File upload failed, but account creation was successful', null, uploadError.message);
       }
       
+      // Step 9: Extract credits information
+      addDebugStep('Credits Check', 'info', 'Checking for credits information...');
+      
+      try {
+        // Wait for page to fully load after upload
+        await sleep(2000);
+        
+        // Look for credits information
+        const creditsInfo = await page.evaluate(() => {
+          // Try multiple selectors for credits
+          const selectors = [
+            '.credits_xXoSG',
+            '[class*="credits"]',
+            '[class*="jetons"]',
+            '[class*="tokens"]',
+            'div:has-text("Plug&Play Jetons")',
+            'div:has-text("Jetons")',
+            'div:has-text("Credits")'
+          ];
+          
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const text = element.innerText || element.textContent || '';
+              if (text.includes('Plug&Play') || text.includes('Jetons') || text.includes('Credits')) {
+                return {
+                  found: true,
+                  selector: selector,
+                  text: text.trim(),
+                  html: element.outerHTML
+                };
+              }
+            }
+          }
+          
+          // Also try to find any div containing credit-related text
+          const allDivs = document.querySelectorAll('div');
+          for (const div of allDivs) {
+            const text = (div.innerText || div.textContent || '').toLowerCase();
+            if (text.includes('plug&play') || text.includes('jetons') || text.includes('credits')) {
+              return {
+                found: true,
+                selector: 'div (text search)',
+                text: div.innerText || div.textContent || '',
+                html: div.outerHTML
+              };
+            }
+          }
+          
+          return { found: false };
+        });
+        
+        if (creditsInfo.found) {
+          addDebugStep('Credits Check', 'success', `Credits found: ${creditsInfo.text}`);
+          addDebugStep('Credits Check', 'info', `Using selector: ${creditsInfo.selector}`);
+          
+          // Extract the credit value (e.g., "0.95/0")
+          const creditMatch = creditsInfo.text.match(/(\d+\.?\d*\/\d+\.?\d*)/);
+          if (creditMatch) {
+            const credits = creditMatch[1];
+            addDebugStep('Credits Check', 'success', `Credits extracted: ${credits}`);
+            
+            // Store credits for return
+            global.credits = credits;
+          } else {
+            addDebugStep('Credits Check', 'warning', 'Could not extract credit numbers from text');
+            global.credits = creditsInfo.text;
+          }
+          
+          await takeScreenshot('Credits-Found', page);
+        } else {
+          addDebugStep('Credits Check', 'warning', 'Credits information not found on dashboard');
+          global.credits = 'Not found';
+        }
+        
+      } catch (creditsError) {
+        addDebugStep('Credits Check', 'warning', 'Error checking credits', null, creditsError.message);
+        global.credits = 'Error checking credits';
+      }
+      
     } catch (error) {
       addDebugStep('Registration', 'error', '❌ CRITICAL: Could not find Save button or registration failed - stopping process', null, error.message);
       throw new Error(`Registration failed: ${error.message}`);
@@ -1863,12 +1943,14 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Account Creation', 'info', `📧 Email: ${tempEmail}`);
     addDebugStep('Account Creation', 'info', `🔑 Password: ${generatedPassword}`);
     addDebugStep('Account Creation', 'info', `🔢 Confirmation Code: ${confirmationCode}`);
+    addDebugStep('Account Creation', 'info', `💰 Credits: ${global.credits || 'Not found'}`);
     
     return {
       success: true,
       tempEmail: tempEmail,
       password: generatedPassword,
       confirmationCode: confirmationCode,
+      credits: global.credits || 'Not found',
       message: 'Latenode account creation process completed successfully with JSON scenario uploaded!'
     };
     
