@@ -31,6 +31,9 @@ let globalScraperStopped = false;
 app.use(express.json());
 app.use(cors());
 app.use(express.static('public'));
+
+// Serve JSON files specifically
+app.use('/files', express.static('public'));
 app.use('/screenshots', express.static('screenshots'));
 
 // Serve the main page

@@ -1584,6 +1584,75 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       addDebugStep('Registration', 'success', 'Successfully registered and reached dashboard');
       await takeScreenshot('Registration-Success', page);
       
+      // Step 8: Upload JSON scenario file
+      addDebugStep('File Upload', 'info', 'Starting JSON scenario file upload...');
+      
+      try {
+        // Wait for page to fully load
+        await sleep(3000);
+        
+        // Look for the import button
+        const importButton = await page.$('button:has-text("Importer"), button[title*="Importer"], button:has-text("Importer un dossier")');
+        if (importButton) {
+          addDebugStep('File Upload', 'info', 'Found import button, clicking...');
+          await importButton.click();
+          await sleep(2000);
+          
+          // Wait for file input to appear
+          await page.waitForSelector('input[type="file"]', { timeout: 10000 });
+          addDebugStep('File Upload', 'info', 'File input found, preparing to upload JSON...');
+          
+          // Upload the JSON file from the hosted URL
+          const jsonFileUrl = 'https://scraper-latnode-production.up.railway.app/files/latenode-scenario.json';
+          
+          await page.evaluate(async (url) => {
+            try {
+              // Fetch the JSON file
+              const response = await fetch(url);
+              if (!response.ok) {
+                throw new Error(`Failed to fetch JSON file: ${response.status}`);
+              }
+              
+              const jsonContent = await response.text();
+              const blob = new Blob([jsonContent], { type: 'application/json' });
+              const file = new File([blob], 'latenode-scenario.json', { type: 'application/json' });
+              
+              // Find the file input
+              const fileInput = document.querySelector('input[type="file"]');
+              if (fileInput) {
+                // Create a DataTransfer object
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+                
+                // Trigger the change event
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                console.log('JSON file uploaded successfully');
+                return true;
+              } else {
+                throw new Error('File input not found');
+              }
+            } catch (error) {
+              console.error('Error uploading JSON file:', error);
+              return false;
+            }
+          }, jsonFileUrl);
+          
+          addDebugStep('File Upload', 'success', 'JSON scenario file uploaded successfully!');
+          await takeScreenshot('JSON-File-Uploaded', page);
+          
+          // Wait a bit for the upload to process
+          await sleep(3000);
+          
+        } else {
+          addDebugStep('File Upload', 'warning', 'Import button not found, skipping file upload');
+        }
+        
+      } catch (uploadError) {
+        addDebugStep('File Upload', 'warning', 'File upload failed, but account creation was successful', null, uploadError.message);
+      }
+      
     } catch (error) {
       addDebugStep('Registration', 'error', '❌ CRITICAL: Could not find Save button or registration failed - stopping process', null, error.message);
       throw new Error(`Registration failed: ${error.message}`);
@@ -1599,7 +1668,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       tempEmail: tempEmail,
       password: generatedPassword,
       confirmationCode: confirmationCode,
-      message: 'Latenode account creation process completed successfully!'
+      message: 'Latenode account creation process completed successfully with JSON scenario uploaded!'
     };
     
   } catch (error) {
