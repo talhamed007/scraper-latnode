@@ -5,6 +5,9 @@ const path = require('path');
 // Global variable for Socket.IO instance
 let globalIO = null;
 
+// Global scraper control variables (will be set by server)
+// These will be accessed from the global scope when available
+
 // Helper function to add debug steps
 function addDebugStep(step, type, message, screenshot = null, error = null) {
   const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
@@ -480,6 +483,17 @@ async function createKieAccountAI(io, email, password) {
     let currentContext = "We're on the Kie.ai homepage and need to start the account creation process";
     
     while (step <= maxSteps) {
+      // Check for pause/stop flags
+      if (global.globalScraperPaused) {
+        addDebugStep('AI Loop', 'info', 'Scraper paused by user');
+        await sleep(1000); // Wait 1 second before checking again
+        continue;
+      }
+      
+      if (global.globalScraperStopped) {
+        addDebugStep('AI Loop', 'info', 'Scraper stopped by user');
+        break;
+      }
       addDebugStep('AI Loop', 'info', `Step ${step}: Getting AI decision...`);
       
       // Emit AI loop step with screenshot

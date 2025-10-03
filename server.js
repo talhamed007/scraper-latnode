@@ -21,6 +21,12 @@ let debugData = {
   recraft: null
 };
 
+// Global scraper control variables
+let globalBrowser = null;
+let globalPage = null;
+let globalScraperPaused = false;
+let globalScraperStopped = false;
+
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -3819,6 +3825,14 @@ app.post('/api/kie-account', async (req, res) => {
       });
     }
     
+    // Reset global control flags
+    globalScraperPaused = false;
+    globalScraperStopped = false;
+    
+    // Set global variables for scraper access
+    global.globalScraperPaused = false;
+    global.globalScraperStopped = false;
+    
     // Pass io instance and credentials to the scraper function
     const result = await createKieAccount(io, email, password);
     
@@ -4041,6 +4055,110 @@ app.post('/api/take-screenshot', async (req, res) => {
     }
   } catch (error) {
     console.error('❌ Manual screenshot error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Pause Scraper API
+app.post('/api/pause-scraper', async (req, res) => {
+  try {
+    console.log('⏸️ Pause scraper requested');
+    
+    // Set global pause flag
+    globalScraperPaused = true;
+    global.globalScraperPaused = true;
+    
+    res.json({ 
+      success: true, 
+      message: 'Scraper paused successfully'
+    });
+  } catch (error) {
+    console.error('❌ Pause scraper error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resume Scraper API
+app.post('/api/resume-scraper', async (req, res) => {
+  try {
+    console.log('▶️ Resume scraper requested');
+    
+    // Clear global pause flag
+    globalScraperPaused = false;
+    global.globalScraperPaused = false;
+    
+    res.json({ 
+      success: true, 
+      message: 'Scraper resumed successfully'
+    });
+  } catch (error) {
+    console.error('❌ Resume scraper error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Stop Scraper API
+app.post('/api/stop-scraper', async (req, res) => {
+  try {
+    console.log('⏹️ Stop scraper requested');
+    
+    // Set global stop flag
+    globalScraperStopped = true;
+    globalScraperPaused = false;
+    global.globalScraperStopped = true;
+    global.globalScraperPaused = false;
+    
+    // Close any active browser
+    if (globalBrowser) {
+      try {
+        await globalBrowser.close();
+        globalBrowser = null;
+        globalPage = null;
+        console.log('✅ Browser closed successfully');
+      } catch (browserError) {
+        console.error('❌ Error closing browser:', browserError);
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Scraper stopped successfully'
+    });
+  } catch (error) {
+    console.error('❌ Stop scraper error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Clean Browser API
+app.post('/api/clean-browser', async (req, res) => {
+  try {
+    console.log('🧹 Clean browser requested');
+    
+    // Close any active browser
+    if (globalBrowser) {
+      try {
+        await globalBrowser.close();
+        globalBrowser = null;
+        globalPage = null;
+        console.log('✅ Browser closed and cleaned successfully');
+      } catch (browserError) {
+        console.error('❌ Error closing browser:', browserError);
+      }
+    }
+    
+    // Reset global flags
+    globalScraperPaused = false;
+    globalScraperStopped = false;
+    global.globalScraperPaused = false;
+    global.globalScraperStopped = false;
+    
+    res.json({ 
+      success: true, 
+      message: 'Browser cleaned successfully'
+    });
+  } catch (error) {
+    console.error('❌ Clean browser error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
