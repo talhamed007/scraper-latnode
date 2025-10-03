@@ -1646,6 +1646,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         
         // Try multiple selectors for the import button
         const importSelectors = [
+          'button[data-test-id="importFolderOrScenarioButton"]', // Most reliable selector
           'button[title*="Importer"]',
           'button[title*="importer"]',
           'button:has-text("Importer")',
@@ -1657,7 +1658,9 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           '[class*="import"] button',
           '[class*="upload"] button',
           'button[class*="import"]',
-          'button[class*="upload"]'
+          'button[class*="upload"]',
+          'button.ant-btn', // Ant Design button class
+          'button[class*="ant-btn"]'
         ];
         
         for (const selector of importSelectors) {
@@ -1677,6 +1680,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         if (!importButton) {
           try {
             const xpathSelectors = [
+              '//button[@data-test-id="importFolderOrScenarioButton"]', // Most reliable XPath
               '//button[contains(text(), "Importer")]',
               '//button[contains(text(), "importer")]',
               '//button[contains(text(), "Import")]',
@@ -1684,7 +1688,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
               '//button[contains(text(), "Importer un dossier")]',
               '//button[contains(text(), "Importer un scénario")]',
               '//*[contains(@class, "import")]//button',
-              '//*[contains(@class, "upload")]//button'
+              '//*[contains(@class, "upload")]//button',
+              '//button[contains(@class, "ant-btn")]' // Ant Design button
             ];
             
             for (const xpath of xpathSelectors) {
@@ -1758,6 +1763,13 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
           
           try {
             const buttonFound = await page.evaluate(() => {
+              // First try the specific data-test-id selector
+              const specificButton = document.querySelector('button[data-test-id="importFolderOrScenarioButton"]');
+              if (specificButton) {
+                specificButton.click();
+                return true;
+              }
+              
               // Look for buttons with import-related text
               const buttons = document.querySelectorAll('button, [role="button"], a[role="button"]');
               
@@ -1765,10 +1777,13 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
                 const text = (button.innerText || button.textContent || '').toLowerCase();
                 const title = (button.title || '').toLowerCase();
                 const className = (button.className || '').toLowerCase();
+                const dataTestId = button.getAttribute('data-test-id') || '';
                 
-                if (text.includes('importer') || text.includes('import') || 
+                if (dataTestId.includes('import') || dataTestId.includes('upload') ||
+                    text.includes('importer') || text.includes('import') || 
                     title.includes('importer') || title.includes('import') ||
-                    className.includes('import') || className.includes('upload')) {
+                    className.includes('import') || className.includes('upload') ||
+                    className.includes('ant-btn')) {
                   button.click();
                   return true;
                 }
