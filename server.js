@@ -3833,6 +3833,7 @@ app.post('/api/latenode-account', async (req, res) => {
       tempEmail: result.tempEmail,
       password: result.password,
       confirmationCode: result.confirmationCode,
+      credits: result.credits,
       message: result.message
     });
     
