@@ -772,6 +772,10 @@ async function createKieAccount(io, email, password) {
     await page.setViewport({ width: 1280, height: 720 });
     addDebugStep('Browser', 'success', 'Page created and viewport set');
     
+    // Debug: Verify page is created properly
+    console.log('DEBUG: Page created successfully:', typeof page, page);
+    console.log('DEBUG: Page URL after creation:', await page.url());
+    
     // Verify page is created
     if (!page) {
       throw new Error('Page was not created successfully');
@@ -788,14 +792,31 @@ async function createKieAccount(io, email, password) {
     // Debug: Check page variable before screenshot
     console.log('DEBUG: page variable before takeScreenshot:', typeof page, page);
     
-    const homepageScreenshot = await takeScreenshot('Kie-Homepage', page);
+    let homepageScreenshot = null;
+    try {
+      homepageScreenshot = await takeScreenshot('Kie-Homepage', page);
+      console.log('DEBUG: Screenshot taken successfully:', homepageScreenshot);
+    } catch (screenshotError) {
+      console.log('DEBUG: Screenshot failed:', screenshotError.message);
+      addDebugStep('Navigation', 'error', `Screenshot failed: ${screenshotError.message}`);
+    }
+    
     addDebugStep('Navigation', 'info', `Homepage screenshot: ${homepageScreenshot || 'Failed to take screenshot'}`);
+    
+    // Debug: Check page variable after screenshot
+    console.log('DEBUG: page variable after takeScreenshot:', typeof page, page);
     
     // Step 2: Click "Get Started" button
     addDebugStep('Get Started', 'info', 'Looking for Get Started button...');
     
     // Debug: Check page variable before Get Started click
     console.log('DEBUG: page variable before Get Started click:', typeof page, page);
+    
+    // Verify page is still available
+    if (!page) {
+      console.log('ERROR: Page is undefined before Get Started click!');
+      throw new Error('Page became undefined before Get Started click');
+    }
     
     // Wait for the page to be fully loaded
     await sleep(3000);
