@@ -1185,6 +1185,8 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
       if (confirmationCode) {
         addDebugStep('Code Extraction', 'success', `Confirmation code extracted: ${confirmationCode}`);
+        // Break out of the retry loop since we found the confirmation code
+        break;
       } else {
         addDebugStep('Code Extraction', 'error', '❌ CRITICAL: Could not extract confirmation code from email - stopping process');
         throw new Error('Confirmation code extraction failed - this step is obligatory');
