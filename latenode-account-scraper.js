@@ -781,12 +781,21 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       throw new Error(`Next button step failed: ${error.message}`);
     }
     
-    // Step 6: Switch back to TempMail100 tab to get confirmation code
-    addDebugStep('Email Check', 'info', 'Switching to TempMail100 tab to check for confirmation email...');
+    // Step 6: Retry loop for email sending (max 3 attempts)
+    let emailFound = false;
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    // Wait a bit for the email to be sent (if Next button was clicked)
-    addDebugStep('Email Check', 'info', 'Waiting for email to be sent...');
-    await sleep(10000); // Wait 10 seconds for email to arrive
+    while (!emailFound && retryCount < maxRetries) {
+      retryCount++;
+      addDebugStep('Email Check', 'info', `Attempt ${retryCount}/${maxRetries} - Checking for confirmation email...`);
+      
+      // Switch back to TempMail100 tab to get confirmation code
+      addDebugStep('Email Check', 'info', 'Switching to TempMail100 tab to check for confirmation email...');
+      
+      // Wait a bit for the email to be sent (if Next button was clicked)
+      addDebugStep('Email Check', 'info', 'Waiting for email to be sent...');
+      await sleep(10000); // Wait 10 seconds for email to arrive
     
     // Get all pages and find the TempMail100 tab
     const pages = await browser.pages();
@@ -1183,8 +1192,47 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       
     } catch (error) {
       addDebugStep('Email Check', 'error', 'Could not find or open Latenode email', null, error.message);
-      throw new Error(`Email check failed: ${error.message}`);
+      
+      // If this is not the last retry, try again
+      if (retryCount < maxRetries) {
+        addDebugStep('Email Check', 'info', `Retrying Latenode email sending process (attempt ${retryCount + 1}/${maxRetries})...`);
+        
+        // Go back to Latenode tab
+        const latenodePage = await browser.pages().find(p => p.url().includes('latenode.com'));
+        if (latenodePage) {
+          await latenodePage.bringToFront();
+          addDebugStep('Email Check', 'info', 'Switched back to Latenode tab');
+          
+          // Re-enter email and click Next
+          addDebugStep('Email Check', 'info', 'Re-entering email and clicking Next...');
+          
+          // Find email field and re-enter
+          const emailField = await latenodePage.$('input[type="email"], input[name="email"], input[data-test-id="authEmailInput"]');
+          if (emailField) {
+            await emailField.click();
+            await emailField.click({ clickCount: 3 }); // Select all
+            await sleep(200);
+            await emailField.type(email);
+            await sleep(500);
+            
+            // Click Next button again
+            const nextButton = await latenodePage.$('button[data-test-id="authEmailButton"]');
+            if (nextButton) {
+              await nextButton.click();
+              addDebugStep('Email Check', 'info', 'Re-clicked Next button to resend email');
+              await sleep(3000);
+            }
+          }
+        }
+        
+        // Continue to next iteration of the retry loop
+        continue;
+      } else {
+        // Last retry failed, throw error
+        throw new Error(`Email check failed after ${maxRetries} retries: ${error.message}`);
+      }
     }
+    } // End of retry loop
     
     // Step 7: Switch back to Latenode tab and enter confirmation code
     addDebugStep('Code Entry', 'info', 'Switching back to Latenode tab to enter confirmation code...');
