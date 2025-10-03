@@ -86,6 +86,22 @@
             box-shadow: none;
         }
         
+        .control-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: nowrap;
+            margin-bottom: 10px;
+            overflow-x: auto;
+        }
+        
+        .control-buttons .btn {
+            flex-shrink: 0;
+            white-space: nowrap;
+            min-width: auto;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
         .status {
             margin-top: 20px;
             padding: 15px;
@@ -274,21 +290,21 @@
             </div>
             
             <div class="form-group">
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+                <div class="control-buttons">
                     <button type="button" class="btn btn-screenshot" id="screenshotBtn" style="background: linear-gradient(45deg, #28a745, #20c997);">
-                        📸 Take Screenshot
+                        📸 Screenshot
                     </button>
-                    <button type="button" class="btn" id="pauseBtn" style="background: linear-gradient(45deg, #ffc107, #ff9800); color: #000;">
-                        ⏸️ Pause Scraper
+                    <button type="button" class="btn" id="pauseBtn" style="background: linear-gradient(45deg, #ffc107, #ff9800); color: #000;" disabled>
+                        ⏸️ Pause
                     </button>
                     <button type="button" class="btn" id="resumeBtn" style="background: linear-gradient(45deg, #17a2b8, #138496);" disabled>
-                        ▶️ Resume Scraper
+                        ▶️ Resume
                     </button>
                     <button type="button" class="btn" id="stopBtn" style="background: linear-gradient(45deg, #dc3545, #c82333);" disabled>
-                        ⏹️ Stop Scraper
+                        ⏹️ Stop
                     </button>
                     <button type="button" class="btn" id="cleanBtn" style="background: linear-gradient(45deg, #6c757d, #5a6268);">
-                        🧹 Clean Browser
+                        🧹 Clean
                     </button>
                 </div>
             </div>
