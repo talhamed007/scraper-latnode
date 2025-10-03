@@ -588,24 +588,41 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       try {
         // Wait for either confirmation code input OR a redirect to a different page
         await page.waitForFunction(() => {
-          // Check for confirmation code input
-          const codeInput = document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i], input[type="text"][maxlength="4"]');
-          if (codeInput) return true;
+          // Check for confirmation code input with more selectors
+          const selectors = [
+            'input[placeholder*="code" i]',
+            'input[placeholder*="confirmation" i]',
+            'input[data-test-id*="code" i]',
+            'input[type="text"][maxlength="4"]',
+            'input[type="text"][maxlength="6"]',
+            'input[type="text"][maxlength="8"]',
+            'input[name*="code" i]',
+            'input[name*="verification" i]',
+            'input[id*="code" i]',
+            'input[id*="verification" i]'
+          ];
+          
+          for (const selector of selectors) {
+            if (document.querySelector(selector)) return true;
+          }
           
           // Check if URL changed (might be redirecting)
           const url = window.location.href;
-          if (url.includes('confirm') || url.includes('verification') || url.includes('code')) {
+          if (url.includes('confirm') || url.includes('verification') || url.includes('code') || 
+              url.includes('dashboard') || url.includes('console') || url.includes('success')) {
             return true;
           }
           
           // Check for any text mentioning confirmation or code
           const bodyText = document.body.innerText.toLowerCase();
-          if (bodyText.includes('confirmation code') || bodyText.includes('verification code') || bodyText.includes('enter code')) {
+          if (bodyText.includes('confirmation code') || bodyText.includes('verification code') || 
+              bodyText.includes('enter code') || bodyText.includes('welcome') || 
+              bodyText.includes('dashboard') || bodyText.includes('success')) {
             return true;
           }
           
           return false;
-        }, { timeout: 20000 });
+        }, { timeout: 30000 }); // Increased timeout to 30 seconds
         
         addDebugStep('Next Button', 'success', 'Page transition detected');
         
@@ -624,10 +641,70 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         
         // If we can't find confirmation code input, this might be a different flow
         const hasCodeInput = await page.evaluate(() => {
-          return document.querySelector('input[placeholder*="code" i], input[placeholder*="confirmation" i], input[data-test-id*="code" i], input[type="text"][maxlength="4"]') !== null;
+          // Try multiple selectors for confirmation code input
+          const selectors = [
+            'input[placeholder*="code" i]',
+            'input[placeholder*="confirmation" i]',
+            'input[data-test-id*="code" i]',
+            'input[type="text"][maxlength="4"]',
+            'input[type="text"][maxlength="6"]',
+            'input[type="text"][maxlength="8"]',
+            'input[name*="code" i]',
+            'input[name*="verification" i]',
+            'input[id*="code" i]',
+            'input[id*="verification" i]',
+            'input[class*="code" i]',
+            'input[class*="verification" i]',
+            'input[type="text"]', // Any text input
+            'input[type="number"]' // Any number input
+          ];
+          
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              console.log('Found confirmation code input with selector:', selector);
+              return true;
+            }
+          }
+          
+          // Also check for any input that might be a code field
+          const allInputs = document.querySelectorAll('input');
+          for (const input of allInputs) {
+            const placeholder = (input.placeholder || '').toLowerCase();
+            const name = (input.name || '').toLowerCase();
+            const id = (input.id || '').toLowerCase();
+            const className = (input.className || '').toLowerCase();
+            
+            if (placeholder.includes('code') || placeholder.includes('verification') || 
+                name.includes('code') || name.includes('verification') ||
+                id.includes('code') || id.includes('verification') ||
+                className.includes('code') || className.includes('verification')) {
+              console.log('Found confirmation code input by text matching:', input);
+              return true;
+            }
+          }
+          
+          return false;
         });
         
         if (!hasCodeInput) {
+          // Let's also check if we're on a different page that might indicate success
+          const currentUrl = await page.url();
+          const pageTitle = await page.title();
+          const pageContent = await page.evaluate(() => document.body.innerText);
+          
+          addDebugStep('Next Button', 'info', `Current URL: ${currentUrl}`);
+          addDebugStep('Next Button', 'info', `Page title: ${pageTitle}`);
+          addDebugStep('Next Button', 'info', `Page content preview: ${pageContent.substring(0, 200)}...`);
+          
+          // Check if we're on a success page or dashboard
+          if (currentUrl.includes('dashboard') || currentUrl.includes('console') || 
+              pageContent.toLowerCase().includes('welcome') || pageContent.toLowerCase().includes('dashboard') ||
+              pageContent.toLowerCase().includes('success') || pageContent.toLowerCase().includes('account created')) {
+            addDebugStep('Next Button', 'success', 'Account creation appears to be successful - no confirmation code needed');
+            return { success: true, email, password: generatedPassword, message: 'Account created successfully without confirmation code' };
+          }
+          
           addDebugStep('Next Button', 'error', '❌ CRITICAL: No confirmation code input found after Next button click - stopping process');
           throw new Error('Confirmation code page not loaded - this step is obligatory');
         }

@@ -3748,6 +3748,50 @@ app.get('/recraft-session', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft-session-test.html'));
 });
 
+// HTTP-based Latenode account creation endpoint (fix for typo in URL)
+app.post('/api/http/latenode-acount', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Email and password are required'
+    });
+  }
+
+  try {
+    console.log('🌐 HTTP Latenode account creation for:', email);
+    
+    // Call the Latenode account creation function
+    const result = await createLatenodeAccount(io, email, password);
+    
+    res.json({
+      ok: true,
+      success: result.success,
+      email: result.email,
+      password: result.password,
+      message: result.message,
+      debugSteps: result.debugSteps,
+      screenshots: result.screenshots,
+      error: result.error
+    });
+  } catch (error) {
+    console.error('❌ HTTP Latenode account creation error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
 // Serve Latenode account creation page
 app.get('/latenode-account', (req, res) => {
   res.sendFile(path.join(__dirname, 'latenode-account-test.html'));
