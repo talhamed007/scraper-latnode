@@ -1861,17 +1861,77 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         // Wait for page to fully load after upload
         await sleep(2000);
         
-        // Look for credits information
+        // First, hover over the progress circle to reveal the tooltip
+        addDebugStep('Credits Check', 'info', 'Hovering over progress circle to reveal credits tooltip...');
+        
+        try {
+          // Find the progress circle path element
+          const progressCircle = await page.$('path.ant-progress-circle-path');
+          if (progressCircle) {
+            addDebugStep('Credits Check', 'info', 'Found progress circle, hovering over it...');
+            
+            // Hover over the progress circle to trigger the tooltip
+            await progressCircle.hover();
+            await sleep(2000); // Wait for tooltip to appear
+            
+            addDebugStep('Credits Check', 'info', 'Hovered over progress circle, waiting for tooltip...');
+          } else {
+            addDebugStep('Credits Check', 'warning', 'Progress circle not found, trying alternative approach...');
+          }
+        } catch (hoverError) {
+          addDebugStep('Credits Check', 'warning', 'Error hovering over progress circle', null, hoverError.message);
+        }
+        
+        // Look for credits information in the tooltip
         const creditsInfo = await page.evaluate(() => {
-          // Try multiple selectors for credits
+          // First try to find the tooltip that appears on hover
+          const tooltipSelectors = [
+            '[class*="tooltip"]',
+            '[class*="popover"]',
+            '[class*="ant-tooltip"]',
+            '[class*="ant-popover"]',
+            '[role="tooltip"]',
+            '[data-testid*="tooltip"]',
+            '[aria-describedby]'
+          ];
+          
+          for (const selector of tooltipSelectors) {
+            const tooltip = document.querySelector(selector);
+            if (tooltip) {
+              const text = tooltip.innerText || tooltip.textContent || '';
+              if (text.includes('Plug&Play') || text.includes('Jetons') || text.includes('Credits') || text.includes('0.95/0')) {
+                return {
+                  found: true,
+                  selector: selector,
+                  text: text.trim(),
+                  html: tooltip.outerHTML,
+                  source: 'tooltip'
+                };
+              }
+            }
+          }
+          
+          // Try to find credits in any visible element after hover
+          const allElements = document.querySelectorAll('*');
+          for (const element of allElements) {
+            const text = (element.innerText || element.textContent || '').toLowerCase();
+            if (text.includes('plug&play') || text.includes('jetons') || text.includes('credits') || text.includes('0.95/0')) {
+              return {
+                found: true,
+                selector: element.tagName.toLowerCase(),
+                text: element.innerText || element.textContent || '',
+                html: element.outerHTML,
+                source: 'element'
+              };
+            }
+          }
+          
+          // Fallback: try the original selectors
           const selectors = [
             '.credits_xXoSG',
             '[class*="credits"]',
             '[class*="jetons"]',
-            '[class*="tokens"]',
-            'div:has-text("Plug&Play Jetons")',
-            'div:has-text("Jetons")',
-            'div:has-text("Credits")'
+            '[class*="tokens"]'
           ];
           
           for (const selector of selectors) {
@@ -1883,23 +1943,10 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
                   found: true,
                   selector: selector,
                   text: text.trim(),
-                  html: element.outerHTML
+                  html: element.outerHTML,
+                  source: 'fallback'
                 };
               }
-            }
-          }
-          
-          // Also try to find any div containing credit-related text
-          const allDivs = document.querySelectorAll('div');
-          for (const div of allDivs) {
-            const text = (div.innerText || div.textContent || '').toLowerCase();
-            if (text.includes('plug&play') || text.includes('jetons') || text.includes('credits')) {
-              return {
-                found: true,
-                selector: 'div (text search)',
-                text: div.innerText || div.textContent || '',
-                html: div.outerHTML
-              };
             }
           }
           
@@ -1908,7 +1955,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         
         if (creditsInfo.found) {
           addDebugStep('Credits Check', 'success', `Credits found: ${creditsInfo.text}`);
-          addDebugStep('Credits Check', 'info', `Using selector: ${creditsInfo.selector}`);
+          addDebugStep('Credits Check', 'info', `Using selector: ${creditsInfo.selector} (source: ${creditsInfo.source})`);
           
           // Extract the credit value (e.g., "0.95/0")
           const creditMatch = creditsInfo.text.match(/(\d+\.?\d*\/\d+\.?\d*)/);
