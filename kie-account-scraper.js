@@ -1077,63 +1077,138 @@ async function createKieAccount(io, email, password) {
       throw error;
     }
     
-    // Step 5: Wait for Microsoft login popup to appear and load
+    // Step 5: Wait for Microsoft login popup to appear and switch to it
     addDebugStep('Microsoft Login Popup', 'info', 'Waiting for Microsoft login popup to appear...');
     
+    let popupPage = null;
+    
     try {
-      // Wait for Microsoft login page/popup to load
-      await page.waitForFunction(() => {
-        // Check for Microsoft login specific elements
-        const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
-        const hasMicrosoftLogin = microsoftElements.length > 0;
+      // Wait for a new popup window to appear
+      const popupPromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('No popup window appeared within 15 seconds'));
+        }, 15000);
         
-        // Also check for Microsoft login page indicators
-        const microsoftPageIndicators = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]');
-        const hasMicrosoftPage = microsoftPageIndicators.length > 0;
-        
-        // Check for Microsoft-specific text
-        const microsoftText = document.body.textContent.toLowerCase();
-        const hasMicrosoftText = microsoftText.includes('microsoft') || microsoftText.includes('outlook') || microsoftText.includes('account');
-        
-        return hasMicrosoftLogin || hasMicrosoftPage || hasMicrosoftText;
-      }, { timeout: 15000 });
+        browser.on('targetcreated', async (target) => {
+          if (target.type() === 'page') {
+            clearTimeout(timeout);
+            try {
+              const newPage = await target.page();
+              if (newPage && newPage !== page) {
+                addDebugStep('Microsoft Login Popup', 'info', 'New popup window detected, checking if it\'s Microsoft login...');
+                
+                // Wait a moment for the popup to load
+                await sleep(2000);
+                
+                // Check if this is the Microsoft login popup
+                const isMicrosoftPopup = await newPage.evaluate(() => {
+                  const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
+                  const hasMicrosoftLogin = microsoftElements.length > 0;
+                  
+                  const microsoftPageIndicators = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]');
+                  const hasMicrosoftPage = microsoftPageIndicators.length > 0;
+                  
+                  const microsoftText = document.body.textContent.toLowerCase();
+                  const hasMicrosoftText = microsoftText.includes('microsoft') || microsoftText.includes('outlook') || microsoftText.includes('account');
+                  
+                  return hasMicrosoftLogin || hasMicrosoftPage || hasMicrosoftText;
+                });
+                
+                if (isMicrosoftPopup) {
+                  addDebugStep('Microsoft Login Popup', 'success', 'Microsoft login popup confirmed, switching to popup window...');
+                  resolve(newPage);
+                } else {
+                  addDebugStep('Microsoft Login Popup', 'warning', 'Popup detected but not Microsoft login, continuing to wait...');
+                }
+              }
+            } catch (e) {
+              addDebugStep('Microsoft Login Popup', 'warning', `Error checking popup: ${e.message}`);
+            }
+          }
+        });
+      });
       
-      addDebugStep('Microsoft Login Popup', 'success', 'Microsoft login popup detected, waiting for full load...');
+      popupPage = await popupPromise;
       
       // Additional wait for content to fully load
       await sleep(3000);
       
       // Take screenshot of the Microsoft login popup
-      await takeScreenshot('Microsoft-Login-Popup', page);
+      await takeScreenshot('Microsoft-Login-Popup', popupPage);
       
     } catch (error) {
       addDebugStep('Microsoft Login Popup', 'error', `Microsoft login popup wait failed: ${error.message}`);
       
-      // Take screenshot to see what's happening after timeout
-      await takeScreenshot('Microsoft-Login-Timeout', page);
+      // Try to find popup in existing pages
+      addDebugStep('Microsoft Login Popup', 'info', 'Trying to find popup in existing pages...');
       
-      // Try to continue anyway - maybe the popup is there but our detection failed
-      addDebugStep('Microsoft Login Popup', 'info', 'Attempting to continue despite timeout...');
+      try {
+        const pages = await browser.pages();
+        for (let i = 0; i < pages.length; i++) {
+          const testPage = pages[i];
+          if (testPage !== page) {
+            try {
+              const isMicrosoftPopup = await testPage.evaluate(() => {
+                const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
+                const hasMicrosoftLogin = microsoftElements.length > 0;
+                
+                const microsoftPageIndicators = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]');
+                const hasMicrosoftPage = microsoftPageIndicators.length > 0;
+                
+                const microsoftText = document.body.textContent.toLowerCase();
+                const hasMicrosoftText = microsoftText.includes('microsoft') || microsoftText.includes('outlook') || microsoftText.includes('account');
+                
+                return hasMicrosoftLogin || hasMicrosoftPage || hasMicrosoftText;
+              });
+              
+              if (isMicrosoftPopup) {
+                popupPage = testPage;
+                addDebugStep('Microsoft Login Popup', 'success', 'Found Microsoft login popup in existing pages');
+                break;
+              }
+            } catch (e) {
+              // Page might be closed or inaccessible
+            }
+          }
+        }
+        
+        if (!popupPage) {
+          // Take screenshot to see what's happening after timeout
+          await takeScreenshot('Microsoft-Login-Timeout', page);
+          addDebugStep('Microsoft Login Popup', 'info', 'Attempting to continue on main page...');
+        }
+      } catch (e) {
+        addDebugStep('Microsoft Login Popup', 'error', `Error checking existing pages: ${e.message}`);
+      }
     }
     
     // Step 6: Enter email
     addDebugStep('Email Entry', 'info', 'Entering email address...');
     
     try {
-      // First check if page is still accessible
+      // Use popup page if available, otherwise fall back to main page
+      const targetPage = popupPage || page;
+      
+      if (popupPage) {
+        addDebugStep('Email Entry', 'info', 'Using Microsoft login popup page for email entry');
+      } else {
+        addDebugStep('Email Entry', 'warning', 'No popup found, using main page for email entry');
+      }
+      
+      // First check if target page is still accessible
       try {
-        await page.evaluate(() => document.title);
-        addDebugStep('Email Entry', 'info', 'Page is accessible, proceeding with email entry');
+        await targetPage.evaluate(() => document.title);
+        addDebugStep('Email Entry', 'info', 'Target page is accessible, proceeding with email entry');
       } catch (e) {
-        addDebugStep('Email Entry', 'error', 'Page is not accessible - session may have closed');
-        throw new Error('Page session closed - cannot proceed with email entry');
+        addDebugStep('Email Entry', 'error', 'Target page is not accessible - session may have closed');
+        throw new Error('Target page session closed - cannot proceed with email entry');
       }
       
       // Take screenshot to see current page state
-      await takeScreenshot('Before-Email-Entry', page);
+      await takeScreenshot('Before-Email-Entry', targetPage);
       
       // Get all input fields on the page for debugging
-      const allInputs = await page.evaluate(() => {
+      const allInputs = await targetPage.evaluate(() => {
         const inputs = Array.from(document.querySelectorAll('input'));
         return inputs.map(input => ({
           type: input.type,
@@ -1197,7 +1272,7 @@ async function createKieAccount(io, email, password) {
           addDebugStep('Email Entry', 'info', `Trying email selector: ${selector}`);
           
           // Wait for selector with shorter timeout
-          emailField = await page.waitForSelector(selector, { timeout: 2000 });
+          emailField = await targetPage.waitForSelector(selector, { timeout: 2000 });
           
           if (emailField) {
             // Check if element is visible and interactable
@@ -1222,7 +1297,7 @@ async function createKieAccount(io, email, password) {
       if (!emailField) {
         addDebugStep('Email Entry', 'info', 'No specific email field found, looking for any text input...');
         
-        const textInputs = await page.$$('input[type="text"], input:not([type])');
+        const textInputs = await targetPage.$$('input[type="text"], input:not([type])');
         for (let i = 0; i < textInputs.length; i++) {
           const input = textInputs[i];
           const isVisible = await input.isIntersectingViewport();
@@ -1242,7 +1317,7 @@ async function createKieAccount(io, email, password) {
         addDebugStep('Email Entry', 'info', 'Trying fallback method to find email field...');
         
         try {
-          const emailFieldFound = await page.evaluate((email) => {
+          const emailFieldFound = await targetPage.evaluate((email) => {
             const inputs = Array.from(document.querySelectorAll('input'));
             const emailInput = inputs.find(input => 
               input.type === 'email' || 
@@ -1266,7 +1341,7 @@ async function createKieAccount(io, email, password) {
           } else {
             // Try XPath fallback
             addDebugStep('Email Entry', 'info', 'Trying XPath fallback for email field...');
-            const xpathResult = await page.$x('//input[@type="text" or @type="email" or not(@type)]');
+            const xpathResult = await targetPage.$x('//input[@type="text" or @type="email" or not(@type)]');
             if (xpathResult.length > 0) {
               const xpathField = xpathResult[0];
               const isVisible = await xpathField.isIntersectingViewport();
@@ -1297,28 +1372,28 @@ async function createKieAccount(io, email, password) {
             const centerY = box.y + box.height / 2;
             
             // Human-like mouse movement to field
-            await humanLikeMouseMove(page, 0, 0, centerX, centerY);
-            await randomHumanDelay(page, 200, 500);
+            await humanLikeMouseMove(targetPage, 0, 0, centerX, centerY);
+            await randomHumanDelay(targetPage, 200, 500);
           }
           
           // Click to focus the field
           await emailField.click();
-          await randomHumanDelay(page, 100, 300);
+          await randomHumanDelay(targetPage, 100, 300);
           
           // Clear any existing text
           await emailField.click({ clickCount: 3 });
-          await randomHumanDelay(page, 50, 150);
+          await randomHumanDelay(targetPage, 50, 150);
           
           // Use human-like typing
-          await humanLikeType(page, usedEmailSelector, email);
+          await humanLikeType(targetPage, usedEmailSelector, email);
           addDebugStep('Email Entry', 'success', `Human-like entered email using selector: ${usedEmailSelector}`);
           
           // Take screenshot after email entry
-          const emailScreenshot = await takeScreenshot('Email-Entered', page);
+          const emailScreenshot = await takeScreenshot('Email-Entered', targetPage);
           addDebugStep('Email Entry', 'info', `Screenshot after email entry: ${emailScreenshot || 'Failed'}`);
           
           // Trigger events to ensure validation
-          await page.evaluate((sel) => {
+          await targetPage.evaluate((sel) => {
             const el = document.querySelector(sel);
             if (el) {
               el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1330,7 +1405,7 @@ async function createKieAccount(io, email, password) {
           }, usedEmailSelector);
           
           // Wait a bit for validation
-          await randomHumanDelay(page, 500, 1000);
+          await randomHumanDelay(targetPage, 500, 1000);
           
         } catch (e) {
           addDebugStep('Email Entry', 'error', `Human-like email entry failed: ${e.message}`);
@@ -1340,7 +1415,7 @@ async function createKieAccount(io, email, password) {
       
       // Take screenshot after successful email entry
       try {
-        await takeScreenshot('Email-Entered', page);
+        await takeScreenshot('Email-Entered', targetPage);
       } catch (screenshotError) {
         addDebugStep('Email Entry', 'warning', `Screenshot failed: ${screenshotError.message}`);
       }
@@ -1350,7 +1425,7 @@ async function createKieAccount(io, email, password) {
       
       // Try to take screenshot even if there's an error
       try {
-        await takeScreenshot('Email-Entry-Failed', page);
+        await takeScreenshot('Email-Entry-Failed', targetPage);
       } catch (screenshotError) {
         addDebugStep('Email Entry', 'error', `Screenshot failed: ${screenshotError.message}`);
       }
@@ -1360,75 +1435,75 @@ async function createKieAccount(io, email, password) {
     
     // Click Next button
     addDebugStep('Email Entry', 'info', 'Clicking Next button...');
-    await page.click('input[type="submit"], //button[contains(text(), "Next")]');
+    await targetPage.click('input[type="submit"], //button[contains(text(), "Next")]');
     addDebugStep('Email Entry', 'success', 'Clicked Next button');
-    await takeScreenshot('Email-Next-Clicked', page);
+    await takeScreenshot('Email-Next-Clicked', targetPage);
     
     // Step 5: Enter password
     addDebugStep('Password Entry', 'info', 'Entering password...');
-    await page.waitForSelector('input[name="passwd"], input[id="passwordEntry"]', { timeout: 10000 });
-    await page.type('input[name="passwd"], input[id="passwordEntry"]', generatedPassword, { delay: 100 });
+    await targetPage.waitForSelector('input[name="passwd"], input[id="passwordEntry"]', { timeout: 10000 });
+    await targetPage.type('input[name="passwd"], input[id="passwordEntry"]', generatedPassword, { delay: 100 });
     addDebugStep('Password Entry', 'success', 'Password entered successfully');
-    await takeScreenshot('Password-Entered', page);
+    await takeScreenshot('Password-Entered', targetPage);
     
     // Click Next button
     addDebugStep('Password Entry', 'info', 'Clicking Next button...');
-    await page.click('input[type="submit"], //button[contains(text(), "Next")]');
+    await targetPage.click('input[type="submit"], //button[contains(text(), "Next")]');
     addDebugStep('Password Entry', 'success', 'Clicked Next button');
-    await takeScreenshot('Password-Next-Clicked', page);
+    await takeScreenshot('Password-Next-Clicked', targetPage);
     
     // Step 6: Handle "Save password?" popup - click "Never"
     try {
       addDebugStep('Password Save', 'info', 'Checking for password save popup...');
-      await page.waitForSelector('//button[contains(text(), "Never")] | //button[contains(text(), "Don\'t save")]', { timeout: 5000 });
-      await page.click('//button[contains(text(), "Never")] | //button[contains(text(), "Don\'t save")]');
+      await targetPage.waitForSelector('//button[contains(text(), "Never")] | //button[contains(text(), "Don\'t save")]', { timeout: 5000 });
+      await targetPage.click('//button[contains(text(), "Never")] | //button[contains(text(), "Don\'t save")]');
       addDebugStep('Password Save', 'success', 'Clicked Never on password save popup');
-      await takeScreenshot('Password-Save-Never', page);
+      await takeScreenshot('Password-Save-Never', targetPage);
     } catch (error) {
       addDebugStep('Password Save', 'info', 'No password save popup appeared');
     }
     
     // Step 7: Handle "Let's protect your account" - click "Skip for now"
     addDebugStep('Account Protection', 'info', 'Looking for account protection popup...');
-    await page.waitForSelector('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]', { timeout: 10000 });
-    await page.click('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]');
+    await targetPage.waitForSelector('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]', { timeout: 10000 });
+    await targetPage.click('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]');
     addDebugStep('Account Protection', 'success', 'Clicked Skip for now on account protection');
-    await takeScreenshot('Account-Protection-Skipped', page);
+    await takeScreenshot('Account-Protection-Skipped', targetPage);
     
     // Step 8: Handle "Sign in faster" popup - click "Skip for now"
     addDebugStep('Sign-in Faster', 'info', 'Looking for sign-in faster popup...');
-    await page.waitForSelector('//button[contains(text(), "Skip for now")]', { timeout: 10000 });
-    await page.click('//button[contains(text(), "Skip for now")]');
+    await targetPage.waitForSelector('//button[contains(text(), "Skip for now")]', { timeout: 10000 });
+    await targetPage.click('//button[contains(text(), "Skip for now")]');
     addDebugStep('Sign-in Faster', 'success', 'Clicked Skip for now on sign-in faster');
-    await takeScreenshot('Signin-Faster-Skipped', page);
+    await takeScreenshot('Signin-Faster-Skipped', targetPage);
     
     // Step 9: Handle "Stay signed in?" - click "Yes"
     addDebugStep('Stay Signed In', 'info', 'Looking for stay signed in popup...');
-    await page.waitForSelector('//button[contains(text(), "Yes")]', { timeout: 10000 });
-    await page.click('//button[contains(text(), "Yes")]');
+    await targetPage.waitForSelector('//button[contains(text(), "Yes")]', { timeout: 10000 });
+    await targetPage.click('//button[contains(text(), "Yes")]');
     addDebugStep('Stay Signed In', 'success', 'Clicked Yes on stay signed in');
-    await takeScreenshot('Stay-Signed-In-Yes', page);
+    await takeScreenshot('Stay-Signed-In-Yes', targetPage);
     
     // Step 10: Handle "Let this app access your info?" - scroll and click "Accept"
     addDebugStep('App Access', 'info', 'Looking for app access consent popup...');
-    await page.waitForSelector('//button[contains(text(), "Accept")]', { timeout: 10000 });
+    await targetPage.waitForSelector('//button[contains(text(), "Accept")]', { timeout: 10000 });
     
     // Scroll down to make sure Accept button is visible
-    await page.evaluate(() => {
+    await targetPage.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight);
     });
     await sleep(1000);
     
-    await page.click('//button[contains(text(), "Accept")]');
+    await targetPage.click('//button[contains(text(), "Accept")]');
     addDebugStep('App Access', 'success', 'Clicked Accept on app access consent');
-    await takeScreenshot('App-Access-Accepted', page);
+    await takeScreenshot('App-Access-Accepted', targetPage);
     
     // Step 11: Handle "I am human" checkbox
     addDebugStep('Human Verification', 'info', 'Looking for I am human checkbox...');
-    await page.waitForSelector('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]', { timeout: 10000 });
-    await page.click('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]');
+    await targetPage.waitForSelector('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]', { timeout: 10000 });
+    await targetPage.click('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]');
     addDebugStep('Human Verification', 'success', 'Clicked I am human checkbox');
-    await takeScreenshot('Human-Verification-Checked', page);
+    await takeScreenshot('Human-Verification-Checked', targetPage);
     
     // Step 12: Handle CAPTCHA challenges
     let captchaAttempts = 0;
@@ -1439,17 +1514,17 @@ async function createKieAccount(io, email, password) {
         addDebugStep('CAPTCHA', 'info', `CAPTCHA attempt ${captchaAttempts + 1}/${maxCaptchaAttempts}`);
         
         // Check if CAPTCHA challenge is present
-        const captchaPresent = await page.$('text="Tap on the item that you can turn on and off"') !== null;
+        const captchaPresent = await targetPage.$('text="Tap on the item that you can turn on and off"') !== null;
         
         if (captchaPresent) {
           addDebugStep('CAPTCHA', 'info', 'CAPTCHA challenge detected, solving with AI...');
           
-          const solved = await solveCaptchaWithAI(page);
+          const solved = await solveCaptchaWithAI(targetPage);
           if (solved) {
             // Click Next button after solving CAPTCHA
-            await page.click('//button[contains(text(), "Next")] | //button[contains(text(), "Continue")]');
+            await targetPage.click('//button[contains(text(), "Next")] | //button[contains(text(), "Continue")]');
             addDebugStep('CAPTCHA', 'success', 'CAPTCHA solved and Next clicked');
-            await takeScreenshot('CAPTCHA-Solved', page);
+            await takeScreenshot('CAPTCHA-Solved', targetPage);
             break;
           } else {
             captchaAttempts++;
@@ -1478,10 +1553,10 @@ async function createKieAccount(io, email, password) {
     // Step 13: Final "I am human" checkbox
     try {
       addDebugStep('Final Verification', 'info', 'Looking for final I am human checkbox...');
-      await page.waitForSelector('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]', { timeout: 5000 });
-      await page.click('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]');
+      await targetPage.waitForSelector('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]', { timeout: 5000 });
+      await targetPage.click('//input[@type="checkbox" and contains(text(), "I am human")] | //label[contains(text(), "I am human")]');
       addDebugStep('Final Verification', 'success', 'Clicked final I am human checkbox');
-      await takeScreenshot('Final-Human-Verification', page);
+      await takeScreenshot('Final-Human-Verification', targetPage);
     } catch (error) {
       addDebugStep('Final Verification', 'info', 'No final human verification needed');
     }
@@ -1489,14 +1564,14 @@ async function createKieAccount(io, email, password) {
     // Step 14: Wait for dashboard
     addDebugStep('Dashboard', 'info', 'Waiting for dashboard...');
     
-    await page.waitForFunction(() => {
+    await targetPage.waitForFunction(() => {
       const url = window.location.href;
       return url.includes('kie.ai') && (url.includes('dashboard') || url.includes('home') || url.includes('console') || 
              document.querySelector('[class*="dashboard"], [class*="welcome"], [class*="console"]') !== null);
     }, { timeout: 30000 });
     
     addDebugStep('Dashboard', 'success', 'Successfully reached Kie.ai dashboard');
-    await takeScreenshot('Dashboard-Reached', page);
+    await takeScreenshot('Dashboard-Reached', targetPage);
     
     addDebugStep('Account Creation', 'success', '✅ Kie.ai account creation process completed successfully!');
     addDebugStep('Account Creation', 'info', `📧 Email: ${email}`);
