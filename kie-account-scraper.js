@@ -1435,8 +1435,33 @@ async function createKieAccount(io, email, password) {
     
     // Click Next button
     addDebugStep('Email Entry', 'info', 'Clicking Next button...');
-    await targetPage.click('input[type="submit"], //button[contains(text(), "Next")]');
-    addDebugStep('Email Entry', 'success', 'Clicked Next button');
+    
+    // Try multiple selectors for the Next button
+    const nextButtonSelectors = [
+      'input[type="submit"][value="Next"]',
+      'input[id="idSIButton9"]',
+      'input[type="submit"]',
+      '//button[contains(text(), "Next")]',
+      '//input[@value="Next"]'
+    ];
+    
+    let nextButtonClicked = false;
+    for (const selector of nextButtonSelectors) {
+      try {
+        addDebugStep('Email Entry', 'info', `Trying Next button selector: ${selector}`);
+        await targetPage.waitForSelector(selector, { timeout: 2000 });
+        await targetPage.click(selector);
+        addDebugStep('Email Entry', 'success', `Clicked Next button using selector: ${selector}`);
+        nextButtonClicked = true;
+        break;
+      } catch (e) {
+        addDebugStep('Email Entry', 'info', `Next button selector ${selector} failed: ${e.message}`);
+      }
+    }
+    
+    if (!nextButtonClicked) {
+      throw new Error('Could not find or click Next button with any selector');
+    }
     await takeScreenshot('Email-Next-Clicked', targetPage);
     
     // Wait for page transition and take immediate screenshot
@@ -1465,8 +1490,33 @@ async function createKieAccount(io, email, password) {
     
     // Click Next button
     addDebugStep('Password Entry', 'info', 'Clicking Next button...');
-    await targetPage.click('input[type="submit"], //button[contains(text(), "Next")]');
-    addDebugStep('Password Entry', 'success', 'Clicked Next button');
+    
+    // Try multiple selectors for the Next button
+    const passwordNextButtonSelectors = [
+      'input[type="submit"][value="Next"]',
+      'input[id="idSIButton9"]',
+      'input[type="submit"]',
+      '//button[contains(text(), "Next")]',
+      '//input[@value="Next"]'
+    ];
+    
+    let passwordNextButtonClicked = false;
+    for (const selector of passwordNextButtonSelectors) {
+      try {
+        addDebugStep('Password Entry', 'info', `Trying Next button selector: ${selector}`);
+        await targetPage.waitForSelector(selector, { timeout: 2000 });
+        await targetPage.click(selector);
+        addDebugStep('Password Entry', 'success', `Clicked Next button using selector: ${selector}`);
+        passwordNextButtonClicked = true;
+        break;
+      } catch (e) {
+        addDebugStep('Password Entry', 'info', `Next button selector ${selector} failed: ${e.message}`);
+      }
+    }
+    
+    if (!passwordNextButtonClicked) {
+      throw new Error('Could not find or click Next button with any selector');
+    }
     await takeScreenshot('Password-Next-Clicked', targetPage);
     
     // Step 6: Handle "Save password?" popup - click "Never"
