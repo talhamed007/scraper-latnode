@@ -1625,11 +1625,14 @@ async function createKieAccount(io, email, password) {
       targetPage = targetPageAfterRedirect;
       addDebugStep('Page Transition', 'info', `Using page: ${await targetPage.evaluate(() => window.location.href)}`);
       
-      // Wait for the page to be fully loaded
+      // Wait for the page to be fully loaded (Puppeteer equivalent)
       addDebugStep('Page Transition', 'info', 'Waiting for page to be fully loaded...');
-      await targetPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-        addDebugStep('Page Transition', 'warning', 'Network idle timeout, continuing anyway');
-      });
+      try {
+        await targetPage.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 });
+        addDebugStep('Page Transition', 'success', 'Page loaded completely');
+      } catch (e) {
+        addDebugStep('Page Transition', 'warning', 'Page load timeout, continuing anyway');
+      }
       
       // Wait a bit more for dynamic content
       await randomHumanDelay(targetPage, 2000, 3000);
@@ -1675,19 +1678,54 @@ async function createKieAccount(io, email, password) {
     // First try direct JavaScript approach
     try {
       addDebugStep('Account Protection', 'info', 'Trying direct JavaScript click on skip link...');
-      const skipClicked = await targetPage.evaluate(() => {
+      
+      // First check if the element exists
+      const elementExists = await targetPage.evaluate(() => {
         const skipLink = document.getElementById('iShowSkip');
-        if (skipLink) {
-          skipLink.click();
-          return true;
-        }
-        return false;
+        return {
+          exists: !!skipLink,
+          visible: skipLink ? skipLink.offsetParent !== null : false,
+          text: skipLink ? skipLink.textContent : '',
+          href: skipLink ? skipLink.href : ''
+        };
       });
       
-      if (skipClicked) {
-        addDebugStep('Account Protection', 'success', 'Clicked skip link using JavaScript');
-        await takeScreenshot('Account-Protection-Skipped', targetPage);
-        skipButtonClicked = true;
+      addDebugStep('Account Protection', 'info', `Skip link check: ${JSON.stringify(elementExists)}`);
+      
+      if (elementExists.exists && elementExists.visible) {
+        // Try multiple click methods
+        const clickMethods = [
+          () => document.getElementById('iShowSkip').click(),
+          () => document.getElementById('iShowSkip').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+          () => {
+            const link = document.getElementById('iShowSkip');
+            const event = new MouseEvent('mousedown', { bubbles: true });
+            link.dispatchEvent(event);
+            const event2 = new MouseEvent('mouseup', { bubbles: true });
+            link.dispatchEvent(event2);
+            const event3 = new MouseEvent('click', { bubbles: true });
+            link.dispatchEvent(event3);
+          }
+        ];
+        
+        let clicked = false;
+        for (let i = 0; i < clickMethods.length; i++) {
+          try {
+            await targetPage.evaluate(clickMethods[i]);
+            addDebugStep('Account Protection', 'success', `Clicked skip link using method ${i + 1}`);
+            clicked = true;
+            break;
+          } catch (e) {
+            addDebugStep('Account Protection', 'info', `Click method ${i + 1} failed: ${e.message}`);
+          }
+        }
+        
+        if (clicked) {
+          await takeScreenshot('Account-Protection-Skipped', targetPage);
+          skipButtonClicked = true;
+        }
+      } else {
+        addDebugStep('Account Protection', 'warning', `Skip link not found or not visible: exists=${elementExists.exists}, visible=${elementExists.visible}`);
       }
     } catch (e) {
       addDebugStep('Account Protection', 'info', `JavaScript click failed: ${e.message}`);
