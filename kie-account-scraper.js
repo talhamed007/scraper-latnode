@@ -1439,6 +1439,23 @@ async function createKieAccount(io, email, password) {
     addDebugStep('Email Entry', 'success', 'Clicked Next button');
     await takeScreenshot('Email-Next-Clicked', targetPage);
     
+    // Wait for page transition and take immediate screenshot
+    addDebugStep('Page Transition', 'info', 'Waiting for page transition to password step...');
+    await randomHumanDelay(targetPage, 2000, 4000);
+    
+    // Take immediate screenshot to see what happened after Next click
+    addDebugStep('Page Transition', 'info', 'Taking screenshot to see current page state...');
+    await takeScreenshot('After-Email-Next-Click', targetPage);
+    
+    // Verify targetPage is still accessible
+    try {
+      await targetPage.evaluate(() => document.title);
+      addDebugStep('Page Transition', 'success', 'Target page is still accessible after Next click');
+    } catch (e) {
+      addDebugStep('Page Transition', 'error', 'Target page is no longer accessible - may have closed or redirected');
+      throw new Error('Target page became inaccessible after Next button click');
+    }
+    
     // Step 5: Enter password
     addDebugStep('Password Entry', 'info', 'Entering password...');
     await targetPage.waitForSelector('input[name="passwd"], input[id="passwordEntry"]', { timeout: 10000 });
