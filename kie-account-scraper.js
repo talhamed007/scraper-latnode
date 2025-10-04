@@ -98,6 +98,23 @@ async function handleStaySignedInStep(targetPage) {
       addDebugStep('Stay Signed In', 'success', 'Clicked Yes button using JavaScript');
       await takeScreenshot('Stay-Signed-In-Yes', targetPage);
       yesButtonClicked = true;
+      
+      // Wait for page navigation after clicking Yes
+      addDebugStep('Stay Signed In', 'info', 'Waiting for page navigation after Yes click...');
+      try {
+        await targetPage.waitForNavigation({ timeout: 10000 });
+        addDebugStep('Stay Signed In', 'success', 'Page navigation completed');
+        
+        // Take screenshot of the new page
+        await takeScreenshot('After-Yes-Navigation', targetPage);
+        
+        // Update targetPage to the current page after navigation
+        targetPage = targetPage;
+        addDebugStep('Stay Signed In', 'info', `New page URL: ${await targetPage.evaluate(() => window.location.href)}`);
+      } catch (navError) {
+        addDebugStep('Stay Signed In', 'warning', `Navigation timeout: ${navError.message}`);
+        // Continue anyway, the page might have already navigated
+      }
     }
   } catch (e) {
     addDebugStep('Stay Signed In', 'info', `JavaScript click failed: ${e.message}`);
@@ -113,6 +130,24 @@ async function handleStaySignedInStep(targetPage) {
         addDebugStep('Stay Signed In', 'success', `Clicked Yes button using selector: ${selector}`);
         await takeScreenshot('Stay-Signed-In-Yes', targetPage);
         yesButtonClicked = true;
+        
+        // Wait for page navigation after clicking Yes
+        addDebugStep('Stay Signed In', 'info', 'Waiting for page navigation after Yes click...');
+        try {
+          await targetPage.waitForNavigation({ timeout: 10000 });
+          addDebugStep('Stay Signed In', 'success', 'Page navigation completed');
+          
+          // Take screenshot of the new page
+          await takeScreenshot('After-Yes-Navigation', targetPage);
+          
+          // Update targetPage to the current page after navigation
+          targetPage = targetPage;
+          addDebugStep('Stay Signed In', 'info', `New page URL: ${await targetPage.evaluate(() => window.location.href)}`);
+        } catch (navError) {
+          addDebugStep('Stay Signed In', 'warning', `Navigation timeout: ${navError.message}`);
+          // Continue anyway, the page might have already navigated
+        }
+        
         break;
       } catch (e) {
         addDebugStep('Stay Signed In', 'info', `Yes selector ${selector} failed: ${e.message}`);
