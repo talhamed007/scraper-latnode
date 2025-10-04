@@ -489,6 +489,10 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
   let confirmationCode = null;
   let generatedPassword = password || `TempPass${Math.random().toString(36).substring(2, 8)}!123`;
   
+  // Initialize global variables
+  global.credits = null;
+  global.webhookUrl = null;
+  
   try {
     addDebugStep('Initialization', 'info', '🚀 Starting Latenode account creation process...');
     
@@ -2249,13 +2253,140 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Final Screenshot', 'info', 'Taking final screenshot to show current location...');
     await takeScreenshot('Final-Scenario-View', page);
     
+    // Step 13: Right-click on the black Recraft node
+    addDebugStep('Node Interaction', 'info', 'Right-clicking on the black Recraft node...');
+    
+    try {
+      // Wait for the Recraft node to be visible
+      await page.waitForSelector('svg.svgBackgroundIcon_szvXq[fill="#000000"]', { timeout: 10000 });
+      
+      // Right-click on the Recraft node
+      await page.click('svg.svgBackgroundIcon_szvXq[fill="#000000"]', { button: 'right' });
+      addDebugStep('Node Interaction', 'success', 'Right-clicked on Recraft node successfully');
+      await sleep(2000); // Wait for context menu to appear
+    } catch (error) {
+      addDebugStep('Node Interaction', 'warning', 'Could not right-click Recraft node', null, error.message);
+    }
+    
+    // Step 14: Click "Exécuter le nœud une fois" (Run node once)
+    addDebugStep('Node Execution', 'info', 'Looking for "Exécuter le nœud une fois" in context menu...');
+    
+    try {
+      // Wait for the context menu item
+      await page.waitForSelector('div.menuItemContainer_fSy4s', { timeout: 10000 });
+      
+      // Click on "Exécuter le nœud une fois"
+      const runNodeClicked = await page.evaluate(() => {
+        const menuItems = document.querySelectorAll('div.menuItemContainer_fSy4s');
+        for (const item of menuItems) {
+          const text = item.innerText || item.textContent || '';
+          if (text.includes('Exécuter le nœud une fois') || text.includes('Run node once')) {
+            item.click();
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (runNodeClicked) {
+        addDebugStep('Node Execution', 'success', 'Clicked "Exécuter le nœud une fois" successfully');
+        await sleep(3000); // Wait for node to start running
+      } else {
+        addDebugStep('Node Execution', 'warning', 'Could not find or click "Exécuter le nœud une fois"');
+      }
+    } catch (error) {
+      addDebugStep('Node Execution', 'warning', 'Error clicking run node once', null, error.message);
+    }
+    
+    // Step 15: Wait for node to finish running and show counter
+    addDebugStep('Node Execution', 'info', 'Waiting for node to finish running and show counter...');
+    
+    try {
+      // Wait for the counter to appear
+      await page.waitForSelector('div.counter_mFATl', { timeout: 30000 }); // Wait up to 30 seconds
+      
+      // Get the counter value
+      const counterValue = await page.evaluate(() => {
+        const counter = document.querySelector('div.counter_mFATl');
+        return counter ? counter.textContent : null;
+      });
+      
+      addDebugStep('Node Execution', 'success', `Node finished running! Counter shows: ${counterValue}`);
+      await sleep(2000); // Wait a bit more
+    } catch (error) {
+      addDebugStep('Node Execution', 'warning', 'Node execution timeout or counter not found', null, error.message);
+    }
+    
+    // Step 16: Click on the pink Trigger on Webhook node
+    addDebugStep('Webhook Node', 'info', 'Clicking on the pink Trigger on Webhook node...');
+    
+    try {
+      // Wait for the webhook node to be visible
+      await page.waitForSelector('svg.svgBackgroundIcon_szvXq[fill="#C13584"]', { timeout: 10000 });
+      
+      // Click on the webhook node
+      await page.click('svg.svgBackgroundIcon_szvXq[fill="#C13584"]');
+      addDebugStep('Webhook Node', 'success', 'Clicked on Trigger on Webhook node successfully');
+      await sleep(2000); // Wait for properties panel to open
+    } catch (error) {
+      addDebugStep('Webhook Node', 'warning', 'Could not click Trigger on Webhook node', null, error.message);
+    }
+    
+    // Step 17: Click copy icon to get webhook URL
+    addDebugStep('Webhook URL', 'info', 'Looking for copy icon to get webhook URL...');
+    
+    let webhookUrl = null;
+    try {
+      // Wait for the copy icon to be visible
+      await page.waitForSelector('span.anticon.anticon-copy', { timeout: 10000 });
+      
+      // Click the copy icon
+      await page.click('span.anticon.anticon-copy');
+      addDebugStep('Webhook URL', 'success', 'Clicked copy icon successfully');
+      await sleep(1000); // Wait for clipboard operation
+      
+      // Get the copied URL from clipboard
+      webhookUrl = await page.evaluate(() => {
+        return navigator.clipboard.readText();
+      });
+      
+      if (webhookUrl && webhookUrl.startsWith('https://webhook.latenode.com')) {
+        global.webhookUrl = webhookUrl;
+        addDebugStep('Webhook URL', 'success', `Webhook URL copied: ${webhookUrl}`);
+      } else {
+        addDebugStep('Webhook URL', 'warning', 'Could not get valid webhook URL from clipboard');
+      }
+    } catch (error) {
+      addDebugStep('Webhook URL', 'warning', 'Error copying webhook URL', null, error.message);
+    }
+    
+    // Step 18: Click deploy button
+    addDebugStep('Deployment', 'info', 'Clicking deploy button...');
+    
+    try {
+      // Wait for the deploy button to be visible
+      await page.waitForSelector('button[data-button-main="deploy"]', { timeout: 10000 });
+      
+      // Click the deploy button
+      await page.click('button[data-button-main="deploy"]');
+      addDebugStep('Deployment', 'success', 'Clicked deploy button successfully');
+      await sleep(3000); // Wait for deployment to initiate
+    } catch (error) {
+      addDebugStep('Deployment', 'warning', 'Could not click deploy button', null, error.message);
+    }
+    
+    // Final screenshot after all interactions
+    addDebugStep('Final Screenshot', 'info', 'Taking final screenshot after all interactions...');
+    await takeScreenshot('Final-Complete-Workflow', page);
+    
     return {
       success: true,
       tempEmail: tempEmail,
       password: generatedPassword,
       confirmationCode: confirmationCode,
       credits: global.credits || 'Not found',
-      message: 'Latenode account creation process completed successfully with JSON scenario uploaded and accessed!'
+      webhookUrl: global.webhookUrl || 'Not found',
+      message: 'Latenode account creation process completed successfully with JSON scenario uploaded, accessed, node executed, webhook URL extracted, and scenario deployed!'
     };
     
   } catch (error) {

@@ -3834,6 +3834,7 @@ app.post('/api/latenode-account', async (req, res) => {
       password: result.password,
       confirmationCode: result.confirmationCode,
       credits: result.credits,
+      webhookUrl: result.webhookUrl,
       message: result.message
     });
     
