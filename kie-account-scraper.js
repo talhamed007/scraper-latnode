@@ -1642,9 +1642,11 @@ async function createKieAccount(io, email, password) {
     // Step 7: Handle "Let's protect your account" - click "Skip for now"
     addDebugStep('Account Protection', 'info', 'Looking for account protection popup...');
     
-    // Try multiple selectors for Skip buttons
+    // Try multiple selectors for Skip buttons (prioritize anchor tags)
     const skipSelectors = [
       '//a[contains(text(), "Skip for now")]',
+      '//a[@id="iShowSkip"]',
+      '//a[contains(@class, "secondary-text")]',
       '//button[contains(text(), "Skip for now")]',
       '//a[contains(text(), "Skip")]',
       '//button[contains(text(), "Skip")]',
@@ -1700,10 +1702,38 @@ async function createKieAccount(io, email, password) {
     
     // Step 9: Handle "Stay signed in?" - click "Yes"
     addDebugStep('Stay Signed In', 'info', 'Looking for stay signed in popup...');
-    await targetPage.waitForSelector('//button[contains(text(), "Yes")]', { timeout: 10000 });
-    await targetPage.click('//button[contains(text(), "Yes")]');
-    addDebugStep('Stay Signed In', 'success', 'Clicked Yes on stay signed in');
-    await takeScreenshot('Stay-Signed-In-Yes', targetPage);
+    
+    // Try multiple selectors for Yes button
+    const yesSelectors = [
+      '//button[contains(text(), "Yes")]',
+      '//button[contains(text(), "Yes, keep me signed in")]',
+      '//button[contains(text(), "Keep me signed in")]',
+      '//button[contains(text(), "Stay signed in")]',
+      '//input[@type="submit" and @value="Yes"]',
+      '//button[@type="submit"]',
+      '//button[contains(@class, "primary")]',
+      '//button[contains(@class, "submit")]'
+    ];
+    
+    let yesButtonClicked = false;
+    for (const selector of yesSelectors) {
+      try {
+        addDebugStep('Stay Signed In', 'info', `Trying Yes selector: ${selector}`);
+        await targetPage.waitForSelector(selector, { timeout: 3000 });
+        await targetPage.click(selector);
+        addDebugStep('Stay Signed In', 'success', `Clicked Yes button using selector: ${selector}`);
+        await takeScreenshot('Stay-Signed-In-Yes', targetPage);
+        yesButtonClicked = true;
+        break;
+      } catch (e) {
+        addDebugStep('Stay Signed In', 'info', `Yes selector ${selector} failed: ${e.message}`);
+      }
+    }
+    
+    if (!yesButtonClicked) {
+      addDebugStep('Stay Signed In', 'warning', 'No Yes button found - continuing without clicking');
+      await takeScreenshot('No-Yes-Button-Found', targetPage);
+    }
     
     // Step 10: Handle "Let this app access your info?" - scroll and click "Accept"
     addDebugStep('App Access', 'info', 'Looking for app access consent popup...');
