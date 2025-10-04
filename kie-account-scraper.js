@@ -1492,8 +1492,29 @@ async function createKieAccount(io, email, password) {
     addDebugStep('Password Entry', 'success', 'Password entered successfully');
     await takeScreenshot('Password-Entered', targetPage);
     
+    // Wait a bit for the button to become enabled after password entry
+    addDebugStep('Password Entry', 'info', 'Waiting for Next button to become enabled...');
+    await randomHumanDelay(targetPage, 1000, 2000);
+    
     // Click Next button
     addDebugStep('Password Entry', 'info', 'Clicking Next button...');
+    
+    // First, let's debug what buttons are available on the page
+    const allButtons = await targetPage.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('input[type="submit"], button'));
+      return buttons.map(btn => ({
+        tagName: btn.tagName,
+        type: btn.type,
+        id: btn.id,
+        value: btn.value,
+        textContent: btn.textContent,
+        className: btn.className,
+        visible: btn.offsetParent !== null,
+        disabled: btn.disabled
+      }));
+    });
+    
+    addDebugStep('Password Entry', 'info', `Found ${allButtons.length} buttons on page: ${JSON.stringify(allButtons)}`);
     
     // Try multiple selectors for the Next button
     const passwordNextButtonSelectors = [
@@ -1508,11 +1529,22 @@ async function createKieAccount(io, email, password) {
     for (const selector of passwordNextButtonSelectors) {
       try {
         addDebugStep('Password Entry', 'info', `Trying Next button selector: ${selector}`);
-        await targetPage.waitForSelector(selector, { timeout: 2000 });
-        await targetPage.click(selector);
-        addDebugStep('Password Entry', 'success', `Clicked Next button using selector: ${selector}`);
-        passwordNextButtonClicked = true;
-        break;
+        
+        // Wait for selector and check if it's visible and enabled
+        const button = await targetPage.waitForSelector(selector, { timeout: 2000 });
+        const isVisible = await button.isIntersectingViewport();
+        const isEnabled = await button.evaluate(el => !el.disabled);
+        
+        addDebugStep('Password Entry', 'info', `Button found - visible: ${isVisible}, enabled: ${isEnabled}`);
+        
+        if (isVisible && isEnabled) {
+          await button.click();
+          addDebugStep('Password Entry', 'success', `Clicked Next button using selector: ${selector}`);
+          passwordNextButtonClicked = true;
+          break;
+        } else {
+          addDebugStep('Password Entry', 'info', `Button found but not visible/enabled: ${selector}`);
+        }
       } catch (e) {
         addDebugStep('Password Entry', 'info', `Next button selector ${selector} failed: ${e.message}`);
       }
