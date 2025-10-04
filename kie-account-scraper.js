@@ -1778,9 +1778,12 @@ async function createKieAccount(io, email, password) {
     // Step 9: Handle "Stay signed in?" - click "Yes"
     addDebugStep('Stay Signed In', 'info', 'Looking for stay signed in popup...');
     
-    // Try multiple selectors for Yes button
+    // Try multiple selectors for Yes/Next button (Microsoft uses "Next" for Yes)
     const yesSelectors = [
       '//button[contains(text(), "Yes")]',
+      '//button[contains(text(), "Next")]',
+      '//button[@data-testid="primaryButton"]',
+      '//button[contains(@class, "fui-Button") and contains(@class, "___jsyn8q0")]',
       '//button[contains(text(), "Yes, keep me signed in")]',
       '//button[contains(text(), "Keep me signed in")]',
       '//button[contains(text(), "Stay signed in")]',
@@ -1791,17 +1794,75 @@ async function createKieAccount(io, email, password) {
     ];
     
     let yesButtonClicked = false;
-    for (const selector of yesSelectors) {
-      try {
-        addDebugStep('Stay Signed In', 'info', `Trying Yes selector: ${selector}`);
-        await targetPage.waitForSelector(selector, { timeout: 3000 });
-        await targetPage.click(selector);
-        addDebugStep('Stay Signed In', 'success', `Clicked Yes button using selector: ${selector}`);
+    
+    // First try direct JavaScript approach for Yes/Next button
+    try {
+      addDebugStep('Stay Signed In', 'info', 'Trying direct JavaScript click on Yes/Next button...');
+      
+      // Check if the button exists
+      const buttonExists = await targetPage.evaluate(() => {
+        const nextButton = document.querySelector('button[data-testid="primaryButton"]');
+        const yesButton = document.querySelector('button[contains(text(), "Yes")]');
+        const anyNextButton = document.querySelector('button[contains(text(), "Next")]');
+        
+        return {
+          primaryButton: !!nextButton,
+          yesButton: !!yesButton,
+          nextButton: !!anyNextButton,
+          allButtons: Array.from(document.querySelectorAll('button')).map(b => ({
+            text: b.textContent?.trim() || '',
+            testId: b.getAttribute('data-testid'),
+            type: b.type,
+            className: b.className,
+            visible: b.offsetParent !== null
+          })).filter(b => b.text.length > 0).slice(0, 5)
+        };
+      });
+      
+      addDebugStep('Stay Signed In', 'info', `Button check: ${JSON.stringify(buttonExists)}`);
+      
+      // Try to click the primary button
+      const clicked = await targetPage.evaluate(() => {
+        const primaryButton = document.querySelector('button[data-testid="primaryButton"]');
+        if (primaryButton && primaryButton.offsetParent !== null) {
+          primaryButton.click();
+          return true;
+        }
+        
+        // Fallback: look for any button with "Next" text
+        const nextButtons = Array.from(document.querySelectorAll('button'));
+        const nextButton = nextButtons.find(b => b.textContent?.trim() === 'Next' && b.offsetParent !== null);
+        if (nextButton) {
+          nextButton.click();
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (clicked) {
+        addDebugStep('Stay Signed In', 'success', 'Clicked Yes/Next button using JavaScript');
         await takeScreenshot('Stay-Signed-In-Yes', targetPage);
         yesButtonClicked = true;
-        break;
-      } catch (e) {
-        addDebugStep('Stay Signed In', 'info', `Yes selector ${selector} failed: ${e.message}`);
+      }
+    } catch (e) {
+      addDebugStep('Stay Signed In', 'info', `JavaScript click failed: ${e.message}`);
+    }
+    
+    // If JavaScript approach failed, try selectors
+    if (!yesButtonClicked) {
+      for (const selector of yesSelectors) {
+        try {
+          addDebugStep('Stay Signed In', 'info', `Trying Yes selector: ${selector}`);
+          await targetPage.waitForSelector(selector, { timeout: 2000 });
+          await targetPage.click(selector);
+          addDebugStep('Stay Signed In', 'success', `Clicked Yes button using selector: ${selector}`);
+          await takeScreenshot('Stay-Signed-In-Yes', targetPage);
+          yesButtonClicked = true;
+          break;
+        } catch (e) {
+          addDebugStep('Stay Signed In', 'info', `Yes selector ${selector} failed: ${e.message}`);
+        }
       }
     }
     
