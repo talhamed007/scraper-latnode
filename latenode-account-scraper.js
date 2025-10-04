@@ -2189,26 +2189,16 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     
     try {
       // Wait for the import popup to appear
-      await page.waitForSelector('button:has-text("Ready"), button[title="Ready"], .ant-btn:has-text("Ready")', { timeout: 10000 });
+      await page.waitForSelector('button.ant-btn.ant-btn-primary', { timeout: 10000 });
       
       // Click the Ready button
       const readyButtonClicked = await page.evaluate(() => {
-        const readySelectors = [
-          'button:has-text("Ready")',
-          'button[title="Ready"]',
-          '.ant-btn:has-text("Ready")',
-          'button',
-          '[role="button"]'
-        ];
-        
-        for (const selector of readySelectors) {
-          const buttons = document.querySelectorAll(selector);
-          for (const button of buttons) {
-            const text = (button.innerText || button.textContent || '').trim();
-            if (text.toLowerCase().includes('ready')) {
-              button.click();
-              return true;
-            }
+        const buttons = document.querySelectorAll('button.ant-btn.ant-btn-primary');
+        for (const button of buttons) {
+          const text = (button.innerText || button.textContent || '').trim();
+          if (text.toLowerCase().includes('ready') || text.toLowerCase().includes('prêt')) {
+            button.click();
+            return true;
           }
         }
         return false;
@@ -2229,41 +2219,17 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     
     try {
       // Wait for the scenario list to be visible
-      await page.waitForSelector('*:has-text("Untitled")', { timeout: 10000 });
+      await page.waitForSelector('div.nameCellWrapper_JCLK1', { timeout: 10000 });
       
       // Click on the Untitled scenario
       const untitledClicked = await page.evaluate(() => {
-        const untitledSelectors = [
-          '*:has-text("Untitled")',
-          'tr:has-text("Untitled")',
-          'div:has-text("Untitled")',
-          'span:has-text("Untitled")',
-          'td:has-text("Untitled")'
-        ];
-        
-        for (const selector of untitledSelectors) {
-          const elements = document.querySelectorAll(selector);
-          for (const element of elements) {
-            const text = (element.innerText || element.textContent || '').trim();
-            if (text.includes('Untitled')) {
-              // Try to find a clickable parent or the element itself
-              let clickableElement = element;
-              
-              // Look for clickable parent (tr, button, a, etc.)
-              let parent = element.parentElement;
-              while (parent && parent !== document.body) {
-                if (parent.tagName === 'TR' || parent.tagName === 'BUTTON' || 
-                    parent.tagName === 'A' || parent.onclick || 
-                    parent.getAttribute('role') === 'button') {
-                  clickableElement = parent;
-                  break;
-                }
-                parent = parent.parentElement;
-              }
-              
-              clickableElement.click();
-              return true;
-            }
+        // Look for the specific wrapper div containing "Untitled"
+        const wrapperDivs = document.querySelectorAll('div.nameCellWrapper_JCLK1');
+        for (const wrapper of wrapperDivs) {
+          const text = wrapper.innerText || wrapper.textContent || '';
+          if (text.includes('Untitled')) {
+            wrapper.click();
+            return true;
           }
         }
         return false;
