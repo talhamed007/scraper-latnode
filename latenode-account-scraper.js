@@ -2332,32 +2332,39 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       addDebugStep('Webhook Node', 'warning', 'Could not click Trigger on Webhook node', null, error.message);
     }
     
-    // Step 17: Click copy icon to get webhook URL
-    addDebugStep('Webhook URL', 'info', 'Looking for copy icon to get webhook URL...');
+    // Step 17: Extract webhook URL from input field
+    addDebugStep('Webhook URL', 'info', 'Looking for webhook URL in input field...');
     
     let webhookUrl = null;
     try {
-      // Wait for the copy icon to be visible
-      await page.waitForSelector('span.anticon.anticon-copy', { timeout: 10000 });
+      // Wait for the webhook URL input field to be visible
+      await page.waitForSelector('span.ant-input-affix-wrapper input[name="path"]', { timeout: 10000 });
       
-      // Click the copy icon
-      await page.click('span.anticon.anticon-copy');
-      addDebugStep('Webhook URL', 'success', 'Clicked copy icon successfully');
-      await sleep(1000); // Wait for clipboard operation
-      
-      // Get the copied URL from clipboard
+      // Extract the webhook URL from the input field and prefix
       webhookUrl = await page.evaluate(() => {
-        return navigator.clipboard.readText();
+        const inputField = document.querySelector('input[name="path"]');
+        const prefixDiv = document.querySelector('span.ant-input-prefix div');
+        
+        if (inputField && prefixDiv) {
+          const prefix = prefixDiv.textContent || prefixDiv.innerText || '';
+          const path = inputField.value || '';
+          const fullUrl = prefix + path;
+          
+          if (fullUrl.startsWith('https://webhook.latenode.com')) {
+            return fullUrl;
+          }
+        }
+        return null;
       });
       
       if (webhookUrl && webhookUrl.startsWith('https://webhook.latenode.com')) {
         global.webhookUrl = webhookUrl;
-        addDebugStep('Webhook URL', 'success', `Webhook URL copied: ${webhookUrl}`);
+        addDebugStep('Webhook URL', 'success', `Webhook URL extracted: ${webhookUrl}`);
       } else {
-        addDebugStep('Webhook URL', 'warning', 'Could not get valid webhook URL from clipboard');
+        addDebugStep('Webhook URL', 'warning', 'Could not extract valid webhook URL from input field');
       }
     } catch (error) {
-      addDebugStep('Webhook URL', 'warning', 'Error copying webhook URL', null, error.message);
+      addDebugStep('Webhook URL', 'warning', 'Error extracting webhook URL', null, error.message);
     }
     
     // Step 18: Click deploy button
