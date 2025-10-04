@@ -1624,6 +1624,18 @@ async function createKieAccount(io, email, password) {
     if (targetPageAfterRedirect) {
       targetPage = targetPageAfterRedirect;
       addDebugStep('Page Transition', 'info', `Using page: ${await targetPage.evaluate(() => window.location.href)}`);
+      
+      // Wait for the page to be fully loaded
+      addDebugStep('Page Transition', 'info', 'Waiting for page to be fully loaded...');
+      await targetPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+        addDebugStep('Page Transition', 'warning', 'Network idle timeout, continuing anyway');
+      });
+      
+      // Wait a bit more for dynamic content
+      await randomHumanDelay(targetPage, 2000, 3000);
+      
+      // Take a screenshot to see the current state
+      await takeScreenshot('Page-After-Redirect', targetPage);
     } else {
       addDebugStep('Page Transition', 'warning', 'No page with skip buttons found, using current page');
     }
@@ -1659,17 +1671,42 @@ async function createKieAccount(io, email, password) {
     ];
     
     let skipButtonClicked = false;
-    for (const selector of skipSelectors) {
-      try {
-        addDebugStep('Account Protection', 'info', `Trying skip selector: ${selector}`);
-        await targetPage.waitForSelector(selector, { timeout: 3000 });
-        await targetPage.click(selector);
-        addDebugStep('Account Protection', 'success', `Clicked skip button using selector: ${selector}`);
+    
+    // First try direct JavaScript approach
+    try {
+      addDebugStep('Account Protection', 'info', 'Trying direct JavaScript click on skip link...');
+      const skipClicked = await targetPage.evaluate(() => {
+        const skipLink = document.getElementById('iShowSkip');
+        if (skipLink) {
+          skipLink.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (skipClicked) {
+        addDebugStep('Account Protection', 'success', 'Clicked skip link using JavaScript');
         await takeScreenshot('Account-Protection-Skipped', targetPage);
         skipButtonClicked = true;
-        break;
-      } catch (e) {
-        addDebugStep('Account Protection', 'info', `Skip selector ${selector} failed: ${e.message}`);
+      }
+    } catch (e) {
+      addDebugStep('Account Protection', 'info', `JavaScript click failed: ${e.message}`);
+    }
+    
+    // If JavaScript approach failed, try selectors
+    if (!skipButtonClicked) {
+      for (const selector of skipSelectors) {
+        try {
+          addDebugStep('Account Protection', 'info', `Trying skip selector: ${selector}`);
+          await targetPage.waitForSelector(selector, { timeout: 2000 });
+          await targetPage.click(selector);
+          addDebugStep('Account Protection', 'success', `Clicked skip button using selector: ${selector}`);
+          await takeScreenshot('Account-Protection-Skipped', targetPage);
+          skipButtonClicked = true;
+          break;
+        } catch (e) {
+          addDebugStep('Account Protection', 'info', `Skip selector ${selector} failed: ${e.message}`);
+        }
       }
     }
     
