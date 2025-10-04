@@ -29,6 +29,148 @@ function addDebugStep(step, type, message, screenshot = null, error = null) {
   return logEntry;
 }
 
+// Helper function to handle Stay Signed In step
+async function handleStaySignedInStep(targetPage) {
+  addDebugStep('Stay Signed In', 'info', 'Handling Stay Signed In step...');
+  
+  // Try multiple selectors for Yes/Next button (Microsoft uses "Next" for Yes)
+  const yesSelectors = [
+    '//button[contains(text(), "Yes")]',
+    '//button[contains(text(), "Next")]',
+    '//button[@data-testid="primaryButton"]',
+    '//button[contains(@class, "fui-Button") and contains(@class, "___jsyn8q0")]',
+    '//button[contains(text(), "Yes, keep me signed in")]',
+    '//button[contains(text(), "Keep me signed in")]',
+    '//button[contains(text(), "Stay signed in")]',
+    '//input[@type="submit" and @value="Yes"]',
+    '//button[@type="submit"]',
+    '//button[contains(@class, "primary")]',
+    '//button[contains(@class, "submit")]'
+  ];
+  
+  let yesButtonClicked = false;
+  
+  // First try direct JavaScript approach for Yes/Next button
+  try {
+    addDebugStep('Stay Signed In', 'info', 'Trying direct JavaScript click on Yes/Next button...');
+    
+    // Check if the button exists
+    const buttonExists = await targetPage.evaluate(() => {
+      const primaryButton = document.querySelector('button[data-testid="primaryButton"]');
+      const yesButton = document.querySelector('button[textContent="Yes"]');
+      const nextButton = document.querySelector('button[textContent="Next"]');
+      
+      return {
+        primaryButton: !!primaryButton,
+        yesButton: !!yesButton,
+        nextButton: !!nextButton,
+        allButtons: Array.from(document.querySelectorAll('button')).map(b => ({
+          text: b.textContent?.trim() || '',
+          testId: b.getAttribute('data-testid'),
+          type: b.type,
+          className: b.className,
+          visible: b.offsetParent !== null
+        })).filter(b => b.text.length > 0).slice(0, 5)
+      };
+    });
+    
+    addDebugStep('Stay Signed In', 'info', `Button check: ${JSON.stringify(buttonExists)}`);
+    
+    // Try to click the Yes button directly
+    const clicked = await targetPage.evaluate(() => {
+      const yesButton = document.querySelector('button[textContent="Yes"]');
+      if (yesButton && yesButton.offsetParent !== null) {
+        yesButton.click();
+        return true;
+      }
+      
+      // Fallback: look for primary button
+      const primaryButton = document.querySelector('button[data-testid="primaryButton"]');
+      if (primaryButton && primaryButton.offsetParent !== null) {
+        primaryButton.click();
+        return true;
+      }
+      
+      return false;
+    });
+    
+    if (clicked) {
+      addDebugStep('Stay Signed In', 'success', 'Clicked Yes button using JavaScript');
+      await takeScreenshot('Stay-Signed-In-Yes', targetPage);
+      yesButtonClicked = true;
+    }
+  } catch (e) {
+    addDebugStep('Stay Signed In', 'info', `JavaScript click failed: ${e.message}`);
+  }
+  
+  // If JavaScript approach failed, try selectors
+  if (!yesButtonClicked) {
+    for (const selector of yesSelectors) {
+      try {
+        addDebugStep('Stay Signed In', 'info', `Trying Yes selector: ${selector}`);
+        await targetPage.waitForSelector(selector, { timeout: 2000 });
+        await targetPage.click(selector);
+        addDebugStep('Stay Signed In', 'success', `Clicked Yes button using selector: ${selector}`);
+        await takeScreenshot('Stay-Signed-In-Yes', targetPage);
+        yesButtonClicked = true;
+        break;
+      } catch (e) {
+        addDebugStep('Stay Signed In', 'info', `Yes selector ${selector} failed: ${e.message}`);
+      }
+    }
+  }
+  
+  if (!yesButtonClicked) {
+    addDebugStep('Stay Signed In', 'warning', 'No Yes button found - continuing without clicking');
+    await takeScreenshot('No-Yes-Button-Found', targetPage);
+  }
+  
+  // Continue to App Access step
+  await handleAppAccessStep(targetPage);
+}
+
+// Helper function to handle App Access step
+async function handleAppAccessStep(targetPage) {
+  addDebugStep('App Access', 'info', 'Handling App Access step...');
+  
+  // Try multiple selectors for Accept button
+  const acceptSelectors = [
+    '//button[contains(text(), "Accept")]',
+    '//button[contains(text(), "Allow")]',
+    '//button[contains(text(), "Continue")]',
+    '//button[@data-testid="primaryButton"]',
+    '//button[@type="submit"]',
+    '//button[contains(@class, "primary")]'
+  ];
+  
+  let acceptButtonClicked = false;
+  
+  for (const selector of acceptSelectors) {
+    try {
+      addDebugStep('App Access', 'info', `Trying Accept selector: ${selector}`);
+      await targetPage.waitForSelector(selector, { timeout: 5000 });
+      await targetPage.click(selector);
+      addDebugStep('App Access', 'success', `Clicked Accept button using selector: ${selector}`);
+      await takeScreenshot('App-Access-Accepted', targetPage);
+      acceptButtonClicked = true;
+      break;
+    } catch (e) {
+      addDebugStep('App Access', 'info', `Accept selector ${selector} failed: ${e.message}`);
+    }
+  }
+  
+  if (!acceptButtonClicked) {
+    addDebugStep('App Access', 'warning', 'No Accept button found - continuing without clicking');
+    await takeScreenshot('No-Accept-Button-Found', targetPage);
+  }
+  
+  // Final step - navigate to Kie.ai dashboard
+  addDebugStep('Dashboard', 'info', 'Navigating to Kie.ai dashboard...');
+  await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+  await takeScreenshot('Dashboard-Reached', targetPage);
+  addDebugStep('Dashboard', 'success', 'Successfully reached Kie.ai dashboard');
+}
+
 // Helper function to take screenshots
 async function takeScreenshot(name, page) {
   try {
@@ -1639,6 +1781,38 @@ async function createKieAccount(io, email, password) {
       
       // Take a screenshot to see the current state
       await takeScreenshot('Page-After-Redirect', targetPage);
+      
+      // Smart page detection - determine which step to execute based on current page
+      const pageInfo = await targetPage.evaluate(() => {
+        return {
+          title: document.title,
+          url: window.location.href,
+          hasYesNoButtons: document.querySelector('button[textContent="Yes"]') || document.querySelector('button[textContent="No"]'),
+          hasSkipLink: document.getElementById('iShowSkip'),
+          hasAcceptButton: document.querySelector('button[textContent="Accept"]'),
+          allButtons: Array.from(document.querySelectorAll('button')).map(b => b.textContent?.trim()).filter(t => t && t.length > 0)
+        };
+      });
+      
+      addDebugStep('Page Detection', 'info', `Page analysis: ${JSON.stringify(pageInfo)}`);
+      
+      // Determine which step to execute based on page content
+      if (pageInfo.title.includes('Stay signed in') || pageInfo.allButtons.includes('Yes') || pageInfo.allButtons.includes('No')) {
+        addDebugStep('Page Detection', 'success', 'Detected Stay Signed In page - skipping to Stay Signed In step');
+        // Skip directly to Stay Signed In step
+        await handleStaySignedInStep(targetPage);
+        return; // Exit early, don't continue with Account Protection steps
+      } else if (pageInfo.title.includes('protect your account') || pageInfo.hasSkipLink) {
+        addDebugStep('Page Detection', 'success', 'Detected Account Protection page - continuing with normal flow');
+        // Continue with normal Account Protection flow
+      } else if (pageInfo.hasAcceptButton) {
+        addDebugStep('Page Detection', 'success', 'Detected App Access page - skipping to App Access step');
+        // Skip directly to App Access step
+        await handleAppAccessStep(targetPage);
+        return; // Exit early
+      } else {
+        addDebugStep('Page Detection', 'warning', 'Unknown page detected - continuing with normal flow');
+      }
     } else {
       addDebugStep('Page Transition', 'warning', 'No page with skip buttons found, using current page');
     }
