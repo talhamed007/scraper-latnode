@@ -1561,6 +1561,69 @@ async function createKieAccount(io, email, password) {
     }
     await takeScreenshot('Password-Next-Clicked', targetPage);
     
+    // Wait for page transition after password Next click
+    addDebugStep('Page Transition', 'info', 'Waiting for page transition after password Next click...');
+    await randomHumanDelay(targetPage, 2000, 4000);
+    
+    // Take screenshot to see current page state
+    addDebugStep('Page Transition', 'info', 'Taking screenshot to see current page after password Next click...');
+    await takeScreenshot('After-Password-Next-Click', targetPage);
+    
+    // Check current page info
+    const currentPageInfo = await targetPage.evaluate(() => {
+      return {
+        title: document.title,
+        url: window.location.href,
+        bodyText: document.body.textContent.substring(0, 500),
+        allButtons: Array.from(document.querySelectorAll('button, a')).map(b => ({
+          text: b.textContent?.trim() || '',
+          tagName: b.tagName,
+          className: b.className,
+          visible: b.offsetParent !== null
+        })).filter(b => b.text.length > 0).slice(0, 10)
+      };
+    });
+    
+    addDebugStep('Page Transition', 'info', `Current page after password Next: ${JSON.stringify(currentPageInfo)}`);
+    
+    // Check if we're on a different page/tab
+    const allPages = await page.browser().pages();
+    addDebugStep('Page Transition', 'info', `Found ${allPages.length} pages in browser`);
+    
+    let targetPageAfterRedirect = targetPage;
+    for (let i = 0; i < allPages.length; i++) {
+      const pageInfo = await allPages[i].evaluate(() => {
+        return {
+          title: document.title,
+          url: window.location.href,
+          bodyText: document.body.textContent.substring(0, 200)
+        };
+      });
+      
+      addDebugStep('Page Transition', 'info', `Page ${i}: ${JSON.stringify(pageInfo)}`);
+      
+      // Check if this page has account protection or skip buttons
+      const hasSkipButtons = await allPages[i].evaluate(() => {
+        const skipElements = document.querySelectorAll('*');
+        for (let el of skipElements) {
+          if (el.textContent && el.textContent.toLowerCase().includes('skip for now')) {
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (hasSkipButtons) {
+        addDebugStep('Page Transition', 'success', `Found page with Skip buttons at index ${i}`);
+        targetPageAfterRedirect = allPages[i];
+        break;
+      }
+    }
+    
+    // Update targetPage to the correct page
+    targetPage = targetPageAfterRedirect;
+    addDebugStep('Page Transition', 'info', `Using page: ${await targetPage.evaluate(() => window.location.href)}`);
+    
     // Step 6: Handle "Save password?" popup - click "Never"
     try {
       addDebugStep('Password Save', 'info', 'Checking for password save popup...');
@@ -1574,17 +1637,62 @@ async function createKieAccount(io, email, password) {
     
     // Step 7: Handle "Let's protect your account" - click "Skip for now"
     addDebugStep('Account Protection', 'info', 'Looking for account protection popup...');
-    await targetPage.waitForSelector('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]', { timeout: 10000 });
-    await targetPage.click('//a[contains(text(), "Skip for now")] | //button[contains(text(), "Skip for now")]');
-    addDebugStep('Account Protection', 'success', 'Clicked Skip for now on account protection');
-    await takeScreenshot('Account-Protection-Skipped', targetPage);
+    
+    // Try multiple selectors for Skip buttons
+    const skipSelectors = [
+      '//a[contains(text(), "Skip for now")]',
+      '//button[contains(text(), "Skip for now")]',
+      '//a[contains(text(), "Skip")]',
+      '//button[contains(text(), "Skip")]',
+      '//a[contains(text(), "Not now")]',
+      '//button[contains(text(), "Not now")]',
+      '//a[contains(text(), "Later")]',
+      '//button[contains(text(), "Later")]',
+      '//a[contains(text(), "Continue")]',
+      '//button[contains(text(), "Continue")]'
+    ];
+    
+    let skipButtonClicked = false;
+    for (const selector of skipSelectors) {
+      try {
+        addDebugStep('Account Protection', 'info', `Trying skip selector: ${selector}`);
+        await targetPage.waitForSelector(selector, { timeout: 3000 });
+        await targetPage.click(selector);
+        addDebugStep('Account Protection', 'success', `Clicked skip button using selector: ${selector}`);
+        await takeScreenshot('Account-Protection-Skipped', targetPage);
+        skipButtonClicked = true;
+        break;
+      } catch (e) {
+        addDebugStep('Account Protection', 'info', `Skip selector ${selector} failed: ${e.message}`);
+      }
+    }
+    
+    if (!skipButtonClicked) {
+      addDebugStep('Account Protection', 'warning', 'No skip button found - continuing without skipping');
+      await takeScreenshot('No-Skip-Button-Found', targetPage);
+    }
     
     // Step 8: Handle "Sign in faster" popup - click "Skip for now"
     addDebugStep('Sign-in Faster', 'info', 'Looking for sign-in faster popup...');
-    await targetPage.waitForSelector('//button[contains(text(), "Skip for now")]', { timeout: 10000 });
-    await targetPage.click('//button[contains(text(), "Skip for now")]');
-    addDebugStep('Sign-in Faster', 'success', 'Clicked Skip for now on sign-in faster');
-    await takeScreenshot('Signin-Faster-Skipped', targetPage);
+    
+    let signinFasterSkipped = false;
+    for (const selector of skipSelectors) {
+      try {
+        addDebugStep('Sign-in Faster', 'info', `Trying signin faster selector: ${selector}`);
+        await targetPage.waitForSelector(selector, { timeout: 3000 });
+        await targetPage.click(selector);
+        addDebugStep('Sign-in Faster', 'success', `Clicked signin faster button using selector: ${selector}`);
+        await takeScreenshot('Signin-Faster-Skipped', targetPage);
+        signinFasterSkipped = true;
+        break;
+      } catch (e) {
+        addDebugStep('Sign-in Faster', 'info', `Signin faster selector ${selector} failed: ${e.message}`);
+      }
+    }
+    
+    if (!signinFasterSkipped) {
+      addDebugStep('Sign-in Faster', 'warning', 'No signin faster skip button found - continuing');
+    }
     
     // Step 9: Handle "Stay signed in?" - click "Yes"
     addDebugStep('Stay Signed In', 'info', 'Looking for stay signed in popup...');

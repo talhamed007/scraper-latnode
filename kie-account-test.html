@@ -308,6 +308,9 @@
                     <button type="button" class="btn" id="cleanBtn" style="background: linear-gradient(45deg, #6c757d, #5a6268);">
                         🧹 Clean
                     </button>
+                    <button type="button" class="btn" id="closeBrowserBtn" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">
+                        ❌ Close Browser
+                    </button>
                 </div>
             </div>
             
@@ -578,12 +581,53 @@
             }
         }
 
+        // Close Browser functionality
+        function closeBrowser() {
+            console.log('Closing browser...');
+            fetch('/api/close-browser', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Close response:', data);
+                if (data.success) {
+                    addLogEntry({
+                        step: 'Browser Control',
+                        type: 'info',
+                        message: 'Browser closed successfully',
+                        timestamp: new Date().toLocaleString()
+                    });
+                } else {
+                    addLogEntry({
+                        step: 'Browser Control',
+                        type: 'error',
+                        message: 'Close failed: ' + (data.message || 'Unknown error'),
+                        timestamp: new Date().toLocaleString()
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Close error:', error);
+                addLogEntry({
+                    step: 'Browser Control',
+                    type: 'error',
+                    message: 'Close error: ' + error.message,
+                    timestamp: new Date().toLocaleString()
+                });
+            });
+        }
+
         // Event listeners
         screenshotBtn.addEventListener('click', takeScreenshot);
         pauseBtn.addEventListener('click', pauseScraper);
         resumeBtn.addEventListener('click', resumeScraper);
         stopBtn.addEventListener('click', stopScraper);
         cleanBtn.addEventListener('click', cleanBrowser);
+        closeBrowserBtn.addEventListener('click', closeBrowser);
 
         // Socket.IO event listeners
         socket.on('debugStep', (data) => {

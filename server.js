@@ -4234,6 +4234,34 @@ app.post('/api/clean-browser', async (req, res) => {
   }
 });
 
+// Close Browser API
+app.post('/api/close-browser', async (req, res) => {
+  try {
+    console.log('❌ Close browser requested');
+    
+    if (globalBrowser) {
+      try {
+        await globalBrowser.close();
+        globalBrowser = null;
+        globalPage = null;
+        console.log('✅ Browser closed successfully');
+      } catch (browserError) {
+        console.error('❌ Error closing browser:', browserError);
+        globalBrowser = null;
+        globalPage = null;
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Browser closed successfully'
+    });
+  } catch (error) {
+    console.error('❌ Close browser error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
