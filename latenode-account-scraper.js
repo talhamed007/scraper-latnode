@@ -2184,13 +2184,112 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Account Creation', 'info', `🔢 Confirmation Code: ${confirmationCode}`);
     addDebugStep('Account Creation', 'info', `💰 Credits: ${global.credits || 'Not found'}`);
     
+    // Step 10: Click "Ready" button in import popup
+    addDebugStep('Import Popup', 'info', 'Looking for "Ready" button in import popup...');
+    
+    try {
+      // Wait for the import popup to appear
+      await page.waitForSelector('button:has-text("Ready"), button[title="Ready"], .ant-btn:has-text("Ready")', { timeout: 10000 });
+      
+      // Click the Ready button
+      const readyButtonClicked = await page.evaluate(() => {
+        const readySelectors = [
+          'button:has-text("Ready")',
+          'button[title="Ready"]',
+          '.ant-btn:has-text("Ready")',
+          'button',
+          '[role="button"]'
+        ];
+        
+        for (const selector of readySelectors) {
+          const buttons = document.querySelectorAll(selector);
+          for (const button of buttons) {
+            const text = (button.innerText || button.textContent || '').trim();
+            if (text.toLowerCase().includes('ready')) {
+              button.click();
+              return true;
+            }
+          }
+        }
+        return false;
+      });
+      
+      if (readyButtonClicked) {
+        addDebugStep('Import Popup', 'success', 'Clicked "Ready" button successfully');
+        await sleep(2000); // Wait for popup to close
+      } else {
+        addDebugStep('Import Popup', 'warning', 'Could not find or click "Ready" button');
+      }
+    } catch (error) {
+      addDebugStep('Import Popup', 'warning', 'Import popup not found or already closed', null, error.message);
+    }
+    
+    // Step 11: Click on "Untitled" scenario to enter it
+    addDebugStep('Scenario Entry', 'info', 'Looking for "Untitled" scenario to click...');
+    
+    try {
+      // Wait for the scenario list to be visible
+      await page.waitForSelector('*:has-text("Untitled")', { timeout: 10000 });
+      
+      // Click on the Untitled scenario
+      const untitledClicked = await page.evaluate(() => {
+        const untitledSelectors = [
+          '*:has-text("Untitled")',
+          'tr:has-text("Untitled")',
+          'div:has-text("Untitled")',
+          'span:has-text("Untitled")',
+          'td:has-text("Untitled")'
+        ];
+        
+        for (const selector of untitledSelectors) {
+          const elements = document.querySelectorAll(selector);
+          for (const element of elements) {
+            const text = (element.innerText || element.textContent || '').trim();
+            if (text.includes('Untitled')) {
+              // Try to find a clickable parent or the element itself
+              let clickableElement = element;
+              
+              // Look for clickable parent (tr, button, a, etc.)
+              let parent = element.parentElement;
+              while (parent && parent !== document.body) {
+                if (parent.tagName === 'TR' || parent.tagName === 'BUTTON' || 
+                    parent.tagName === 'A' || parent.onclick || 
+                    parent.getAttribute('role') === 'button') {
+                  clickableElement = parent;
+                  break;
+                }
+                parent = parent.parentElement;
+              }
+              
+              clickableElement.click();
+              return true;
+            }
+          }
+        }
+        return false;
+      });
+      
+      if (untitledClicked) {
+        addDebugStep('Scenario Entry', 'success', 'Clicked on "Untitled" scenario successfully');
+        await sleep(3000); // Wait for scenario to load
+      } else {
+        addDebugStep('Scenario Entry', 'warning', 'Could not find or click "Untitled" scenario');
+      }
+    } catch (error) {
+      addDebugStep('Scenario Entry', 'warning', 'Could not find "Untitled" scenario', null, error.message);
+    }
+    
+    // Step 12: Take final screenshot to show where we are
+    addDebugStep('Final Screenshot', 'info', 'Taking final screenshot to show current location...');
+    await takeScreenshot('Final-Scenario-View', page);
+    
     return {
       success: true,
       tempEmail: tempEmail,
       password: generatedPassword,
       confirmationCode: confirmationCode,
       credits: global.credits || 'Not found',
-      message: 'Latenode account creation process completed successfully with JSON scenario uploaded!'
+      message: 'Latenode account creation process completed successfully with JSON scenario uploaded and accessed!'
     };
     
   } catch (error) {
