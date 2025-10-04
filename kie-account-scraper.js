@@ -1425,10 +1425,13 @@ async function createKieAccount(io, email, password) {
       
       // Try multiple selectors for the Next button
       const nextButtonSelectors = [
+        'button[type="submit"]',
+        'button[data-testid="primaryButton"]',
+        '//button[contains(text(), "Next")]',
+        'button[type="submit"][textContent="Next"]',
         'input[type="submit"][value="Next"]',
         'input[id="idSIButton9"]',
         'input[type="submit"]',
-        '//button[contains(text(), "Next")]',
         '//input[@value="Next"]'
       ];
       
@@ -1518,10 +1521,13 @@ async function createKieAccount(io, email, password) {
     
     // Try multiple selectors for the Next button
     const passwordNextButtonSelectors = [
+      'button[type="submit"]',
+      'button[data-testid="primaryButton"]',
+      '//button[contains(text(), "Next")]',
+      'button[type="submit"][textContent="Next"]',
       'input[type="submit"][value="Next"]',
       'input[id="idSIButton9"]',
       'input[type="submit"]',
-      '//button[contains(text(), "Next")]',
       '//input[@value="Next"]'
     ];
     
