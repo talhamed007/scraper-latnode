@@ -1187,7 +1187,7 @@ async function createKieAccount(io, email, password) {
     
     try {
       // Use popup page if available, otherwise fall back to main page
-      const targetPage = popupPage || page;
+      let targetPage = popupPage || page;
       
       if (popupPage) {
         addDebugStep('Email Entry', 'info', 'Using Microsoft login popup page for email entry');
@@ -1488,7 +1488,7 @@ async function createKieAccount(io, email, password) {
     addDebugStep('Password Entry', 'info', 'Entering password...');
     
     // Use the same targetPage reference
-    const targetPage = popupPage || page;
+    let targetPage = popupPage || page;
     
     await targetPage.waitForSelector('input[name="passwd"], input[id="passwordEntry"]', { timeout: 10000 });
     await targetPage.type('input[name="passwd"], input[id="passwordEntry"]', generatedPassword, { delay: 100 });
@@ -1621,8 +1621,12 @@ async function createKieAccount(io, email, password) {
     }
     
     // Update targetPage to the correct page
-    targetPage = targetPageAfterRedirect;
-    addDebugStep('Page Transition', 'info', `Using page: ${await targetPage.evaluate(() => window.location.href)}`);
+    if (targetPageAfterRedirect) {
+      targetPage = targetPageAfterRedirect;
+      addDebugStep('Page Transition', 'info', `Using page: ${await targetPage.evaluate(() => window.location.href)}`);
+    } else {
+      addDebugStep('Page Transition', 'warning', 'No page with skip buttons found, using current page');
+    }
     
     // Step 6: Handle "Save password?" popup - click "Never"
     try {
