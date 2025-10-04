@@ -133,8 +133,21 @@ async function handleStaySignedInStep(targetPage) {
 async function handleAppAccessStep(targetPage) {
   addDebugStep('App Access', 'info', 'Handling App Access step...');
   
-  // Try multiple selectors for Accept button
+  // First, scroll down to make sure the Accept button is visible
+  addDebugStep('App Access', 'info', 'Scrolling down to find Accept button...');
+  await targetPage.evaluate(() => {
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+  
+  // Wait a moment for the scroll to complete
+  await randomHumanDelay(targetPage, 1000, 2000);
+  
+  // Take a screenshot to see the current state after scrolling
+  await takeScreenshot('App-Access-After-Scroll', targetPage);
+  
+  // Try multiple selectors for Accept button, including the specific data-testid
   const acceptSelectors = [
+    '//button[@data-testid="appConsentPrimaryButton"]',  // Specific selector from user
     '//button[contains(text(), "Accept")]',
     '//button[contains(text(), "Allow")]',
     '//button[contains(text(), "Continue")]',
@@ -145,17 +158,52 @@ async function handleAppAccessStep(targetPage) {
   
   let acceptButtonClicked = false;
   
-  for (const selector of acceptSelectors) {
-    try {
-      addDebugStep('App Access', 'info', `Trying Accept selector: ${selector}`);
-      await targetPage.waitForSelector(selector, { timeout: 5000 });
-      await targetPage.click(selector);
-      addDebugStep('App Access', 'success', `Clicked Accept button using selector: ${selector}`);
+  // First try direct JavaScript approach for Accept button
+  try {
+    addDebugStep('App Access', 'info', 'Trying direct JavaScript click on Accept button...');
+    
+    const clicked = await targetPage.evaluate(() => {
+      // Try the specific data-testid first
+      const acceptButton = document.querySelector('button[data-testid="appConsentPrimaryButton"]');
+      if (acceptButton && acceptButton.offsetParent !== null) {
+        acceptButton.click();
+        return true;
+      }
+      
+      // Fallback: look for any button with "Accept" text
+      const acceptButtons = Array.from(document.querySelectorAll('button'));
+      const acceptBtn = acceptButtons.find(b => b.textContent?.trim() === 'Accept' && b.offsetParent !== null);
+      if (acceptBtn) {
+        acceptBtn.click();
+        return true;
+      }
+      
+      return false;
+    });
+    
+    if (clicked) {
+      addDebugStep('App Access', 'success', 'Clicked Accept button using JavaScript');
       await takeScreenshot('App-Access-Accepted', targetPage);
       acceptButtonClicked = true;
-      break;
-    } catch (e) {
-      addDebugStep('App Access', 'info', `Accept selector ${selector} failed: ${e.message}`);
+    }
+  } catch (e) {
+    addDebugStep('App Access', 'info', `JavaScript click failed: ${e.message}`);
+  }
+  
+  // If JavaScript approach failed, try selectors
+  if (!acceptButtonClicked) {
+    for (const selector of acceptSelectors) {
+      try {
+        addDebugStep('App Access', 'info', `Trying Accept selector: ${selector}`);
+        await targetPage.waitForSelector(selector, { timeout: 3000 });
+        await targetPage.click(selector);
+        addDebugStep('App Access', 'success', `Clicked Accept button using selector: ${selector}`);
+        await takeScreenshot('App-Access-Accepted', targetPage);
+        acceptButtonClicked = true;
+        break;
+      } catch (e) {
+        addDebugStep('App Access', 'info', `Accept selector ${selector} failed: ${e.message}`);
+      }
     }
   }
   
