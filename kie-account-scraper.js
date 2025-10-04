@@ -1420,6 +1420,54 @@ async function createKieAccount(io, email, password) {
         addDebugStep('Email Entry', 'warning', `Screenshot failed: ${screenshotError.message}`);
       }
       
+      // Click Next button
+      addDebugStep('Email Entry', 'info', 'Clicking Next button...');
+      
+      // Try multiple selectors for the Next button
+      const nextButtonSelectors = [
+        'input[type="submit"][value="Next"]',
+        'input[id="idSIButton9"]',
+        'input[type="submit"]',
+        '//button[contains(text(), "Next")]',
+        '//input[@value="Next"]'
+      ];
+      
+      let nextButtonClicked = false;
+      for (const selector of nextButtonSelectors) {
+        try {
+          addDebugStep('Email Entry', 'info', `Trying Next button selector: ${selector}`);
+          await targetPage.waitForSelector(selector, { timeout: 2000 });
+          await targetPage.click(selector);
+          addDebugStep('Email Entry', 'success', `Clicked Next button using selector: ${selector}`);
+          nextButtonClicked = true;
+          break;
+        } catch (e) {
+          addDebugStep('Email Entry', 'info', `Next button selector ${selector} failed: ${e.message}`);
+        }
+      }
+      
+      if (!nextButtonClicked) {
+        throw new Error('Could not find or click Next button with any selector');
+      }
+      await takeScreenshot('Email-Next-Clicked', targetPage);
+      
+      // Wait for page transition and take immediate screenshot
+      addDebugStep('Page Transition', 'info', 'Waiting for page transition to password step...');
+      await randomHumanDelay(targetPage, 2000, 4000);
+      
+      // Take immediate screenshot to see what happened after Next click
+      addDebugStep('Page Transition', 'info', 'Taking screenshot to see current page state...');
+      await takeScreenshot('After-Email-Next-Click', targetPage);
+      
+      // Verify targetPage is still accessible
+      try {
+        await targetPage.evaluate(() => document.title);
+        addDebugStep('Page Transition', 'success', 'Target page is still accessible after Next click');
+      } catch (e) {
+        addDebugStep('Page Transition', 'error', 'Target page is no longer accessible - may have closed or redirected');
+        throw new Error('Target page became inaccessible after Next button click');
+      }
+      
     } catch (error) {
       addDebugStep('Email Entry', 'error', `Email entry failed: ${error.message}`);
       
@@ -1433,56 +1481,12 @@ async function createKieAccount(io, email, password) {
       throw error;
     }
     
-    // Click Next button
-    addDebugStep('Email Entry', 'info', 'Clicking Next button...');
-    
-    // Try multiple selectors for the Next button
-    const nextButtonSelectors = [
-      'input[type="submit"][value="Next"]',
-      'input[id="idSIButton9"]',
-      'input[type="submit"]',
-      '//button[contains(text(), "Next")]',
-      '//input[@value="Next"]'
-    ];
-    
-    let nextButtonClicked = false;
-    for (const selector of nextButtonSelectors) {
-      try {
-        addDebugStep('Email Entry', 'info', `Trying Next button selector: ${selector}`);
-        await targetPage.waitForSelector(selector, { timeout: 2000 });
-        await targetPage.click(selector);
-        addDebugStep('Email Entry', 'success', `Clicked Next button using selector: ${selector}`);
-        nextButtonClicked = true;
-        break;
-      } catch (e) {
-        addDebugStep('Email Entry', 'info', `Next button selector ${selector} failed: ${e.message}`);
-      }
-    }
-    
-    if (!nextButtonClicked) {
-      throw new Error('Could not find or click Next button with any selector');
-    }
-    await takeScreenshot('Email-Next-Clicked', targetPage);
-    
-    // Wait for page transition and take immediate screenshot
-    addDebugStep('Page Transition', 'info', 'Waiting for page transition to password step...');
-    await randomHumanDelay(targetPage, 2000, 4000);
-    
-    // Take immediate screenshot to see what happened after Next click
-    addDebugStep('Page Transition', 'info', 'Taking screenshot to see current page state...');
-    await takeScreenshot('After-Email-Next-Click', targetPage);
-    
-    // Verify targetPage is still accessible
-    try {
-      await targetPage.evaluate(() => document.title);
-      addDebugStep('Page Transition', 'success', 'Target page is still accessible after Next click');
-    } catch (e) {
-      addDebugStep('Page Transition', 'error', 'Target page is no longer accessible - may have closed or redirected');
-      throw new Error('Target page became inaccessible after Next button click');
-    }
-    
     // Step 5: Enter password
     addDebugStep('Password Entry', 'info', 'Entering password...');
+    
+    // Use the same targetPage reference
+    const targetPage = popupPage || page;
+    
     await targetPage.waitForSelector('input[name="passwd"], input[id="passwordEntry"]', { timeout: 10000 });
     await targetPage.type('input[name="passwd"], input[id="passwordEntry"]', generatedPassword, { delay: 100 });
     addDebugStep('Password Entry', 'success', 'Password entered successfully');
