@@ -1277,7 +1277,7 @@ async function createKieAccount(io, email, password) {
           if (emailField) {
             // Check if element is visible and interactable
             const isVisible = await emailField.isIntersectingViewport();
-            const isEnabled = await emailField.isEnabled();
+            const isEnabled = await emailField.evaluate(el => !el.disabled);
             
             if (isVisible && isEnabled) {
               usedEmailSelector = selector;
@@ -1301,7 +1301,7 @@ async function createKieAccount(io, email, password) {
         for (let i = 0; i < textInputs.length; i++) {
           const input = textInputs[i];
           const isVisible = await input.isIntersectingViewport();
-          const isEnabled = await input.isEnabled();
+          const isEnabled = await input.evaluate(el => !el.disabled);
           
           if (isVisible && isEnabled) {
             emailField = input;
@@ -1345,7 +1345,7 @@ async function createKieAccount(io, email, password) {
             if (xpathResult.length > 0) {
               const xpathField = xpathResult[0];
               const isVisible = await xpathField.isIntersectingViewport();
-              const isEnabled = await xpathField.isEnabled();
+              const isEnabled = await xpathField.evaluate(el => !el.disabled);
               
               if (isVisible && isEnabled) {
                 emailField = xpathField;
