@@ -402,6 +402,17 @@ async function handleAppAccessStep(targetPage) {
     await takeScreenshot('No-Accept-Button-Found', targetPage);
   }
   
+  // Wait for navigation after Accept button click
+  addDebugStep('Navigation', 'info', 'Waiting for navigation after Accept button click...');
+  try {
+    await targetPage.waitForNavigation({ timeout: 10000 });
+    addDebugStep('Navigation', 'success', 'Navigation completed after Accept click');
+    await takeScreenshot('After-Accept-Navigation', targetPage);
+  } catch (navError) {
+    addDebugStep('Navigation', 'warning', `Navigation timeout after Accept: ${navError.message}`);
+    // Continue anyway, the page might have already navigated
+  }
+  
   // Check for human verification popup after Accept
   addDebugStep('Human Verification', 'info', 'Checking for human verification popup...');
   try {
@@ -476,9 +487,16 @@ async function handleAppAccessStep(targetPage) {
   
   // Final step - navigate to Kie.ai dashboard
   addDebugStep('Dashboard', 'info', 'Navigating to Kie.ai dashboard...');
-  await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
-  await takeScreenshot('Dashboard-Reached', targetPage);
-  addDebugStep('Dashboard', 'success', 'Successfully reached Kie.ai dashboard');
+  try {
+    await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+    await takeScreenshot('Dashboard-Reached', targetPage);
+    addDebugStep('Dashboard', 'success', 'Successfully reached Kie.ai dashboard');
+  } catch (dashboardError) {
+    addDebugStep('Dashboard', 'error', `Failed to navigate to dashboard: ${dashboardError.message}`);
+    // Try to take screenshot of current page to see what happened
+    await takeScreenshot('Dashboard-Error', targetPage);
+    throw new Error(`Dashboard navigation failed: ${dashboardError.message}`);
+  }
 }
 
 // Helper function to take screenshots
