@@ -4001,6 +4001,11 @@ app.get('/kie-collaborative', (req, res) => {
   res.sendFile(path.join(__dirname, 'kie-account-collaborative-test.html'));
 });
 
+// Serve Outlook account creation page
+app.get('/outlook', (req, res) => {
+  res.sendFile(path.join(__dirname, 'outlook-account-test.html'));
+});
+
 // AI Control Endpoints
 app.post('/api/pause-ai', async (req, res) => {
   try {
@@ -4299,6 +4304,51 @@ app.post('/api/go-to-dashboard', async (req, res) => {
   } catch (error) {
     console.error('❌ Go to dashboard error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Outlook Account Creation Route
+app.post('/api/outlook-account', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email and password are required' 
+      });
+    }
+
+    console.log('🚀 Starting Outlook account creation...');
+    
+    // Import the Outlook scraper
+    const { createOutlookAccount } = require('./outlook-account-scraper');
+    
+    // Reset global control flags
+    globalScraperPaused = false;
+    globalScraperStopped = false;
+    
+    // Start the account creation process
+    const result = await createOutlookAccount(email, password, io);
+    
+    console.log('✅ Outlook account creation completed');
+    res.json(result);
+    
+  } catch (error) {
+    console.error('❌ Outlook account creation error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
