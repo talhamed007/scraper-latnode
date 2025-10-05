@@ -111,6 +111,72 @@ async function handleStaySignedInStep(targetPage) {
         // Update targetPage to the current page after navigation
         targetPage = targetPage;
         addDebugStep('Stay Signed In', 'info', `New page URL: ${await targetPage.evaluate(() => window.location.href)}`);
+        
+        // After Stay signed in popup closes, return to original Kie.ai page
+        addDebugStep('Stay Signed In', 'info', 'Stay signed in popup closed - returning to original Kie.ai page...');
+        
+        // Navigate back to Kie.ai main page
+        try {
+          await targetPage.goto('https://kie.ai', { waitUntil: 'networkidle2', timeout: 30000 });
+          addDebugStep('Stay Signed In', 'success', 'Returned to Kie.ai main page');
+          await takeScreenshot('Kie-Main-Page-After-Stay-Signed-In', targetPage);
+          
+          // Wait for page to fully load
+          addDebugStep('Stay Signed In', 'info', 'Waiting for Kie.ai page to load completely...');
+          await randomHumanDelay(targetPage, 3000, 5000);
+          
+          // Look for Get Started button in top right corner
+          addDebugStep('Stay Signed In', 'info', 'Looking for Get Started button in top right corner...');
+          
+          // Try to find Get Started button
+          const getStartedFound = await targetPage.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button, a'));
+            for (const button of buttons) {
+              const text = button.textContent?.toLowerCase() || '';
+              if (text.includes('get started') || text.includes('getstarted')) {
+                return {
+                  found: true,
+                  text: button.textContent,
+                  tagName: button.tagName,
+                  className: button.className
+                };
+              }
+            }
+            return { found: false };
+          });
+          
+          if (getStartedFound.found) {
+            addDebugStep('Stay Signed In', 'success', `Found Get Started button: ${getStartedFound.text}`);
+            
+            // Click Get Started button
+            await targetPage.click('button:contains("Get Started"), a:contains("Get Started")');
+            addDebugStep('Stay Signed In', 'success', 'Clicked Get Started button');
+            await takeScreenshot('Get-Started-After-Stay-Signed-In', targetPage);
+            
+            // Check if Microsoft popup appears after Get Started click
+            addDebugStep('Stay Signed In', 'info', 'Checking for Microsoft popup after Get Started click...');
+            try {
+              await targetPage.waitForSelector('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft")', { timeout: 5000 });
+              addDebugStep('Stay Signed In', 'success', 'Microsoft popup detected after Get Started');
+              await takeScreenshot('Microsoft-Popup-After-Get-Started', targetPage);
+              
+              // Click Sign in with Microsoft
+              await targetPage.click('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft")');
+              addDebugStep('Stay Signed In', 'success', 'Clicked Sign in with Microsoft after Get Started');
+              await takeScreenshot('Microsoft-Login-After-Get-Started', targetPage);
+              
+            } catch (microsoftError) {
+              addDebugStep('Stay Signed In', 'info', 'No Microsoft popup appeared after Get Started click');
+            }
+            
+          } else {
+            addDebugStep('Stay Signed In', 'warning', 'Get Started button not found on Kie.ai page');
+          }
+          
+        } catch (kieError) {
+          addDebugStep('Stay Signed In', 'error', `Failed to return to Kie.ai page: ${kieError.message}`);
+        }
+        
       } catch (navError) {
         addDebugStep('Stay Signed In', 'warning', `Navigation timeout: ${navError.message}`);
         
