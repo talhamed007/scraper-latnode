@@ -2281,8 +2281,20 @@ async function createKieAccount(io, email, password) {
     // Step 8: Handle "Sign in faster" popup - click "Skip for now"
     addDebugStep('Sign-in Faster', 'info', 'Looking for sign-in faster popup...');
     
+    // Check for stop flag before starting
+    if (global.globalScraperStopped) {
+      addDebugStep('Sign-in Faster', 'info', 'Scraper stopped by user');
+      return { success: false, error: 'Scraper stopped by user' };
+    }
+    
     let signinFasterSkipped = false;
     for (const selector of skipSelectors) {
+      // Check for stop flag in each iteration
+      if (global.globalScraperStopped) {
+        addDebugStep('Sign-in Faster', 'info', 'Scraper stopped by user');
+        return { success: false, error: 'Scraper stopped by user' };
+      }
+      
       try {
         addDebugStep('Sign-in Faster', 'info', `Trying signin faster selector: ${selector}`);
         await targetPage.waitForSelector(selector, { timeout: 3000 });
@@ -2302,6 +2314,12 @@ async function createKieAccount(io, email, password) {
     
     // Step 9: Handle "Stay signed in?" - click "Yes"
     addDebugStep('Stay Signed In', 'info', 'Looking for stay signed in popup...');
+    
+    // Check for stop flag before starting
+    if (global.globalScraperStopped) {
+      addDebugStep('Stay Signed In', 'info', 'Scraper stopped by user');
+      return { success: false, error: 'Scraper stopped by user' };
+    }
     
     // Try multiple selectors for Yes/Next button (Microsoft uses "Next" for Yes)
     const yesSelectors = [
@@ -2398,6 +2416,13 @@ async function createKieAccount(io, email, password) {
     
     // Step 10: Handle "Let this app access your info?" - scroll and click "Accept"
     addDebugStep('App Access', 'info', 'Looking for app access consent popup...');
+    
+    // Check for stop flag before starting
+    if (global.globalScraperStopped) {
+      addDebugStep('App Access', 'info', 'Scraper stopped by user');
+      return { success: false, error: 'Scraper stopped by user' };
+    }
+    
     await targetPage.waitForSelector('//button[contains(text(), "Accept")]', { timeout: 10000 });
     
     // Scroll down to make sure Accept button is visible
