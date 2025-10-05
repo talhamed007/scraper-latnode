@@ -2138,6 +2138,19 @@ async function createKieAccount(io, email, password) {
         // Skip directly to App Access step
         await handleAppAccessStep(targetPage);
         return; // Exit early
+      } else if (pageInfo.title.includes('Sign in to your account') || pageInfo.url.includes('login.microsoftonline.com')) {
+        addDebugStep('Page Detection', 'success', 'Detected Microsoft OAuth sign-in page - this means authentication is complete');
+        // This page indicates the authentication flow is complete, navigate to dashboard
+        addDebugStep('Dashboard', 'info', 'Authentication complete, navigating to Kie.ai dashboard...');
+        try {
+          await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+          await takeScreenshot('Dashboard-Reached', targetPage);
+          addDebugStep('Dashboard', 'success', 'Successfully reached Kie.ai dashboard');
+          return { success: true, message: 'Account created successfully' };
+        } catch (dashboardError) {
+          addDebugStep('Dashboard', 'error', `Failed to navigate to dashboard: ${dashboardError.message}`);
+          return { success: false, error: `Dashboard navigation failed: ${dashboardError.message}` };
+        }
       } else {
         addDebugStep('Page Detection', 'warning', 'Unknown page detected - continuing with normal flow');
       }
