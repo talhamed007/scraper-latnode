@@ -311,6 +311,9 @@
                     <button type="button" class="btn" id="closeBrowserBtn" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">
                         ❌ Close Browser
                     </button>
+                    <button type="button" class="btn" id="goToDashboardBtn" style="background: linear-gradient(45deg, #9b59b6, #8e44ad);">
+                        🏠 Go to Dashboard
+                    </button>
                 </div>
             </div>
             
@@ -352,6 +355,7 @@
         const resumeBtn = document.getElementById('resumeBtn');
         const stopBtn = document.getElementById('stopBtn');
         const cleanBtn = document.getElementById('cleanBtn');
+        const goToDashboardBtn = document.getElementById('goToDashboardBtn');
         
         // Scraper state
         let isScraperRunning = false;
@@ -621,6 +625,46 @@
             });
         }
 
+        // Go to Dashboard functionality
+        function goToDashboard() {
+            console.log('Navigating to dashboard...');
+            fetch('/api/go-to-dashboard', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Dashboard response:', data);
+                if (data.success) {
+                    addLogEntry({
+                        step: 'Dashboard Navigation',
+                        type: 'info',
+                        message: 'Navigated to Kie.ai dashboard successfully',
+                        timestamp: new Date().toLocaleString()
+                    });
+                } else {
+                    addLogEntry({
+                        step: 'Dashboard Navigation',
+                        type: 'error',
+                        message: 'Failed to navigate to dashboard: ' + (data.message || 'Unknown error'),
+                        timestamp: new Date().toLocaleString()
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Dashboard error:', error);
+                addLogEntry({
+                    step: 'Dashboard Navigation',
+                    type: 'error',
+                    message: 'Dashboard error: ' + error.message,
+                    timestamp: new Date().toLocaleString()
+                });
+            });
+        }
+
         // Event listeners
         screenshotBtn.addEventListener('click', takeScreenshot);
         pauseBtn.addEventListener('click', pauseScraper);
@@ -628,6 +672,7 @@
         stopBtn.addEventListener('click', stopScraper);
         cleanBtn.addEventListener('click', cleanBrowser);
         closeBrowserBtn.addEventListener('click', closeBrowser);
+        goToDashboardBtn.addEventListener('click', goToDashboard);
 
         // Socket.IO event listeners
         socket.on('debugStep', (data) => {

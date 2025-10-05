@@ -4262,6 +4262,46 @@ app.post('/api/close-browser', async (req, res) => {
   }
 });
 
+// Go to Dashboard API
+app.post('/api/go-to-dashboard', async (req, res) => {
+  try {
+    console.log('🏠 Go to dashboard requested');
+    
+    if (!globalBrowser) {
+      return res.json({ success: false, message: 'No browser available. Please start the scraper first.' });
+    }
+
+    // Get the first available page or create a new one
+    let page = globalPage;
+    if (!page) {
+      const pages = await globalBrowser.pages();
+      if (pages.length > 0) {
+        page = pages[0];
+      } else {
+        page = await globalBrowser.newPage();
+      }
+    }
+
+    // Navigate to Kie.ai dashboard
+    await page.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+    
+    // Take a screenshot to show the result
+    const timestamp = Date.now();
+    const screenshotPath = path.join(__dirname, 'screenshots', `dashboard-${timestamp}.png`);
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    
+    console.log('✅ Navigated to Kie.ai dashboard successfully');
+    res.json({ 
+      success: true, 
+      message: 'Navigated to Kie.ai dashboard successfully',
+      screenshot: `dashboard-${timestamp}.png`
+    });
+  } catch (error) {
+    console.error('❌ Go to dashboard error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
