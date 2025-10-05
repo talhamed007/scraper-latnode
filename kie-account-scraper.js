@@ -457,13 +457,23 @@ async function handleStaySignedInStep(targetPage) {
               
               // Try to navigate to dashboard to see if we're logged in
               try {
-                await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+                await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2', timeout: 60000 });
                 await takeScreenshot('Dashboard-After-Recovery', targetPage);
                 addDebugStep('Stay Signed In', 'success', 'Successfully navigated to dashboard - authentication complete');
                 return { success: true, message: 'Account created successfully' };
               } catch (dashboardError) {
                 addDebugStep('Stay Signed In', 'warning', `Dashboard navigation failed: ${dashboardError.message}`);
-                // Continue with normal flow
+                // Try alternative navigation methods
+                try {
+                  addDebugStep('Stay Signed In', 'info', 'Trying alternative dashboard navigation...');
+                  await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'domcontentloaded', timeout: 30000 });
+                  await takeScreenshot('Dashboard-Alternative', targetPage);
+                  addDebugStep('Stay Signed In', 'success', 'Successfully navigated to dashboard with alternative method');
+                  return { success: true, message: 'Account created successfully' };
+                } catch (altError) {
+                  addDebugStep('Stay Signed In', 'warning', `Alternative dashboard navigation also failed: ${altError.message}`);
+                  // Continue with normal flow
+                }
               }
             }
           } else {
@@ -889,14 +899,23 @@ async function handleAppAccessStep(targetPage) {
   // Final step - navigate to Kie.ai dashboard
   addDebugStep('Dashboard', 'info', 'Navigating to Kie.ai dashboard...');
   try {
-    await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+    await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2', timeout: 60000 });
     await takeScreenshot('Dashboard-Reached', targetPage);
     addDebugStep('Dashboard', 'success', 'Successfully reached Kie.ai dashboard');
   } catch (dashboardError) {
-    addDebugStep('Dashboard', 'error', `Failed to navigate to dashboard: ${dashboardError.message}`);
-    // Try to take screenshot of current page to see what happened
-    await takeScreenshot('Dashboard-Error', targetPage);
-    throw new Error(`Dashboard navigation failed: ${dashboardError.message}`);
+    addDebugStep('Dashboard', 'warning', `Dashboard navigation failed: ${dashboardError.message}`);
+    // Try alternative navigation methods
+    try {
+      addDebugStep('Dashboard', 'info', 'Trying alternative dashboard navigation...');
+      await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await takeScreenshot('Dashboard-Alternative', targetPage);
+      addDebugStep('Dashboard', 'success', 'Successfully reached Kie.ai dashboard with alternative method');
+    } catch (altError) {
+      addDebugStep('Dashboard', 'error', `Alternative dashboard navigation also failed: ${altError.message}`);
+      // Try to take screenshot of current page to see what happened
+      await takeScreenshot('Dashboard-Error', targetPage);
+      throw new Error(`Dashboard navigation failed: ${dashboardError.message}`);
+    }
   }
 }
 
@@ -1323,6 +1342,7 @@ async function createKieAccountAI(io, email, password) {
     // Launch browser
     browser = await puppeteer.launch({
       headless: true,
+      protocolTimeout: 120000, // 2 minutes timeout
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -1633,6 +1653,7 @@ async function createKieAccount(io, email, password) {
     
     const browserPromise = puppeteer.launch({
       headless: true,
+      protocolTimeout: 120000, // 2 minutes timeout
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -1990,6 +2011,30 @@ async function createKieAccount(io, email, password) {
                 // Wait a moment for the popup to load
                 await sleep(2000);
                 
+                // Take screenshot of the new popup to see what it is
+                await takeScreenshot('New-Popup-Detected', newPage);
+                addDebugStep('Microsoft Login Popup', 'info', 'Screenshot taken of new popup window');
+                
+                // Get popup details for debugging
+                const popupDetails = await newPage.evaluate(() => {
+                  return {
+                    url: window.location.href,
+                    title: document.title,
+                    hasEmailInput: document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]').length > 0,
+                    hasPasswordInput: document.querySelectorAll('input[name="passwd"], input[type="password"]').length > 0,
+                    hasMicrosoftElements: document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]').length > 0,
+                    bodyText: document.body.textContent.substring(0, 200).toLowerCase(),
+                    allInputs: Array.from(document.querySelectorAll('input')).map(input => ({
+                      name: input.name,
+                      id: input.id,
+                      type: input.type,
+                      placeholder: input.placeholder
+                    }))
+                  };
+                });
+                
+                addDebugStep('Microsoft Login Popup', 'info', `Popup details: URL=${popupDetails.url}, Title=${popupDetails.title}, EmailInput=${popupDetails.hasEmailInput}, PasswordInput=${popupDetails.hasPasswordInput}`);
+                
                 // Check if this is the Microsoft login popup
                 const isMicrosoftPopup = await newPage.evaluate(() => {
                   const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
@@ -1999,16 +2044,25 @@ async function createKieAccount(io, email, password) {
                   const hasMicrosoftPage = microsoftPageIndicators.length > 0;
                   
                   const microsoftText = document.body.textContent.toLowerCase();
-                  const hasMicrosoftText = microsoftText.includes('microsoft') || microsoftText.includes('outlook') || microsoftText.includes('account');
+                  const hasMicrosoftText = microsoftText.includes('microsoft') || microsoftText.includes('outlook') || microsoftText.includes('account') || microsoftText.includes('sign in');
                   
                   return hasMicrosoftLogin || hasMicrosoftPage || hasMicrosoftText;
                 });
                 
                 if (isMicrosoftPopup) {
                   addDebugStep('Microsoft Login Popup', 'success', 'Microsoft login popup confirmed, switching to popup window...');
+                  await takeScreenshot('Microsoft-Popup-Confirmed', newPage);
                   resolve(newPage);
                 } else {
-                  addDebugStep('Microsoft Login Popup', 'warning', 'Popup detected but not Microsoft login, continuing to wait...');
+                  addDebugStep('Microsoft Login Popup', 'warning', `Popup detected but not Microsoft login. URL: ${popupDetails.url}, Title: ${popupDetails.title}`);
+                  await takeScreenshot('Non-Microsoft-Popup', newPage);
+                  // Close this popup if it's not Microsoft login
+                  try {
+                    await newPage.close();
+                    addDebugStep('Microsoft Login Popup', 'info', 'Closed non-Microsoft popup window');
+                  } catch (closeError) {
+                    addDebugStep('Microsoft Login Popup', 'warning', `Failed to close popup: ${closeError.message}`);
+                  }
                 }
               }
             } catch (e) {
