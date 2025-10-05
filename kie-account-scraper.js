@@ -402,6 +402,78 @@ async function handleAppAccessStep(targetPage) {
     await takeScreenshot('No-Accept-Button-Found', targetPage);
   }
   
+  // Check for human verification popup after Accept
+  addDebugStep('Human Verification', 'info', 'Checking for human verification popup...');
+  try {
+    // Wait a moment for any popup to appear
+    await randomHumanDelay(targetPage, 2000, 3000);
+    
+    // Check if human verification popup is present
+    const humanVerification = await targetPage.evaluate(() => {
+      const popup = document.querySelector('[class*="popup"], [class*="modal"], [class*="verification"]');
+      const humanCheckbox = document.querySelector('input[type="checkbox"][id*="human"], input[type="checkbox"][class*="human"], input[type="checkbox"][name*="human"]');
+      const hcaptcha = document.querySelector('[class*="hcaptcha"], [id*="hcaptcha"]');
+      const humanText = document.querySelector('text*="human", text*="Human", text*="I am human"');
+      
+      return {
+        popupExists: !!popup,
+        humanCheckbox: !!humanCheckbox,
+        hcaptcha: !!hcaptcha,
+        humanText: !!humanText,
+        allText: document.body.textContent.includes('human') || document.body.textContent.includes('Human'),
+        allCheckboxes: Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => ({
+          id: cb.id,
+          name: cb.name,
+          className: cb.className,
+          checked: cb.checked
+        }))
+      };
+    });
+    
+    addDebugStep('Human Verification', 'info', `Human verification check: ${JSON.stringify(humanVerification)}`);
+    
+    if (humanVerification.humanCheckbox || humanVerification.hcaptcha || humanVerification.allText) {
+      addDebugStep('Human Verification', 'success', 'Human verification popup detected');
+      await takeScreenshot('Human-Verification-Popup', targetPage);
+      
+      // Try to find and click the human checkbox
+      const checkboxClicked = await targetPage.evaluate(() => {
+        const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+        for (const checkbox of checkboxes) {
+          if (checkbox.id.includes('human') || 
+              checkbox.name.includes('human') || 
+              checkbox.className.includes('human') ||
+              checkbox.closest('label')?.textContent?.toLowerCase().includes('human')) {
+            checkbox.click();
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (checkboxClicked) {
+        addDebugStep('Human Verification', 'success', 'Clicked human verification checkbox');
+        await takeScreenshot('Human-Verification-Checked', targetPage);
+        
+        // Wait for automatic redirect
+        addDebugStep('Human Verification', 'info', 'Waiting for automatic redirect after verification...');
+        try {
+          await targetPage.waitForNavigation({ timeout: 15000 });
+          addDebugStep('Human Verification', 'success', 'Redirected after human verification');
+          await takeScreenshot('After-Human-Verification', targetPage);
+        } catch (navError) {
+          addDebugStep('Human Verification', 'warning', `Navigation timeout after verification: ${navError.message}`);
+        }
+      } else {
+        addDebugStep('Human Verification', 'warning', 'Human verification checkbox not found');
+      }
+    } else {
+      addDebugStep('Human Verification', 'info', 'No human verification popup detected');
+    }
+  } catch (verificationError) {
+    addDebugStep('Human Verification', 'warning', `Human verification check failed: ${verificationError.message}`);
+  }
+  
   // Final step - navigate to Kie.ai dashboard
   addDebugStep('Dashboard', 'info', 'Navigating to Kie.ai dashboard...');
   await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
