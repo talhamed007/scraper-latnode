@@ -9,8 +9,18 @@ let globalScraperPaused = false;
 let globalScraperStopped = false;
 
 // Debug logging function
-function addDebugStep(step, type, message, screenshot = null, error = null) {
+async function addDebugStep(step, type, message, screenshot = null, error = null, page = null) {
   const timestamp = new Date().toLocaleString();
+  
+  // Take screenshot for important steps if page is provided
+  if (page && !screenshot && (type === 'success' || type === 'error' || step.includes('Entry') || step.includes('Button'))) {
+    try {
+      screenshot = await takeScreenshot(`${step.replace(/\s+/g, '-')}-${type}`, page);
+    } catch (e) {
+      // Screenshot failed, continue without it
+    }
+  }
+  
   const logEntry = {
     step,
     type,
@@ -100,9 +110,9 @@ async function createOutlookAccount(email, password, io = null) {
     globalScraperPaused = false;
     globalScraperStopped = false;
     
-    addDebugStep('Outlook Account Creation', 'info', '🚀 Starting Outlook account creation process...');
-    addDebugStep('Outlook Account Creation', 'info', `📧 Email: ${email}`);
-    addDebugStep('Outlook Account Creation', 'info', `🔑 Password: ${password}`);
+    await addDebugStep('Outlook Account Creation', 'info', '🚀 Starting Outlook account creation process...', null, null, page);
+    await addDebugStep('Outlook Account Creation', 'info', `📧 Email: ${email}`, null, null, page);
+    await addDebugStep('Outlook Account Creation', 'info', `🔑 Password: ${password}`, null, null, page);
     
     // Launch browser
     addDebugStep('Browser', 'info', 'Launching browser...');
@@ -191,30 +201,68 @@ async function createOutlookAccount(email, password, io = null) {
     // Wait for birthdate page
     await page.waitForSelector('input[name="BirthYear"]', { timeout: 10000 });
     
-    // Select month (first option - January)
+    // Select month (January)
     addDebugStep('Birthdate Entry', 'info', 'Selecting month...');
-    await page.click('button[name="BirthMonth"]');
-    await randomHumanDelay(page, 500, 1000);
     
-    // Try to select January (first option)
+    // First, try to find and click the month dropdown
     try {
-      await page.click('button[name="BirthMonth"] option:first-child');
+      await page.click('button[name="BirthMonth"]');
+      await randomHumanDelay(page, 1000, 1500);
+      
+      // Look for January option in the dropdown
+      const monthSelected = await page.evaluate(() => {
+        // Try to find January option by text
+        const options = Array.from(document.querySelectorAll('[role="option"], option, [data-value]'));
+        for (const option of options) {
+          const text = option.textContent?.toLowerCase() || '';
+          if (text.includes('january') || text.includes('jan')) {
+            option.click();
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (!monthSelected) {
+        // Fallback: try to click first option
+        await page.click('[role="option"]:first-child');
+      }
+      
+      addDebugStep('Birthdate Entry', 'success', 'Month selected successfully');
     } catch (e) {
-      // Alternative approach - select by text
-      await page.select('select[name="BirthMonth"]', '1');
+      addDebugStep('Birthdate Entry', 'warning', `Month selection failed: ${e.message}`);
     }
+    
+    await randomHumanDelay(page, 500, 1000);
     
     // Select day (1)
     addDebugStep('Birthdate Entry', 'info', 'Selecting day...');
-    await page.click('button[name="BirthDay"]');
-    await randomHumanDelay(page, 500, 1000);
     
-    // Try to select day 1
     try {
-      await page.click('button[name="BirthDay"] option[value="1"]');
+      await page.click('button[name="BirthDay"]');
+      await randomHumanDelay(page, 1000, 1500);
+      
+      // Look for day 1 option
+      const daySelected = await page.evaluate(() => {
+        const options = Array.from(document.querySelectorAll('[role="option"], option, [data-value]'));
+        for (const option of options) {
+          const text = option.textContent?.trim() || '';
+          if (text === '1') {
+            option.click();
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (!daySelected) {
+        // Fallback: try to click first option
+        await page.click('[role="option"]:first-child');
+      }
+      
+      addDebugStep('Birthdate Entry', 'success', 'Day selected successfully');
     } catch (e) {
-      // Alternative approach - select by text
-      await page.select('select[name="BirthDay"]', '1');
+      addDebugStep('Birthdate Entry', 'warning', `Day selection failed: ${e.message}`);
     }
     
     // Enter year (1986)

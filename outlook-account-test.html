@@ -203,6 +203,21 @@
         .log-entry:last-child {
             border-bottom: none;
         }
+        
+        .log-screenshot {
+            margin-top: 8px;
+            padding: 4px;
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        
+        .log-screenshot img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #444;
+            border-radius: 4px;
+            display: block;
+        }
 
         .log-timestamp {
             color: #6c757d;
@@ -431,10 +446,22 @@
             const type = entry.type || 'info';
             const message = entry.message || '';
             
+            // Create screenshot HTML if available
+            let screenshotHtml = '';
+            if (entry.screenshot) {
+                screenshotHtml = `
+                    <div class="log-screenshot" style="margin-top: 8px;">
+                        <img src="/screenshots/${entry.screenshot}" alt="Screenshot" 
+                             style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; display: block;">
+                    </div>
+                `;
+            }
+            
             logElement.innerHTML = `
                 <span class="log-timestamp">[${timestamp}]</span>
                 <span class="log-step">${step}</span>
                 <span class="log-type-${type}">${message}</span>
+                ${screenshotHtml}
             `;
             
             logsContainer.appendChild(logElement);
