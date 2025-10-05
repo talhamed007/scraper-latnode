@@ -2011,51 +2011,174 @@ async function createKieAccount(io, email, password) {
                 // Wait a moment for the popup to load
                 await sleep(2000);
                 
-                // Take screenshot of the new popup to see what it is
-                await takeScreenshot('New-Popup-Detected', newPage);
-                addDebugStep('Microsoft Login Popup', 'info', 'Screenshot taken of new popup window');
+                // Analyze popup content without taking screenshots (to avoid timeout issues)
+                addDebugStep('Microsoft Login Popup', 'info', 'Analyzing popup content...');
                 
-                // Get popup details for debugging
-                const popupDetails = await newPage.evaluate(() => {
-                  return {
-                    url: window.location.href,
-                    title: document.title,
-                    hasEmailInput: document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]').length > 0,
-                    hasPasswordInput: document.querySelectorAll('input[name="passwd"], input[type="password"]').length > 0,
-                    hasMicrosoftElements: document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]').length > 0,
-                    bodyText: document.body.textContent.substring(0, 200).toLowerCase(),
-                    allInputs: Array.from(document.querySelectorAll('input')).map(input => ({
-                      name: input.name,
-                      id: input.id,
-                      type: input.type,
-                      placeholder: input.placeholder
-                    }))
+                // Get comprehensive popup details for debugging with timeout protection
+                let popupDetails;
+                try {
+                  popupDetails = await Promise.race([
+                    newPage.evaluate(() => {
+                      // Get all text content
+                      const allText = document.body.textContent || '';
+                      const visibleText = allText.replace(/\s+/g, ' ').trim();
+                      
+                      // Get all buttons and clickable elements
+                      const buttons = Array.from(document.querySelectorAll('button, a, [role="button"], [onclick], input[type="submit"], input[type="button"]'));
+                      const buttonDetails = buttons.map(btn => ({
+                        tagName: btn.tagName,
+                        text: btn.textContent?.trim() || '',
+                        className: btn.className,
+                        id: btn.id,
+                        type: btn.type || '',
+                        visible: btn.offsetParent !== null,
+                        disabled: btn.disabled || false
+                      })).filter(btn => btn.text || btn.className || btn.id);
+                      
+                      // Get all input fields
+                      const inputs = Array.from(document.querySelectorAll('input, textarea, select'));
+                      const inputDetails = inputs.map(input => ({
+                        tagName: input.tagName,
+                        type: input.type,
+                        name: input.name,
+                        id: input.id,
+                        placeholder: input.placeholder,
+                        value: input.value,
+                        visible: input.offsetParent !== null,
+                        required: input.required || false
+                      }));
+                      
+                      // Get all links
+                      const links = Array.from(document.querySelectorAll('a'));
+                      const linkDetails = links.map(link => ({
+                        text: link.textContent?.trim() || '',
+                        href: link.href,
+                        className: link.className,
+                        visible: link.offsetParent !== null
+                      })).filter(link => link.text);
+                      
+                      // Check for specific Microsoft elements
+                      const microsoftElements = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"], [data-testid*="microsoft"]');
+                      const microsoftDetails = Array.from(microsoftElements).map(el => ({
+                        tagName: el.tagName,
+                        className: el.className,
+                        text: el.textContent?.trim() || '',
+                        id: el.id
+                      }));
+                      
+                      return {
+                        url: window.location.href,
+                        title: document.title,
+                        domain: window.location.hostname,
+                        pathname: window.location.pathname,
+                        visibleText: visibleText.substring(0, 500),
+                        allText: allText.substring(0, 1000),
+                        buttonCount: buttons.length,
+                        buttons: buttonDetails,
+                        inputCount: inputs.length,
+                        inputs: inputDetails,
+                        linkCount: links.length,
+                        links: linkDetails,
+                        microsoftElementCount: microsoftElements.length,
+                        microsoftElements: microsoftDetails,
+                        hasEmailInput: document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]').length > 0,
+                        hasPasswordInput: document.querySelectorAll('input[name="passwd"], input[type="password"]').length > 0,
+                        hasMicrosoftText: visibleText.toLowerCase().includes('microsoft') || visibleText.toLowerCase().includes('sign in') || visibleText.toLowerCase().includes('login'),
+                        pageHeight: document.body.scrollHeight,
+                        pageWidth: document.body.scrollWidth
+                      };
+                    }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Popup analysis timeout')), 10000))
+                  ]);
+                } catch (analysisError) {
+                  addDebugStep('Microsoft Login Popup', 'warning', `Popup analysis failed: ${analysisError.message}`);
+                  // Create minimal popup details if analysis fails
+                  popupDetails = {
+                    url: 'unknown',
+                    title: 'unknown',
+                    domain: 'unknown',
+                    hasEmailInput: false,
+                    hasPasswordInput: false,
+                    hasMicrosoftText: false,
+                    buttonCount: 0,
+                    inputCount: 0,
+                    microsoftElementCount: 0
                   };
-                });
+                }
                 
-                addDebugStep('Microsoft Login Popup', 'info', `Popup details: URL=${popupDetails.url}, Title=${popupDetails.title}, EmailInput=${popupDetails.hasEmailInput}, PasswordInput=${popupDetails.hasPasswordInput}`);
+                addDebugStep('Microsoft Login Popup', 'info', `Popup Analysis Complete:`);
+                addDebugStep('Microsoft Login Popup', 'info', `- URL: ${popupDetails.url}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Title: ${popupDetails.title}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Domain: ${popupDetails.domain}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Buttons Found: ${popupDetails.buttonCount}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Inputs Found: ${popupDetails.inputCount}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Links Found: ${popupDetails.linkCount}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Microsoft Elements: ${popupDetails.microsoftElementCount}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Has Email Input: ${popupDetails.hasEmailInput}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Has Password Input: ${popupDetails.hasPasswordInput}`);
+                addDebugStep('Microsoft Login Popup', 'info', `- Has Microsoft Text: ${popupDetails.hasMicrosoftText}`);
                 
-                // Check if this is the Microsoft login popup
-                const isMicrosoftPopup = await newPage.evaluate(() => {
-                  const microsoftElements = document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]');
-                  const hasMicrosoftLogin = microsoftElements.length > 0;
-                  
-                  const microsoftPageIndicators = document.querySelectorAll('[class*="microsoft"], [class*="login"], [class*="signin"]');
-                  const hasMicrosoftPage = microsoftPageIndicators.length > 0;
-                  
-                  const microsoftText = document.body.textContent.toLowerCase();
-                  const hasMicrosoftText = microsoftText.includes('microsoft') || microsoftText.includes('outlook') || microsoftText.includes('account') || microsoftText.includes('sign in');
-                  
-                  return hasMicrosoftLogin || hasMicrosoftPage || hasMicrosoftText;
-                });
+                // Log button details
+                if (popupDetails.buttons.length > 0) {
+                  addDebugStep('Microsoft Login Popup', 'info', `Buttons found:`);
+                  popupDetails.buttons.forEach((btn, index) => {
+                    addDebugStep('Microsoft Login Popup', 'info', `  ${index + 1}. ${btn.tagName} - "${btn.text}" (${btn.className}) - Visible: ${btn.visible} - Disabled: ${btn.disabled}`);
+                  });
+                }
+                
+                // Log input details
+                if (popupDetails.inputs.length > 0) {
+                  addDebugStep('Microsoft Login Popup', 'info', `Inputs found:`);
+                  popupDetails.inputs.forEach((input, index) => {
+                    addDebugStep('Microsoft Login Popup', 'info', `  ${index + 1}. ${input.tagName}[${input.type}] - Name: "${input.name}" - ID: "${input.id}" - Placeholder: "${input.placeholder}" - Visible: ${input.visible}`);
+                  });
+                }
+                
+                // Log visible text content
+                if (popupDetails.visibleText) {
+                  addDebugStep('Microsoft Login Popup', 'info', `Visible text content: "${popupDetails.visibleText}"`);
+                }
+                
+                // Determine if this is Microsoft login popup based on detailed analysis
+                const isMicrosoftPopup = popupDetails.hasEmailInput || 
+                                       popupDetails.hasMicrosoftText || 
+                                       popupDetails.microsoftElementCount > 0 ||
+                                       popupDetails.domain.includes('microsoft') ||
+                                       popupDetails.domain.includes('live.com') ||
+                                       popupDetails.domain.includes('login.live.com') ||
+                                       popupDetails.url.includes('microsoft') ||
+                                       popupDetails.url.includes('live.com');
+                
+                addDebugStep('Microsoft Login Popup', 'info', `Microsoft popup detection result: ${isMicrosoftPopup}`);
+                addDebugStep('Microsoft Login Popup', 'info', `Detection criteria: EmailInput=${popupDetails.hasEmailInput}, MicrosoftText=${popupDetails.hasMicrosoftText}, MicrosoftElements=${popupDetails.microsoftElementCount}, Domain=${popupDetails.domain}`);
                 
                 if (isMicrosoftPopup) {
                   addDebugStep('Microsoft Login Popup', 'success', 'Microsoft login popup confirmed, switching to popup window...');
-                  await takeScreenshot('Microsoft-Popup-Confirmed', newPage);
+                  
+                  // Try to take screenshot with short timeout, but don't fail if it times out
+                  try {
+                    await Promise.race([
+                      takeScreenshot('Microsoft-Popup-Confirmed', newPage),
+                      new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 5000))
+                    ]);
+                  } catch (screenshotError) {
+                    addDebugStep('Microsoft Login Popup', 'warning', `Screenshot failed but continuing: ${screenshotError.message}`);
+                  }
+                  
                   resolve(newPage);
                 } else {
                   addDebugStep('Microsoft Login Popup', 'warning', `Popup detected but not Microsoft login. URL: ${popupDetails.url}, Title: ${popupDetails.title}`);
-                  await takeScreenshot('Non-Microsoft-Popup', newPage);
+                  
+                  // Try to take screenshot with short timeout, but don't fail if it times out
+                  try {
+                    await Promise.race([
+                      takeScreenshot('Non-Microsoft-Popup', newPage),
+                      new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 5000))
+                    ]);
+                  } catch (screenshotError) {
+                    addDebugStep('Microsoft Login Popup', 'warning', `Screenshot failed but continuing: ${screenshotError.message}`);
+                  }
+                  
                   // Close this popup if it's not Microsoft login
                   try {
                     await newPage.close();
