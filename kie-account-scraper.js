@@ -171,7 +171,14 @@ async function handleAppAccessStep(targetPage) {
   // First, scroll down to make sure the Accept button is visible
   addDebugStep('App Access', 'info', 'Scrolling down to find Accept button...');
   await targetPage.evaluate(() => {
-    window.scrollTo(0, document.body.scrollHeight);
+    // Try to scroll the specific scrollable container first
+    const scrollableContainer = document.querySelector('[data-scrollable="true"]');
+    if (scrollableContainer) {
+      scrollableContainer.scrollTop = scrollableContainer.scrollHeight;
+    } else {
+      // Fallback to window scroll
+      window.scrollTo(0, document.body.scrollHeight);
+    }
   });
   
   // Wait a moment for the scroll to complete
@@ -179,6 +186,18 @@ async function handleAppAccessStep(targetPage) {
   
   // Take a screenshot to see the current state after scrolling
   await takeScreenshot('App-Access-After-Scroll', targetPage);
+  
+  // Check if Accept button is visible after scrolling
+  const buttonVisibility = await targetPage.evaluate(() => {
+    const acceptButton = document.querySelector('button[data-testid="appConsentPrimaryButton"]');
+    return {
+      exists: !!acceptButton,
+      visible: acceptButton ? acceptButton.offsetParent !== null : false,
+      inViewport: acceptButton ? acceptButton.getBoundingClientRect().top >= 0 && acceptButton.getBoundingClientRect().bottom <= window.innerHeight : false
+    };
+  });
+  
+  addDebugStep('App Access', 'info', `Accept button visibility after scroll: ${JSON.stringify(buttonVisibility)}`);
   
   // Try multiple selectors for Accept button, including the specific data-testid
   const acceptSelectors = [
@@ -197,6 +216,18 @@ async function handleAppAccessStep(targetPage) {
   try {
     addDebugStep('App Access', 'info', 'Trying direct JavaScript click on Accept button...');
     
+    // First scroll the button into view
+    await targetPage.evaluate(() => {
+      const acceptButton = document.querySelector('button[data-testid="appConsentPrimaryButton"]');
+      if (acceptButton) {
+        acceptButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+    
+    // Wait for scroll to complete
+    await randomHumanDelay(targetPage, 1000, 1500);
+    
+    // Now try to click the button
     const clicked = await targetPage.evaluate(() => {
       // Try the specific data-testid first
       const acceptButton = document.querySelector('button[data-testid="appConsentPrimaryButton"]');
