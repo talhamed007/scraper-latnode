@@ -127,16 +127,19 @@ async function handleStaySignedInStep(targetPage) {
               const title = await page.title();
               addDebugStep('Stay Signed In', 'info', `Checking page ${i}: ${url} - ${title}`);
               
-              // Look for any page that's not the original Kie.ai page or blank page
+              // Look for any page that's not blank and not the old login page
               if (url !== 'about:blank' && 
-                  !url.includes('kie.ai') && 
                   !url.includes('login.live.com/ppsecure/post.srf') &&
                   (url.includes('account.live.com') || 
                    url.includes('Consent') || 
                    url.includes('appConsent') ||
                    url.includes('login.live.com') ||
+                   url.includes('kie.ai') ||
+                   url.includes('login.microsoftonline.com') ||
                    title.includes('app access') ||
-                   title.includes('Let this app'))) {
+                   title.includes('Let this app') ||
+                   title.includes('Kie.ai') ||
+                   title.includes('One API for All'))) {
                 newTargetPage = page;
                 addDebugStep('Stay Signed In', 'success', `Found new page: ${url} - ${title}`);
                 break;
@@ -151,7 +154,15 @@ async function handleStaySignedInStep(targetPage) {
             addDebugStep('Stay Signed In', 'success', 'Page context recovered successfully');
             await takeScreenshot('After-Yes-Navigation-Recovered', targetPage);
           } else {
-            addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, continuing with current page');
+            addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, trying to navigate to dashboard...');
+            // Try to navigate to dashboard as fallback
+            try {
+              await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+              addDebugStep('Stay Signed In', 'success', 'Successfully navigated to dashboard as fallback');
+              await takeScreenshot('Dashboard-Fallback', targetPage);
+            } catch (dashboardError) {
+              addDebugStep('Stay Signed In', 'error', `Dashboard fallback failed: ${dashboardError.message}`);
+            }
           }
         } catch (recoveryError) {
           addDebugStep('Stay Signed In', 'warning', `Page recovery failed: ${recoveryError.message}`);
@@ -201,16 +212,19 @@ async function handleStaySignedInStep(targetPage) {
                 const title = await page.title();
                 addDebugStep('Stay Signed In', 'info', `Checking page ${i}: ${url} - ${title}`);
                 
-                // Look for any page that's not the original Kie.ai page or blank page
+                // Look for any page that's not blank and not the old login page
                 if (url !== 'about:blank' && 
-                    !url.includes('kie.ai') && 
                     !url.includes('login.live.com/ppsecure/post.srf') &&
                     (url.includes('account.live.com') || 
                      url.includes('Consent') || 
                      url.includes('appConsent') ||
                      url.includes('login.live.com') ||
+                     url.includes('kie.ai') ||
+                     url.includes('login.microsoftonline.com') ||
                      title.includes('app access') ||
-                     title.includes('Let this app'))) {
+                     title.includes('Let this app') ||
+                     title.includes('Kie.ai') ||
+                     title.includes('One API for All'))) {
                   newTargetPage = page;
                   addDebugStep('Stay Signed In', 'success', `Found new page: ${url} - ${title}`);
                   break;
@@ -225,7 +239,15 @@ async function handleStaySignedInStep(targetPage) {
               addDebugStep('Stay Signed In', 'success', 'Page context recovered successfully');
               await takeScreenshot('After-Yes-Navigation-Recovered', targetPage);
             } else {
-              addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, continuing with current page');
+              addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, trying to navigate to dashboard...');
+              // Try to navigate to dashboard as fallback
+              try {
+                await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+                addDebugStep('Stay Signed In', 'success', 'Successfully navigated to dashboard as fallback');
+                await takeScreenshot('Dashboard-Fallback', targetPage);
+              } catch (dashboardError) {
+                addDebugStep('Stay Signed In', 'error', `Dashboard fallback failed: ${dashboardError.message}`);
+              }
             }
           } catch (recoveryError) {
             addDebugStep('Stay Signed In', 'warning', `Page recovery failed: ${recoveryError.message}`);
