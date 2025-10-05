@@ -226,75 +226,57 @@ async function handleStaySignedInStep(targetPage) {
             const currentTitle = await targetPage.title();
             
             if (currentUrl.includes('kie.ai') && !currentUrl.includes('dashboard')) {
-              addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - checking for human verification popup');
+              addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - waiting for page to load fully');
               
-              // Check for human verification popup first
+              // Wait for page to load completely
+              await randomHumanDelay(targetPage, 3000, 5000);
+              addDebugStep('Stay Signed In', 'info', 'Page loaded, checking for login popup...');
+              
+              // Check for "Unleash AI Power" popup with Microsoft login
               try {
-                const humanVerification = await targetPage.evaluate(() => {
-                  const popup = document.querySelector('[class*="popup"], [class*="modal"], [class*="verification"]');
-                  const humanCheckbox = document.querySelector('input[type="checkbox"][id*="human"], input[type="checkbox"][class*="human"], input[type="checkbox"][name*="human"]');
-                  const hcaptcha = document.querySelector('[class*="hcaptcha"], [id*="hcaptcha"]');
-                  const humanText = document.body.textContent.includes('human') || document.body.textContent.includes('Human');
-                  const verificationText = document.body.textContent.includes('verification') || document.body.textContent.includes('Please complete');
-                  
-                  return {
-                    popupExists: !!popup,
-                    humanCheckbox: !!humanCheckbox,
-                    hcaptcha: !!hcaptcha,
-                    humanText: humanText,
-                    verificationText: verificationText,
-                    allCheckboxes: Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => ({
-                      id: cb.id,
-                      name: cb.name,
-                      className: cb.className,
-                      checked: cb.checked,
-                      visible: cb.offsetParent !== null
-                    }))
-                  };
+                await targetPage.waitForSelector('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft"), [data-testid*="microsoft"], [class*="microsoft"]', { timeout: 5000 });
+                addDebugStep('Stay Signed In', 'success', 'Unleash AI Power popup detected with Microsoft login');
+                await takeScreenshot('Unleash-AI-Power-Popup', targetPage);
+                
+                // Click "Sign in with Microsoft" button
+                await targetPage.click('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft"), [data-testid*="microsoft"], [class*="microsoft"]');
+                addDebugStep('Stay Signed In', 'success', 'Clicked Sign in with Microsoft in popup');
+                await takeScreenshot('Microsoft-Login-From-Popup', targetPage);
+                
+              } catch (popupError) {
+                addDebugStep('Stay Signed In', 'info', 'No Unleash AI Power popup found - looking for Get Started button');
+                
+                // Look for Get Started button in top right corner
+                addDebugStep('Stay Signed In', 'info', 'Looking for Get Started button in top right corner...');
+                
+                // Try to find Get Started button
+                const getStartedFound = await targetPage.evaluate(() => {
+                  const buttons = Array.from(document.querySelectorAll('button, a'));
+                  for (const button of buttons) {
+                    const text = button.textContent?.toLowerCase() || '';
+                    if (text.includes('get started') || text.includes('getstarted')) {
+                      return {
+                        found: true,
+                        text: button.textContent,
+                        tagName: button.tagName,
+                        className: button.className
+                      };
+                    }
+                  }
+                  return { found: false };
                 });
                 
-                addDebugStep('Stay Signed In', 'info', `Human verification check: ${JSON.stringify(humanVerification)}`);
-                
-                if (humanVerification.humanCheckbox || humanVerification.hcaptcha || humanVerification.verificationText) {
-                  addDebugStep('Stay Signed In', 'success', 'Human verification popup detected on main page');
-                  await takeScreenshot('Human-Verification-Popup-Main', targetPage);
+                if (getStartedFound.found) {
+                  addDebugStep('Stay Signed In', 'success', `Found Get Started button: ${getStartedFound.text}`);
                   
-                  // Try to find and click the human checkbox
-                  const checkboxClicked = await targetPage.evaluate(() => {
-                    const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
-                    for (const checkbox of checkboxes) {
-                      if (checkbox.id.includes('human') || 
-                          checkbox.name.includes('human') || 
-                          checkbox.className.includes('human') ||
-                          checkbox.closest('label')?.textContent?.toLowerCase().includes('human')) {
-                        checkbox.click();
-                        return true;
-                      }
-                    }
-                    return false;
-                  });
+                  // Click Get Started button
+                  await targetPage.click('button:contains("Get Started"), a:contains("Get Started")');
+                  addDebugStep('Stay Signed In', 'success', 'Clicked Get Started button');
+                  await takeScreenshot('Get-Started-After-Recovery', targetPage);
                   
-                  if (checkboxClicked) {
-                    addDebugStep('Stay Signed In', 'success', 'Clicked human verification checkbox on main page');
-                    await takeScreenshot('Human-Verification-Checked-Main', targetPage);
-                    
-                    // Wait for automatic redirect
-                    addDebugStep('Stay Signed In', 'info', 'Waiting for automatic redirect after verification...');
-                    try {
-                      await targetPage.waitForNavigation({ timeout: 15000 });
-                      addDebugStep('Stay Signed In', 'success', 'Redirected after human verification');
-                      await takeScreenshot('After-Human-Verification-Main', targetPage);
-                    } catch (navError) {
-                      addDebugStep('Stay Signed In', 'warning', `Navigation timeout after verification: ${navError.message}`);
-                    }
-                  } else {
-                    addDebugStep('Stay Signed In', 'warning', 'Human verification checkbox not found on main page');
-                  }
                 } else {
-                  addDebugStep('Stay Signed In', 'info', 'No human verification popup detected on main page');
+                  addDebugStep('Stay Signed In', 'warning', 'Get Started button not found on Kie.ai page');
                 }
-              } catch (verificationError) {
-                addDebugStep('Stay Signed In', 'warning', `Human verification check failed: ${verificationError.message}`);
               }
               
               // Try to navigate to dashboard to see if we're logged in
