@@ -154,6 +154,25 @@ async function handleStaySignedInStep(targetPage) {
             targetPage = newTargetPage;
             addDebugStep('Stay Signed In', 'success', 'Page context recovered successfully');
             await takeScreenshot('After-Yes-Navigation-Recovered', targetPage);
+            
+            // Check if we're on the Kie.ai main page - this might mean authentication is complete
+            const currentUrl = await targetPage.url();
+            const currentTitle = await targetPage.title();
+            
+            if (currentUrl.includes('kie.ai') && !currentUrl.includes('dashboard')) {
+              addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - checking if authentication is complete');
+              
+              // Try to navigate to dashboard to see if we're logged in
+              try {
+                await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+                await takeScreenshot('Dashboard-After-Recovery', targetPage);
+                addDebugStep('Stay Signed In', 'success', 'Successfully navigated to dashboard - authentication complete');
+                return { success: true, message: 'Account created successfully' };
+              } catch (dashboardError) {
+                addDebugStep('Stay Signed In', 'warning', `Dashboard navigation failed: ${dashboardError.message}`);
+                // Continue with normal flow
+              }
+            }
           } else {
             addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, trying to navigate to dashboard...');
             // Try to navigate to dashboard as fallback
@@ -240,6 +259,25 @@ async function handleStaySignedInStep(targetPage) {
               targetPage = newTargetPage;
               addDebugStep('Stay Signed In', 'success', 'Page context recovered successfully');
               await takeScreenshot('After-Yes-Navigation-Recovered', targetPage);
+              
+              // Check if we're on the Kie.ai main page - this might mean authentication is complete
+              const currentUrl = await targetPage.url();
+              const currentTitle = await targetPage.title();
+              
+              if (currentUrl.includes('kie.ai') && !currentUrl.includes('dashboard')) {
+                addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - checking if authentication is complete');
+                
+                // Try to navigate to dashboard to see if we're logged in
+                try {
+                  await targetPage.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2' });
+                  await takeScreenshot('Dashboard-After-Recovery', targetPage);
+                  addDebugStep('Stay Signed In', 'success', 'Successfully navigated to dashboard - authentication complete');
+                  return { success: true, message: 'Account created successfully' };
+                } catch (dashboardError) {
+                  addDebugStep('Stay Signed In', 'warning', `Dashboard navigation failed: ${dashboardError.message}`);
+                  // Continue with normal flow
+                }
+              }
             } else {
               addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, trying to navigate to dashboard...');
               // Try to navigate to dashboard as fallback
