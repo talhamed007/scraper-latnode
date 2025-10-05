@@ -613,6 +613,52 @@ async function handleAppAccessStep(targetPage) {
     // Continue anyway, the page might have already navigated
   }
   
+  // After Accept click, the permission page closes and we need to go back to the original Kie.ai page
+  addDebugStep('App Access', 'info', 'Permission page closed - returning to original Kie.ai page...');
+  
+  // Try to find the original Kie.ai page among all open pages
+  let originalKiePage = null;
+  try {
+    const allPages = await targetPage.browser().pages();
+    addDebugStep('App Access', 'info', `Found ${allPages.length} open pages, looking for original Kie.ai page...`);
+    
+    for (const page of allPages) {
+      try {
+        const url = await page.url();
+        const title = await page.title();
+        addDebugStep('App Access', 'info', `Checking page: ${url} - ${title}`);
+        
+        // Look for the original Kie.ai main page
+        if (url.includes('kie.ai') && !url.includes('dashboard') && !url.includes('login')) {
+          originalKiePage = page;
+          addDebugStep('App Access', 'success', `Found original Kie.ai page: ${url}`);
+          break;
+        }
+      } catch (pageError) {
+        addDebugStep('App Access', 'warning', `Could not check page: ${pageError.message}`);
+      }
+    }
+    
+    if (originalKiePage) {
+      // Switch to the original Kie.ai page
+      targetPage = originalKiePage;
+      addDebugStep('App Access', 'success', 'Switched to original Kie.ai page');
+      await takeScreenshot('Original-Kie-Page-After-Accept', targetPage);
+    } else {
+      addDebugStep('App Access', 'warning', 'Original Kie.ai page not found, trying to navigate to Kie.ai...');
+      // If we can't find the original page, try to navigate to Kie.ai
+      try {
+        await targetPage.goto('https://kie.ai', { waitUntil: 'networkidle2' });
+        addDebugStep('App Access', 'success', 'Navigated to Kie.ai main page');
+        await takeScreenshot('Kie-Main-Page-After-Accept', targetPage);
+      } catch (navError) {
+        addDebugStep('App Access', 'error', `Failed to navigate to Kie.ai: ${navError.message}`);
+      }
+    }
+  } catch (browserError) {
+    addDebugStep('App Access', 'error', `Failed to find original page: ${browserError.message}`);
+  }
+  
   // Check for human verification popup after Accept
   addDebugStep('Human Verification', 'info', 'Checking for human verification popup...');
   try {
