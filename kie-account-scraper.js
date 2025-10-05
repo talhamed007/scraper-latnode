@@ -235,39 +235,113 @@ async function handleStaySignedInStep(targetPage) {
               // Check for "Sign in with Microsoft" popup (sometimes appears at bottom of page)
               addDebugStep('Stay Signed In', 'info', 'Looking for Sign in with Microsoft popup...');
               
-              // First check if popup is visible without scrolling
-              let microsoftPopupFound = false;
+            // First check if popup is visible without scrolling
+            let microsoftPopupFound = false;
+            try {
+              // Use proper XPath selectors for Microsoft popup detection
+              await targetPage.waitForXPath('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]', { timeout: 3000 });
+              addDebugStep('Stay Signed In', 'success', 'Sign in with Microsoft popup detected at top');
+              await takeScreenshot('Microsoft-Popup-Top', targetPage);
+              microsoftPopupFound = true;
+            } catch (topError) {
+              addDebugStep('Stay Signed In', 'info', 'No Microsoft popup found at top - scrolling down to check bottom of page');
+              
+              // Scroll down to look for popup at bottom of page
+              await targetPage.evaluate(() => {
+                window.scrollTo(0, document.body.scrollHeight);
+              });
+              await randomHumanDelay(targetPage, 2000, 3000);
+              await takeScreenshot('Scrolled-Down-Looking-For-Popup', targetPage);
+              
+              // Check again after scrolling with multiple methods
               try {
-                await targetPage.waitForSelector('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft"), [data-testid*="microsoft"], [class*="microsoft"]', { timeout: 3000 });
-                addDebugStep('Stay Signed In', 'success', 'Sign in with Microsoft popup detected at top');
-                await takeScreenshot('Microsoft-Popup-Top', targetPage);
+                // Try XPath first
+                await targetPage.waitForXPath('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]', { timeout: 3000 });
+                addDebugStep('Stay Signed In', 'success', 'Sign in with Microsoft popup detected at bottom after scrolling');
+                await takeScreenshot('Microsoft-Popup-Bottom', targetPage);
                 microsoftPopupFound = true;
-              } catch (topError) {
-                addDebugStep('Stay Signed In', 'info', 'No Microsoft popup found at top - scrolling down to check bottom of page');
+              } catch (bottomError) {
+                // Try alternative detection methods
+                addDebugStep('Stay Signed In', 'info', 'XPath detection failed, trying alternative methods...');
                 
-                // Scroll down to look for popup at bottom of page
-                await targetPage.evaluate(() => {
-                  window.scrollTo(0, document.body.scrollHeight);
+                // Check for any popup or modal elements
+                const popupDetected = await targetPage.evaluate(() => {
+                  // Look for common popup indicators
+                  const popups = document.querySelectorAll('[role="dialog"], [class*="popup"], [class*="modal"], [class*="overlay"], [class*="popup"], [class*="dialog"]');
+                  if (popups.length > 0) {
+                    return {
+                      found: true,
+                      count: popups.length,
+                      elements: Array.from(popups).map(el => ({
+                        tagName: el.tagName,
+                        className: el.className,
+                        textContent: el.textContent?.substring(0, 100)
+                      }))
+                    };
+                  }
+                  
+                  // Look for Microsoft-related text anywhere on page
+                  const microsoftElements = document.querySelectorAll('*');
+                  for (const el of microsoftElements) {
+                    const text = el.textContent?.toLowerCase() || '';
+                    if (text.includes('sign in with microsoft') || text.includes('inloggen met microsoft') || text.includes('microsoft')) {
+                      return {
+                        found: true,
+                        element: {
+                          tagName: el.tagName,
+                          className: el.className,
+                          textContent: el.textContent?.substring(0, 100)
+                        }
+                      };
+                    }
+                  }
+                  
+                  return { found: false };
                 });
-                await randomHumanDelay(targetPage, 2000, 3000);
-                await takeScreenshot('Scrolled-Down-Looking-For-Popup', targetPage);
                 
-                // Check again after scrolling
-                try {
-                  await targetPage.waitForSelector('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft"), [data-testid*="microsoft"], [class*="microsoft"]', { timeout: 3000 });
-                  addDebugStep('Stay Signed In', 'success', 'Sign in with Microsoft popup detected at bottom after scrolling');
-                  await takeScreenshot('Microsoft-Popup-Bottom', targetPage);
+                if (popupDetected.found) {
+                  addDebugStep('Stay Signed In', 'success', `Microsoft popup detected using alternative method: ${JSON.stringify(popupDetected)}`);
+                  await takeScreenshot('Microsoft-Popup-Alternative', targetPage);
                   microsoftPopupFound = true;
-                } catch (bottomError) {
+                } else {
                   addDebugStep('Stay Signed In', 'info', 'No Microsoft popup found at bottom either');
                 }
               }
+            }
               
               if (microsoftPopupFound) {
-                // Click "Sign in with Microsoft" button
+                // Click "Sign in with Microsoft" button using proper selectors
                 addDebugStep('Stay Signed In', 'info', 'Clicking Sign in with Microsoft button...');
-                await targetPage.click('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft"), [data-testid*="microsoft"], [class*="microsoft"]');
-                addDebugStep('Stay Signed In', 'success', 'Clicked Sign in with Microsoft button');
+                
+                try {
+                  // Try XPath first
+                  await targetPage.waitForXPath('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]', { timeout: 5000 });
+                  await targetPage.click('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]');
+                  addDebugStep('Stay Signed In', 'success', 'Clicked Sign in with Microsoft button using XPath');
+                } catch (xpathError) {
+                  // Fallback to evaluate method
+                  addDebugStep('Stay Signed In', 'info', 'XPath click failed, trying evaluate method...');
+                  
+                  const clicked = await targetPage.evaluate(() => {
+                    // Look for Microsoft button by text content
+                    const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                    for (const button of buttons) {
+                      const text = button.textContent?.toLowerCase() || '';
+                      if (text.includes('sign in with microsoft') || text.includes('inloggen met microsoft') || text.includes('microsoft')) {
+                        button.click();
+                        return true;
+                      }
+                    }
+                    return false;
+                  });
+                  
+                  if (clicked) {
+                    addDebugStep('Stay Signed In', 'success', 'Clicked Sign in with Microsoft button using evaluate method');
+                  } else {
+                    addDebugStep('Stay Signed In', 'warning', 'Could not click Microsoft button with any method');
+                  }
+                }
+                
                 await takeScreenshot('Microsoft-Login-Clicked', targetPage);
               } else {
                 // No Microsoft popup found, look for Get Started button
@@ -302,12 +376,76 @@ async function handleStaySignedInStep(targetPage) {
                 if (getStartedFound.found) {
                   addDebugStep('Stay Signed In', 'success', `Found Get Started button: ${getStartedFound.text}`);
                   
-                  // Click Get Started button using XPath to avoid selector issues
+                  // Click Get Started button using proper selectors
                   try {
-                    await targetPage.waitForXPath('//button[contains(text(), "Get Started")] | //a[contains(text(), "Get Started")]', { timeout: 5000 });
-                    await targetPage.click('//button[contains(text(), "Get Started")] | //a[contains(text(), "Get Started")]');
-                    addDebugStep('Stay Signed In', 'success', 'Clicked Get Started button');
-                    await takeScreenshot('Get-Started-After-Recovery', targetPage);
+                    // Try multiple selectors for Get Started button
+                    const getStartedSelectors = [
+                      'button:contains("Get Started")',
+                      'a:contains("Get Started")',
+                      'button[class*="Get Started"]',
+                      'a[class*="Get Started"]',
+                      '[data-testid*="get-started"]',
+                      '[data-testid*="getStarted"]'
+                    ];
+                    
+                    let getStartedButton = null;
+                    let usedSelector = '';
+                    
+                    for (const selector of getStartedSelectors) {
+                      try {
+                        if (selector.includes(':contains')) {
+                          // Use XPath for text-based selectors
+                          const xpathSelector = selector.includes('button') ? 
+                            '//button[contains(text(), "Get Started")]' : 
+                            '//a[contains(text(), "Get Started")]';
+                          getStartedButton = await targetPage.waitForXPath(xpathSelector, { timeout: 3000 });
+                        } else {
+                          getStartedButton = await targetPage.waitForSelector(selector, { timeout: 3000 });
+                        }
+                        
+                        if (getStartedButton) {
+                          usedSelector = selector;
+                          addDebugStep('Stay Signed In', 'info', `Found Get Started button with selector: ${selector}`);
+                          break;
+                        }
+                      } catch (e) {
+                        // Continue to next selector
+                        addDebugStep('Stay Signed In', 'info', `Selector ${selector} failed: ${e.message}`);
+                      }
+                    }
+                    
+                    if (getStartedButton) {
+                      // Click the found button
+                      if (usedSelector.includes(':contains') || usedSelector.includes('//')) {
+                        await getStartedButton.click();
+                      } else {
+                        await targetPage.click(usedSelector);
+                      }
+                      addDebugStep('Stay Signed In', 'success', `Clicked Get Started button using selector: ${usedSelector}`);
+                      await takeScreenshot('Get-Started-After-Recovery', targetPage);
+                    } else {
+                      // Fallback: try to find by text content using evaluate
+                      addDebugStep('Stay Signed In', 'info', 'Trying fallback method to find Get Started button...');
+                      
+                      const buttonFound = await targetPage.evaluate(() => {
+                        const buttons = Array.from(document.querySelectorAll('button, a'));
+                        const getStartedBtn = buttons.find(btn => 
+                          btn.textContent && btn.textContent.trim().toLowerCase().includes('get started')
+                        );
+                        if (getStartedBtn) {
+                          getStartedBtn.click();
+                          return true;
+                        }
+                        return false;
+                      });
+                      
+                      if (buttonFound) {
+                        addDebugStep('Stay Signed In', 'success', 'Clicked Get Started button using fallback method');
+                        await takeScreenshot('Get-Started-After-Recovery', targetPage);
+                      } else {
+                        addDebugStep('Stay Signed In', 'warning', 'Could not find Get Started button with any method');
+                      }
+                    }
                   } catch (clickError) {
                     addDebugStep('Stay Signed In', 'warning', `Failed to click Get Started button: ${clickError.message}`);
                   }
