@@ -2374,6 +2374,77 @@ async function createKieAccount(io, email, password) {
       addDebugStep('Password Save', 'info', 'No password save popup appeared');
     }
     
+    // Step 6.5: Handle repeated Account Protection pages - click skip multiple times if needed
+    let accountProtectionAttempts = 0;
+    const maxAccountProtectionAttempts = 3;
+    
+    while (accountProtectionAttempts < maxAccountProtectionAttempts) {
+      // Check if we're still on Account Protection page
+      const currentPageInfo = await targetPage.evaluate(() => {
+        const title = document.title;
+        const url = window.location.href;
+        const hasSkipLink = document.querySelector('a[href*="Skip"], a:contains("Skip for now")') !== null;
+        const skipLinkText = document.querySelector('a[href*="Skip"], a:contains("Skip for now")')?.textContent || '';
+        
+        return {
+          title: title,
+          url: url,
+          hasSkipLink: hasSkipLink,
+          skipLinkText: skipLinkText
+        };
+      });
+      
+      if (currentPageInfo.title.includes('protect your account') || currentPageInfo.hasSkipLink) {
+        accountProtectionAttempts++;
+        addDebugStep('Account Protection', 'info', `Account Protection page detected (attempt ${accountProtectionAttempts}/${maxAccountProtectionAttempts}) - ${currentPageInfo.skipLinkText}`);
+        
+        // Try to click the skip link again
+        try {
+          const skipClicked = await targetPage.evaluate(() => {
+            const skipLinks = Array.from(document.querySelectorAll('a')).filter(a => 
+              a.textContent.includes('Skip for now') || 
+              a.textContent.includes('Skip') ||
+              a.href.includes('Skip')
+            );
+            
+            for (const link of skipLinks) {
+              if (link.offsetParent !== null) {
+                link.click();
+                return true;
+              }
+            }
+            return false;
+          });
+          
+          if (skipClicked) {
+            addDebugStep('Account Protection', 'success', `Clicked skip link (attempt ${accountProtectionAttempts})`);
+            await takeScreenshot(`Account-Protection-Skip-Attempt-${accountProtectionAttempts}`, targetPage);
+            
+            // Wait for navigation
+            try {
+              await targetPage.waitForNavigation({ timeout: 5000 });
+              addDebugStep('Account Protection', 'success', 'Navigation completed after skip click');
+            } catch (navError) {
+              addDebugStep('Account Protection', 'warning', `Navigation timeout: ${navError.message}`);
+            }
+          } else {
+            addDebugStep('Account Protection', 'warning', 'No skip link found to click');
+            break;
+          }
+        } catch (skipError) {
+          addDebugStep('Account Protection', 'warning', `Skip link click failed: ${skipError.message}`);
+          break;
+        }
+      } else {
+        addDebugStep('Account Protection', 'info', 'No longer on Account Protection page - continuing');
+        break;
+      }
+    }
+    
+    if (accountProtectionAttempts >= maxAccountProtectionAttempts) {
+      addDebugStep('Account Protection', 'warning', `Reached maximum attempts (${maxAccountProtectionAttempts}) for Account Protection - continuing`);
+    }
+    
     // Step 7: Handle "Let's protect your account" - click "Skip for now"
     addDebugStep('Account Protection', 'info', 'Looking for account protection popup...');
     
