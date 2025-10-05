@@ -160,7 +160,76 @@ async function handleStaySignedInStep(targetPage) {
             const currentTitle = await targetPage.title();
             
             if (currentUrl.includes('kie.ai') && !currentUrl.includes('dashboard')) {
-              addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - checking if authentication is complete');
+              addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - checking for human verification popup');
+              
+              // Check for human verification popup first
+              try {
+                const humanVerification = await targetPage.evaluate(() => {
+                  const popup = document.querySelector('[class*="popup"], [class*="modal"], [class*="verification"]');
+                  const humanCheckbox = document.querySelector('input[type="checkbox"][id*="human"], input[type="checkbox"][class*="human"], input[type="checkbox"][name*="human"]');
+                  const hcaptcha = document.querySelector('[class*="hcaptcha"], [id*="hcaptcha"]');
+                  const humanText = document.body.textContent.includes('human') || document.body.textContent.includes('Human');
+                  const verificationText = document.body.textContent.includes('verification') || document.body.textContent.includes('Please complete');
+                  
+                  return {
+                    popupExists: !!popup,
+                    humanCheckbox: !!humanCheckbox,
+                    hcaptcha: !!hcaptcha,
+                    humanText: humanText,
+                    verificationText: verificationText,
+                    allCheckboxes: Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => ({
+                      id: cb.id,
+                      name: cb.name,
+                      className: cb.className,
+                      checked: cb.checked,
+                      visible: cb.offsetParent !== null
+                    }))
+                  };
+                });
+                
+                addDebugStep('Stay Signed In', 'info', `Human verification check: ${JSON.stringify(humanVerification)}`);
+                
+                if (humanVerification.humanCheckbox || humanVerification.hcaptcha || humanVerification.verificationText) {
+                  addDebugStep('Stay Signed In', 'success', 'Human verification popup detected on main page');
+                  await takeScreenshot('Human-Verification-Popup-Main', targetPage);
+                  
+                  // Try to find and click the human checkbox
+                  const checkboxClicked = await targetPage.evaluate(() => {
+                    const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+                    for (const checkbox of checkboxes) {
+                      if (checkbox.id.includes('human') || 
+                          checkbox.name.includes('human') || 
+                          checkbox.className.includes('human') ||
+                          checkbox.closest('label')?.textContent?.toLowerCase().includes('human')) {
+                        checkbox.click();
+                        return true;
+                      }
+                    }
+                    return false;
+                  });
+                  
+                  if (checkboxClicked) {
+                    addDebugStep('Stay Signed In', 'success', 'Clicked human verification checkbox on main page');
+                    await takeScreenshot('Human-Verification-Checked-Main', targetPage);
+                    
+                    // Wait for automatic redirect
+                    addDebugStep('Stay Signed In', 'info', 'Waiting for automatic redirect after verification...');
+                    try {
+                      await targetPage.waitForNavigation({ timeout: 15000 });
+                      addDebugStep('Stay Signed In', 'success', 'Redirected after human verification');
+                      await takeScreenshot('After-Human-Verification-Main', targetPage);
+                    } catch (navError) {
+                      addDebugStep('Stay Signed In', 'warning', `Navigation timeout after verification: ${navError.message}`);
+                    }
+                  } else {
+                    addDebugStep('Stay Signed In', 'warning', 'Human verification checkbox not found on main page');
+                  }
+                } else {
+                  addDebugStep('Stay Signed In', 'info', 'No human verification popup detected on main page');
+                }
+              } catch (verificationError) {
+                addDebugStep('Stay Signed In', 'warning', `Human verification check failed: ${verificationError.message}`);
+              }
               
               // Try to navigate to dashboard to see if we're logged in
               try {
@@ -265,7 +334,76 @@ async function handleStaySignedInStep(targetPage) {
               const currentTitle = await targetPage.title();
               
               if (currentUrl.includes('kie.ai') && !currentUrl.includes('dashboard')) {
-                addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - checking if authentication is complete');
+                addDebugStep('Stay Signed In', 'info', 'Recovered to Kie.ai main page - checking for human verification popup');
+                
+                // Check for human verification popup first
+                try {
+                  const humanVerification = await targetPage.evaluate(() => {
+                    const popup = document.querySelector('[class*="popup"], [class*="modal"], [class*="verification"]');
+                    const humanCheckbox = document.querySelector('input[type="checkbox"][id*="human"], input[type="checkbox"][class*="human"], input[type="checkbox"][name*="human"]');
+                    const hcaptcha = document.querySelector('[class*="hcaptcha"], [id*="hcaptcha"]');
+                    const humanText = document.body.textContent.includes('human') || document.body.textContent.includes('Human');
+                    const verificationText = document.body.textContent.includes('verification') || document.body.textContent.includes('Please complete');
+                    
+                    return {
+                      popupExists: !!popup,
+                      humanCheckbox: !!humanCheckbox,
+                      hcaptcha: !!hcaptcha,
+                      humanText: humanText,
+                      verificationText: verificationText,
+                      allCheckboxes: Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => ({
+                        id: cb.id,
+                        name: cb.name,
+                        className: cb.className,
+                        checked: cb.checked,
+                        visible: cb.offsetParent !== null
+                      }))
+                    };
+                  });
+                  
+                  addDebugStep('Stay Signed In', 'info', `Human verification check: ${JSON.stringify(humanVerification)}`);
+                  
+                  if (humanVerification.humanCheckbox || humanVerification.hcaptcha || humanVerification.verificationText) {
+                    addDebugStep('Stay Signed In', 'success', 'Human verification popup detected on main page');
+                    await takeScreenshot('Human-Verification-Popup-Main', targetPage);
+                    
+                    // Try to find and click the human checkbox
+                    const checkboxClicked = await targetPage.evaluate(() => {
+                      const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+                      for (const checkbox of checkboxes) {
+                        if (checkbox.id.includes('human') || 
+                            checkbox.name.includes('human') || 
+                            checkbox.className.includes('human') ||
+                            checkbox.closest('label')?.textContent?.toLowerCase().includes('human')) {
+                          checkbox.click();
+                          return true;
+                        }
+                      }
+                      return false;
+                    });
+                    
+                    if (checkboxClicked) {
+                      addDebugStep('Stay Signed In', 'success', 'Clicked human verification checkbox on main page');
+                      await takeScreenshot('Human-Verification-Checked-Main', targetPage);
+                      
+                      // Wait for automatic redirect
+                      addDebugStep('Stay Signed In', 'info', 'Waiting for automatic redirect after verification...');
+                      try {
+                        await targetPage.waitForNavigation({ timeout: 15000 });
+                        addDebugStep('Stay Signed In', 'success', 'Redirected after human verification');
+                        await takeScreenshot('After-Human-Verification-Main', targetPage);
+                      } catch (navError) {
+                        addDebugStep('Stay Signed In', 'warning', `Navigation timeout after verification: ${navError.message}`);
+                      }
+                    } else {
+                      addDebugStep('Stay Signed In', 'warning', 'Human verification checkbox not found on main page');
+                    }
+                  } else {
+                    addDebugStep('Stay Signed In', 'info', 'No human verification popup detected on main page');
+                  }
+                } catch (verificationError) {
+                  addDebugStep('Stay Signed In', 'warning', `Human verification check failed: ${verificationError.message}`);
+                }
                 
                 // Try to navigate to dashboard to see if we're logged in
                 try {
