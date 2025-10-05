@@ -660,36 +660,62 @@ async function handleAppAccessStep(targetPage) {
   }
   
   // Check for human verification popup after Accept
+  addDebugStep('Human Verification', 'info', 'Waiting for human verification popup to appear...');
+  
+  // Wait longer for the popup to appear (it takes time to load)
+  addDebugStep('Human Verification', 'info', 'Waiting 5 seconds for popup to load...');
+  await randomHumanDelay(targetPage, 5000, 6000);
+  
+  // Check if popup is visible
   addDebugStep('Human Verification', 'info', 'Checking for human verification popup...');
   try {
-    // Wait a moment for any popup to appear
-    await randomHumanDelay(targetPage, 2000, 3000);
     
     // Check if human verification popup is present
     const humanVerification = await targetPage.evaluate(() => {
-      const popup = document.querySelector('[class*="popup"], [class*="modal"], [class*="verification"]');
+      // Look for popup containers
+      const popup = document.querySelector('[class*="popup"], [class*="modal"], [class*="verification"], [class*="dialog"]');
+      
+      // Look for human checkbox specifically
       const humanCheckbox = document.querySelector('input[type="checkbox"][id*="human"], input[type="checkbox"][class*="human"], input[type="checkbox"][name*="human"]');
-      const hcaptcha = document.querySelector('[class*="hcaptcha"], [id*="hcaptcha"]');
-      const humanText = document.querySelector('text*="human", text*="Human", text*="I am human"');
+      
+      // Look for hCaptcha elements
+      const hcaptcha = document.querySelector('[class*="hcaptcha"], [id*="hcaptcha"], iframe[src*="hcaptcha"]');
+      
+      // Check for human verification text
+      const humanText = document.body.textContent.includes('human') || 
+                       document.body.textContent.includes('Human') || 
+                       document.body.textContent.includes('I am human');
+      
+      // Check for verification text
+      const verificationText = document.body.textContent.includes('verification') || 
+                              document.body.textContent.includes('Please complete') ||
+                              document.body.textContent.includes('check if you\'re human');
+      
+      // Get all checkboxes for debugging
+      const allCheckboxes = Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => ({
+        id: cb.id,
+        name: cb.name,
+        className: cb.className,
+        checked: cb.checked,
+        visible: cb.offsetParent !== null,
+        text: cb.closest('label')?.textContent || ''
+      }));
       
       return {
         popupExists: !!popup,
         humanCheckbox: !!humanCheckbox,
         hcaptcha: !!hcaptcha,
-        humanText: !!humanText,
-        allText: document.body.textContent.includes('human') || document.body.textContent.includes('Human'),
-        allCheckboxes: Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => ({
-          id: cb.id,
-          name: cb.name,
-          className: cb.className,
-          checked: cb.checked
-        }))
+        humanText: humanText,
+        verificationText: verificationText,
+        allCheckboxes: allCheckboxes,
+        pageTitle: document.title,
+        pageUrl: window.location.href
       };
     });
     
     addDebugStep('Human Verification', 'info', `Human verification check: ${JSON.stringify(humanVerification)}`);
     
-    if (humanVerification.humanCheckbox || humanVerification.hcaptcha || humanVerification.allText) {
+    if (humanVerification.humanCheckbox || humanVerification.hcaptcha || humanVerification.humanText || humanVerification.verificationText) {
       addDebugStep('Human Verification', 'success', 'Human verification popup detected');
       await takeScreenshot('Human-Verification-Popup', targetPage);
       
@@ -725,7 +751,78 @@ async function handleAppAccessStep(targetPage) {
         addDebugStep('Human Verification', 'warning', 'Human verification checkbox not found');
       }
     } else {
-      addDebugStep('Human Verification', 'info', 'No human verification popup detected');
+      addDebugStep('Human Verification', 'info', 'No human verification popup detected - waiting longer...');
+      
+      // Wait longer and check again (popup might be loading)
+      addDebugStep('Human Verification', 'info', 'Waiting additional 3 seconds for popup to load...');
+      await randomHumanDelay(targetPage, 3000, 4000);
+      
+      // Check again for popup
+      addDebugStep('Human Verification', 'info', 'Re-checking for human verification popup...');
+      try {
+        const retryVerification = await targetPage.evaluate(() => {
+          const popup = document.querySelector('[class*="popup"], [class*="modal"], [class*="verification"], [class*="dialog"]');
+          const humanCheckbox = document.querySelector('input[type="checkbox"][id*="human"], input[type="checkbox"][class*="human"], input[type="checkbox"][name*="human"]');
+          const hcaptcha = document.querySelector('[class*="hcaptcha"], [id*="hcaptcha"], iframe[src*="hcaptcha"]');
+          const humanText = document.body.textContent.includes('human') || 
+                           document.body.textContent.includes('Human') || 
+                           document.body.textContent.includes('I am human');
+          const verificationText = document.body.textContent.includes('verification') || 
+                                  document.body.textContent.includes('Please complete') ||
+                                  document.body.textContent.includes('check if you\'re human');
+          
+          return {
+            popupExists: !!popup,
+            humanCheckbox: !!humanCheckbox,
+            hcaptcha: !!hcaptcha,
+            humanText: humanText,
+            verificationText: verificationText
+          };
+        });
+        
+        addDebugStep('Human Verification', 'info', `Retry verification check: ${JSON.stringify(retryVerification)}`);
+        
+        if (retryVerification.humanCheckbox || retryVerification.hcaptcha || retryVerification.humanText || retryVerification.verificationText) {
+          addDebugStep('Human Verification', 'success', 'Human verification popup detected on retry');
+          await takeScreenshot('Human-Verification-Popup-Retry', targetPage);
+          
+          // Try to find and click the human checkbox
+          const checkboxClicked = await targetPage.evaluate(() => {
+            const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+            for (const checkbox of checkboxes) {
+              if (checkbox.id.includes('human') || 
+                  checkbox.name.includes('human') || 
+                  checkbox.className.includes('human') ||
+                  checkbox.closest('label')?.textContent?.toLowerCase().includes('human')) {
+                checkbox.click();
+                return true;
+              }
+            }
+            return false;
+          });
+          
+          if (checkboxClicked) {
+            addDebugStep('Human Verification', 'success', 'Clicked human verification checkbox on retry');
+            await takeScreenshot('Human-Verification-Checked-Retry', targetPage);
+            
+            // Wait for automatic redirect
+            addDebugStep('Human Verification', 'info', 'Waiting for automatic redirect after verification...');
+            try {
+              await targetPage.waitForNavigation({ timeout: 15000 });
+              addDebugStep('Human Verification', 'success', 'Redirected after human verification');
+              await takeScreenshot('After-Human-Verification-Retry', targetPage);
+            } catch (navError) {
+              addDebugStep('Human Verification', 'warning', `Navigation timeout after verification: ${navError.message}`);
+            }
+          } else {
+            addDebugStep('Human Verification', 'warning', 'Human verification checkbox not found on retry');
+          }
+        } else {
+          addDebugStep('Human Verification', 'info', 'No human verification popup detected on retry - continuing');
+        }
+      } catch (retryError) {
+        addDebugStep('Human Verification', 'warning', `Retry verification check failed: ${retryError.message}`);
+      }
     }
   } catch (verificationError) {
     addDebugStep('Human Verification', 'warning', `Human verification check failed: ${verificationError.message}`);
