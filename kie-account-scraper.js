@@ -2135,6 +2135,17 @@ async function createKieAccount(io, email, password) {
         if (clicked) {
           await takeScreenshot('Account-Protection-Skipped', targetPage);
           skipButtonClicked = true;
+          
+          // Wait for page navigation after clicking skip
+          addDebugStep('Account Protection', 'info', 'Waiting for page navigation after skip click...');
+          try {
+            await targetPage.waitForNavigation({ timeout: 10000 });
+            addDebugStep('Account Protection', 'success', 'Page navigation completed after skip');
+            await takeScreenshot('After-Skip-Navigation', targetPage);
+          } catch (navError) {
+            addDebugStep('Account Protection', 'warning', `Navigation timeout after skip: ${navError.message}`);
+            // Continue anyway, the page might have already navigated
+          }
         }
       } else {
         addDebugStep('Account Protection', 'warning', `Skip link not found or not visible: exists=${elementExists.exists}, visible=${elementExists.visible}`);
@@ -2153,6 +2164,18 @@ async function createKieAccount(io, email, password) {
           addDebugStep('Account Protection', 'success', `Clicked skip button using selector: ${selector}`);
           await takeScreenshot('Account-Protection-Skipped', targetPage);
           skipButtonClicked = true;
+          
+          // Wait for page navigation after clicking skip
+          addDebugStep('Account Protection', 'info', 'Waiting for page navigation after skip click...');
+          try {
+            await targetPage.waitForNavigation({ timeout: 10000 });
+            addDebugStep('Account Protection', 'success', 'Page navigation completed after skip');
+            await takeScreenshot('After-Skip-Navigation', targetPage);
+          } catch (navError) {
+            addDebugStep('Account Protection', 'warning', `Navigation timeout after skip: ${navError.message}`);
+            // Continue anyway, the page might have already navigated
+          }
+          
           break;
         } catch (e) {
           addDebugStep('Account Protection', 'info', `Skip selector ${selector} failed: ${e.message}`);
