@@ -22,6 +22,7 @@ function addDebugStep(step, type, message, screenshot = null, error = null) {
   
   console.log(`[${timestamp}] ${step}: ${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'} ${message}`);
   
+  // Emit to all connected clients
   if (globalIO) {
     globalIO.emit('log', logEntry);
   }
@@ -53,8 +54,15 @@ async function takeScreenshot(name, page) {
     // Verify file was saved
     if (fs.existsSync(screenshotPath)) {
       const stats = fs.statSync(screenshotPath);
-      addDebugStep('Screenshot', 'success', `Screenshot saved: ${name}-${timestamp}.png (${stats.size} bytes)`);
-      return `${name}-${timestamp}.png`;
+      const filename = `${name}-${timestamp}.png`;
+      addDebugStep('Screenshot', 'success', `Screenshot saved: ${filename} (${stats.size} bytes)`);
+      
+      // Emit screenshot to clients
+      if (globalIO) {
+        globalIO.emit('screenshot', { filename: filename });
+      }
+      
+      return filename;
     } else {
       addDebugStep('Screenshot', 'error', `Screenshot file not found: ${screenshotPath}`);
       return null;
@@ -187,13 +195,27 @@ async function createOutlookAccount(email, password, io = null) {
     addDebugStep('Birthdate Entry', 'info', 'Selecting month...');
     await page.click('button[name="BirthMonth"]');
     await randomHumanDelay(page, 500, 1000);
-    await page.click('button[name="BirthMonth"] option:first-child');
+    
+    // Try to select January (first option)
+    try {
+      await page.click('button[name="BirthMonth"] option:first-child');
+    } catch (e) {
+      // Alternative approach - select by text
+      await page.select('select[name="BirthMonth"]', '1');
+    }
     
     // Select day (1)
     addDebugStep('Birthdate Entry', 'info', 'Selecting day...');
     await page.click('button[name="BirthDay"]');
     await randomHumanDelay(page, 500, 1000);
-    await page.click('button[name="BirthDay"] option[value="1"]');
+    
+    // Try to select day 1
+    try {
+      await page.click('button[name="BirthDay"] option[value="1"]');
+    } catch (e) {
+      // Alternative approach - select by text
+      await page.select('select[name="BirthDay"]', '1');
+    }
     
     // Enter year (1986)
     addDebugStep('Birthdate Entry', 'info', 'Entering year...');

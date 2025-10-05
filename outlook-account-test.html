@@ -365,7 +365,21 @@
         </div>
     </div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // Listen for real-time logs
+        socket.on('log', function(logEntry) {
+            addLogEntry(logEntry);
+        });
+        
+        // Listen for screenshots
+        socket.on('screenshot', function(screenshotData) {
+            updateScreenshot(screenshotData.filename);
+        });
+        
         // DOM elements
         const emailInput = document.getElementById('email');
         const passwordInput = document.getElementById('password');
