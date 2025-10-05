@@ -138,6 +138,7 @@ async function handleStaySignedInStep(targetPage) {
                    url.includes('login.microsoftonline.com') ||
                    title.includes('app access') ||
                    title.includes('Let this app') ||
+                   title.includes('needs your permission') ||
                    title.includes('Kie.ai') ||
                    title.includes('One API for All'))) {
                 newTargetPage = page;
@@ -223,6 +224,7 @@ async function handleStaySignedInStep(targetPage) {
                      url.includes('login.microsoftonline.com') ||
                      title.includes('app access') ||
                      title.includes('Let this app') ||
+                     title.includes('needs your permission') ||
                      title.includes('Kie.ai') ||
                      title.includes('One API for All'))) {
                   newTargetPage = page;
@@ -2157,6 +2159,11 @@ async function createKieAccount(io, email, password) {
         // Continue with normal Account Protection flow
       } else if (pageInfo.hasAcceptButton) {
         addDebugStep('Page Detection', 'success', 'Detected App Access page - skipping to App Access step');
+        // Skip directly to App Access step
+        await handleAppAccessStep(targetPage);
+        return; // Exit early
+      } else if (pageInfo.title.includes('needs your permission') || pageInfo.title.includes('Let this app access')) {
+        addDebugStep('Page Detection', 'success', 'Detected App Access permission page - skipping to App Access step');
         // Skip directly to App Access step
         await handleAppAccessStep(targetPage);
         return; // Exit early
