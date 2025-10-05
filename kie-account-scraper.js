@@ -343,6 +343,99 @@ async function handleStaySignedInStep(targetPage) {
                 }
                 
                 await takeScreenshot('Microsoft-Login-Clicked', targetPage);
+                
+                // Wait for popup to appear and analyze what opens
+                addDebugStep('Microsoft Login Popup', 'info', 'Waiting for Microsoft login popup to appear...');
+                await randomHumanDelay(targetPage, 3000, 5000);
+                
+                // Check what pages/tabs are now open
+                addDebugStep('Microsoft Login Popup', 'info', 'Analyzing all open pages after Microsoft login click...');
+                
+                try {
+                  const allPages = await Promise.race([
+                    targetPage.browser().pages(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Browser pages timeout')), 5000))
+                  ]);
+                  addDebugStep('Microsoft Login Popup', 'info', `Total pages open: ${allPages.length}`);
+                  
+                  for (let i = 0; i < allPages.length; i++) {
+                    const page = allPages[i];
+                    try {
+                      const pageInfo = await Promise.race([
+                        page.evaluate(() => {
+                          return {
+                            url: window.location.href,
+                            title: document.title,
+                            domain: window.location.hostname,
+                            pathname: window.location.pathname,
+                            hasEmailInput: document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]').length > 0,
+                            hasPasswordInput: document.querySelectorAll('input[name="passwd"], input[type="password"]').length > 0,
+                            buttonCount: document.querySelectorAll('button, a, [role="button"]').length,
+                            inputCount: document.querySelectorAll('input, textarea, select').length,
+                            visibleText: document.body.textContent?.substring(0, 200) || '',
+                            isMicrosoftLogin: window.location.hostname.includes('login.live.com') || 
+                                           window.location.hostname.includes('microsoft.com') ||
+                                           document.body.textContent.toLowerCase().includes('microsoft') ||
+                                           document.querySelectorAll('input[name="loginfmt"]').length > 0
+                          };
+                        }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Page analysis timeout')), 3000))
+                      ]);
+                      
+                      addDebugStep('Microsoft Login Popup', 'info', `Page ${i + 1}:`);
+                      addDebugStep('Microsoft Login Popup', 'info', `  - URL: ${pageInfo.url}`);
+                      addDebugStep('Microsoft Login Popup', 'info', `  - Title: ${pageInfo.title}`);
+                      addDebugStep('Microsoft Login Popup', 'info', `  - Domain: ${pageInfo.domain}`);
+                      addDebugStep('Microsoft Login Popup', 'info', `  - Buttons: ${pageInfo.buttonCount}, Inputs: ${pageInfo.inputCount}`);
+                      addDebugStep('Microsoft Login Popup', 'info', `  - Email Input: ${pageInfo.hasEmailInput}, Password Input: ${pageInfo.hasPasswordInput}`);
+                      addDebugStep('Microsoft Login Popup', 'info', `  - Is Microsoft Login: ${pageInfo.isMicrosoftLogin}`);
+                      addDebugStep('Microsoft Login Popup', 'info', `  - Text: "${pageInfo.visibleText}"`);
+                      
+                      // If this is a Microsoft login page, switch to it
+                      if (pageInfo.isMicrosoftLogin && page !== targetPage) {
+                        addDebugStep('Microsoft Login Popup', 'success', `Found Microsoft login page, switching to it...`);
+                        targetPage = page;
+                        await takeScreenshot('Microsoft-Login-Page-Detected', targetPage);
+                        break;
+                      }
+                    } catch (pageError) {
+                      addDebugStep('Microsoft Login Popup', 'warning', `Could not analyze page ${i + 1}: ${pageError.message}`);
+                    }
+                  }
+                } catch (browserError) {
+                  addDebugStep('Microsoft Login Popup', 'warning', `Could not get browser pages: ${browserError.message}`);
+                }
+                
+                // If no Microsoft login page was found, wait a bit more and try again
+                if (!targetPage || targetPage.url().includes('kie.ai')) {
+                  addDebugStep('Microsoft Login Popup', 'info', 'No Microsoft login page found, waiting for popup to appear...');
+                  await randomHumanDelay(targetPage, 2000, 3000);
+                  
+                  // Try to detect new popup using the existing popup detection logic
+                  try {
+                    const allPages = await targetPage.browser().pages();
+                    addDebugStep('Microsoft Login Popup', 'info', `Re-checking pages after delay: ${allPages.length} pages open`);
+                    
+                    for (const page of allPages) {
+                      try {
+                        const url = page.url();
+                        const title = await page.title();
+                        
+                        if (url.includes('login.live.com') || url.includes('microsoft.com') || 
+                            title.toLowerCase().includes('sign in') || title.toLowerCase().includes('microsoft')) {
+                          addDebugStep('Microsoft Login Popup', 'success', `Found Microsoft login page on second check: ${url}`);
+                          targetPage = page;
+                          await takeScreenshot('Microsoft-Login-Page-Second-Check', targetPage);
+                          break;
+                        }
+                      } catch (pageError) {
+                        // Continue to next page
+                      }
+                    }
+                  } catch (secondCheckError) {
+                    addDebugStep('Microsoft Login Popup', 'warning', `Second check failed: ${secondCheckError.message}`);
+                  }
+                }
               } else {
                 // No Microsoft popup found, look for Get Started button
                 addDebugStep('Stay Signed In', 'info', 'No Microsoft popup found - looking for Get Started button');
