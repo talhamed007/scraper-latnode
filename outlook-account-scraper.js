@@ -314,20 +314,72 @@ async function createOutlookAccount(email, password, io = null) {
     await randomHumanDelay(page, 3000, 5000);
     
     // Step 8: Human verification (Press and hold)
-    addDebugStep('Human Verification', 'info', 'Starting human verification (press and hold)...');
+    await addDebugStep('Human Verification', 'info', 'Starting human verification (press and hold)...', null, null, page);
     
-    // Wait for human verification page
-    await page.waitForSelector('button:contains("Press and hold")', { timeout: 10000 });
+    // Wait for human verification page to load
+    await page.waitForFunction(() => {
+      return document.body.textContent.includes('prove you\'re human') || 
+             document.body.textContent.includes('Press and hold') ||
+             document.querySelector('button[type="button"]') !== null;
+    }, { timeout: 15000 });
     
-    // Find the press and hold button
-    const holdButton = await page.$('button:contains("Press and hold")');
-    if (!holdButton) {
+    // Find the press and hold button using multiple approaches
+    const holdButton = await page.evaluate(() => {
+      // Try different selectors for the hold button
+      const selectors = [
+        'button[type="button"]',
+        'button[aria-label*="hold"]',
+        'button[aria-label*="press"]',
+        'button[class*="hold"]',
+        'button[class*="press"]'
+      ];
+      
+      for (const selector of selectors) {
+        const button = document.querySelector(selector);
+        if (button && button.offsetParent !== null) {
+          return { found: true, selector: selector };
+        }
+      }
+      
+      // Fallback: look for any visible button
+      const buttons = Array.from(document.querySelectorAll('button'));
+      for (const button of buttons) {
+        if (button.offsetParent !== null && 
+            (button.textContent.toLowerCase().includes('hold') || 
+             button.getAttribute('aria-label')?.toLowerCase().includes('hold') ||
+             button.className.includes('hold'))) {
+          return { found: true, selector: 'button by text/aria-label' };
+        }
+      }
+      
+      return { found: false };
+    });
+    
+    if (!holdButton.found) {
       throw new Error('Press and hold button not found');
     }
     
-    // Start holding the button
-    addDebugStep('Human Verification', 'info', 'Starting to hold the button...');
-    await page.mouse.move(0, 0);
+    await addDebugStep('Human Verification', 'success', `Found press and hold button using: ${holdButton.selector}`, null, null, page);
+    
+    // Get the button element and press and hold it
+    const buttonElement = await page.$('button[type="button"]') || 
+                         await page.$('button[aria-label*="hold"]') ||
+                         await page.$('button[aria-label*="press"]');
+    
+    if (!buttonElement) {
+      throw new Error('Could not find button element');
+    }
+    
+    // Get button position
+    const box = await buttonElement.boundingBox();
+    if (!box) {
+      throw new Error('Could not get button position');
+    }
+    
+    await addDebugStep('Human Verification', 'info', 'Starting to hold the button...', null, null, page);
+    
+    // Move mouse to button center and press and hold
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     
     // Hold the button and wait for checkmark
@@ -341,10 +393,17 @@ async function createOutlookAccount(email, password, io = null) {
       
       // Check for checkmark or success indicator
       try {
-        const checkmark = await page.$('svg[class*="check"], .checkmark, [class*="success"]');
-        if (checkmark) {
-          checkmarkFound = true;
-          addDebugStep('Human Verification', 'success', 'Checkmark detected!');
+        checkmarkFound = await page.evaluate(() => {
+          return document.querySelector('svg[data-testid="checkmark"]') !== null ||
+                 document.querySelector('.checkmark') !== null ||
+                 document.querySelector('[class*="success"]') !== null ||
+                 document.body.textContent.includes('verified') ||
+                 document.body.textContent.includes('success') ||
+                 document.body.textContent.includes('complete');
+        });
+        
+        if (checkmarkFound) {
+          await addDebugStep('Human Verification', 'success', 'Checkmark detected!', null, null, page);
           break;
         }
       } catch (e) {
