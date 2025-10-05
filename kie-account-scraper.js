@@ -113,7 +113,33 @@ async function handleStaySignedInStep(targetPage) {
         addDebugStep('Stay Signed In', 'info', `New page URL: ${await targetPage.evaluate(() => window.location.href)}`);
       } catch (navError) {
         addDebugStep('Stay Signed In', 'warning', `Navigation timeout: ${navError.message}`);
-        // Continue anyway, the page might have already navigated
+        
+        // Try to recover page context by finding the new page
+        addDebugStep('Stay Signed In', 'info', 'Attempting to recover page context...');
+        try {
+          const allPages = await targetPage.browser().pages();
+          let newTargetPage = null;
+          
+          for (let i = 0; i < allPages.length; i++) {
+            const page = allPages[i];
+            const url = await page.url();
+            if (url.includes('account.live.com') || url.includes('Consent') || url.includes('appConsent')) {
+              newTargetPage = page;
+              addDebugStep('Stay Signed In', 'success', `Found new page: ${url}`);
+              break;
+            }
+          }
+          
+          if (newTargetPage) {
+            targetPage = newTargetPage;
+            addDebugStep('Stay Signed In', 'success', 'Page context recovered successfully');
+            await takeScreenshot('After-Yes-Navigation-Recovered', targetPage);
+          } else {
+            addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, continuing with current page');
+          }
+        } catch (recoveryError) {
+          addDebugStep('Stay Signed In', 'warning', `Page recovery failed: ${recoveryError.message}`);
+        }
       }
     }
   } catch (e) {
@@ -145,7 +171,33 @@ async function handleStaySignedInStep(targetPage) {
           addDebugStep('Stay Signed In', 'info', `New page URL: ${await targetPage.evaluate(() => window.location.href)}`);
         } catch (navError) {
           addDebugStep('Stay Signed In', 'warning', `Navigation timeout: ${navError.message}`);
-          // Continue anyway, the page might have already navigated
+          
+          // Try to recover page context by finding the new page
+          addDebugStep('Stay Signed In', 'info', 'Attempting to recover page context...');
+          try {
+            const allPages = await targetPage.browser().pages();
+            let newTargetPage = null;
+            
+            for (let i = 0; i < allPages.length; i++) {
+              const page = allPages[i];
+              const url = await page.url();
+              if (url.includes('account.live.com') || url.includes('Consent') || url.includes('appConsent')) {
+                newTargetPage = page;
+                addDebugStep('Stay Signed In', 'success', `Found new page: ${url}`);
+                break;
+              }
+            }
+            
+            if (newTargetPage) {
+              targetPage = newTargetPage;
+              addDebugStep('Stay Signed In', 'success', 'Page context recovered successfully');
+              await takeScreenshot('After-Yes-Navigation-Recovered', targetPage);
+            } else {
+              addDebugStep('Stay Signed In', 'warning', 'Could not recover page context, continuing with current page');
+            }
+          } catch (recoveryError) {
+            addDebugStep('Stay Signed In', 'warning', `Page recovery failed: ${recoveryError.message}`);
+          }
         }
         
         break;
