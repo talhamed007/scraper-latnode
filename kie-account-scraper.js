@@ -1637,8 +1637,26 @@ async function createKieAccount(io, email, password) {
     // Debug: Check page variable after screenshot
     console.log('DEBUG: page variable after takeScreenshot:', typeof page, page);
     
-    // Step 2: Click "Get Started" button
-    addDebugStep('Get Started', 'info', 'Looking for Get Started button...');
+    // Step 2: Look for Kie.ai login popup and click "Sign in with Microsoft"
+    addDebugStep('Kie Login', 'info', 'Looking for Kie.ai login popup...');
+    
+    // Wait for login popup to appear
+    try {
+      await page.waitForSelector('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft"), [data-testid*="microsoft"], [class*="microsoft"]', { timeout: 10000 });
+      addDebugStep('Kie Login', 'success', 'Kie.ai login popup detected');
+      await takeScreenshot('Kie-Login-Popup', page);
+      
+      // Click "Sign in with Microsoft" button
+      addDebugStep('Kie Login', 'info', 'Clicking Sign in with Microsoft button...');
+      await page.click('button:contains("Sign in with Microsoft"), button:contains("Inloggen met Microsoft"), [data-testid*="microsoft"], [class*="microsoft"]');
+      addDebugStep('Kie Login', 'success', 'Clicked Sign in with Microsoft button');
+      await takeScreenshot('Microsoft-Login-Clicked', page);
+      
+    } catch (popupError) {
+      addDebugStep('Kie Login', 'warning', `Login popup not found: ${popupError.message} - trying Get Started button instead`);
+      
+      // Fallback to Get Started button if no login popup
+      addDebugStep('Get Started', 'info', 'Looking for Get Started button...');
     
     // Debug: Check page variable before Get Started click
     console.log('DEBUG: page variable before Get Started click:', typeof page, page);
@@ -1719,6 +1737,7 @@ async function createKieAccount(io, email, password) {
     // Take screenshot after Get Started click
     const getStartedScreenshot = await takeScreenshot('Get-Started-Clicked', page);
     addDebugStep('Get Started', 'info', `Screenshot after Get Started click: ${getStartedScreenshot || 'Failed'}`);
+    } // Close the catch block for popupError
     
     // Step 3: Wait for popup to appear and load fully
     addDebugStep('Popup Wait', 'info', 'Waiting for popup to appear after Get Started click...');
