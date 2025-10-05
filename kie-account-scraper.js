@@ -122,11 +122,27 @@ async function handleStaySignedInStep(targetPage) {
           
           for (let i = 0; i < allPages.length; i++) {
             const page = allPages[i];
-            const url = await page.url();
-            if (url.includes('account.live.com') || url.includes('Consent') || url.includes('appConsent')) {
-              newTargetPage = page;
-              addDebugStep('Stay Signed In', 'success', `Found new page: ${url}`);
-              break;
+            try {
+              const url = await page.url();
+              const title = await page.title();
+              addDebugStep('Stay Signed In', 'info', `Checking page ${i}: ${url} - ${title}`);
+              
+              // Look for any page that's not the original Kie.ai page or blank page
+              if (url !== 'about:blank' && 
+                  !url.includes('kie.ai') && 
+                  !url.includes('login.live.com/ppsecure/post.srf') &&
+                  (url.includes('account.live.com') || 
+                   url.includes('Consent') || 
+                   url.includes('appConsent') ||
+                   url.includes('login.live.com') ||
+                   title.includes('app access') ||
+                   title.includes('Let this app'))) {
+                newTargetPage = page;
+                addDebugStep('Stay Signed In', 'success', `Found new page: ${url} - ${title}`);
+                break;
+              }
+            } catch (pageError) {
+              addDebugStep('Stay Signed In', 'info', `Page ${i} not accessible: ${pageError.message}`);
             }
           }
           
@@ -180,11 +196,27 @@ async function handleStaySignedInStep(targetPage) {
             
             for (let i = 0; i < allPages.length; i++) {
               const page = allPages[i];
-              const url = await page.url();
-              if (url.includes('account.live.com') || url.includes('Consent') || url.includes('appConsent')) {
-                newTargetPage = page;
-                addDebugStep('Stay Signed In', 'success', `Found new page: ${url}`);
-                break;
+              try {
+                const url = await page.url();
+                const title = await page.title();
+                addDebugStep('Stay Signed In', 'info', `Checking page ${i}: ${url} - ${title}`);
+                
+                // Look for any page that's not the original Kie.ai page or blank page
+                if (url !== 'about:blank' && 
+                    !url.includes('kie.ai') && 
+                    !url.includes('login.live.com/ppsecure/post.srf') &&
+                    (url.includes('account.live.com') || 
+                     url.includes('Consent') || 
+                     url.includes('appConsent') ||
+                     url.includes('login.live.com') ||
+                     title.includes('app access') ||
+                     title.includes('Let this app'))) {
+                  newTargetPage = page;
+                  addDebugStep('Stay Signed In', 'success', `Found new page: ${url} - ${title}`);
+                  break;
+                }
+              } catch (pageError) {
+                addDebugStep('Stay Signed In', 'info', `Page ${i} not accessible: ${pageError.message}`);
               }
             }
             
@@ -219,6 +251,46 @@ async function handleStaySignedInStep(targetPage) {
 // Helper function to handle App Access step
 async function handleAppAccessStep(targetPage) {
   addDebugStep('App Access', 'info', 'Handling App Access step...');
+  
+  // Check if the page is still accessible
+  try {
+    await targetPage.evaluate(() => document.title);
+    addDebugStep('App Access', 'info', 'Page is accessible, proceeding...');
+  } catch (pageError) {
+    addDebugStep('App Access', 'warning', `Page not accessible: ${pageError.message}`);
+    
+    // Try to find a valid page
+    try {
+      const allPages = await targetPage.browser().pages();
+      let validPage = null;
+      
+      for (let i = 0; i < allPages.length; i++) {
+        const page = allPages[i];
+        try {
+          const url = await page.url();
+          const title = await page.title();
+          if (url !== 'about:blank' && !url.includes('kie.ai')) {
+            validPage = page;
+            addDebugStep('App Access', 'info', `Found valid page: ${url} - ${title}`);
+            break;
+          }
+        } catch (e) {
+          // Skip inaccessible pages
+        }
+      }
+      
+      if (validPage) {
+        targetPage = validPage;
+        addDebugStep('App Access', 'success', 'Switched to valid page context');
+      } else {
+        addDebugStep('App Access', 'error', 'No valid page found, cannot continue');
+        return;
+      }
+    } catch (recoveryError) {
+      addDebugStep('App Access', 'error', `Page recovery failed: ${recoveryError.message}`);
+      return;
+    }
+  }
   
   // First, scroll down to make sure the Accept button is visible
   addDebugStep('App Access', 'info', 'Scrolling down to find Accept button...');
