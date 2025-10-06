@@ -405,67 +405,118 @@ async function createOutlookAccount(email, password, io = null) {
           let progressValue = 0;
           let progressElement = null;
           let progressText = '';
+          let debugInfo = [];
           
-          // Strategy 1: Look for the specific progress bar div
-          const progressBar = document.querySelector('div[id*="oHlwWeEQqwYPjwS"]') || 
-                             document.querySelector('div[style*="width"]') ||
-                             document.querySelector('div[id*="progress"]') ||
-                             document.querySelector('div[class*="progress"]');
-          
-          if (progressBar) {
-            const style = window.getComputedStyle(progressBar);
-            const inlineStyle = progressBar.getAttribute('style') || '';
+          // Strategy 1: Look for the specific progress bar div by exact ID
+          const exactProgressBar = document.getElementById('oHlwWeEQqwYPjwS');
+          if (exactProgressBar) {
+            const inlineStyle = exactProgressBar.getAttribute('style') || '';
+            debugInfo.push(`Found exact ID element: ${inlineStyle}`);
             
-            // Extract width from inline style (e.g., "width: 123.45px;")
             const widthMatch = inlineStyle.match(/width:\s*([0-9.]+)px/);
             if (widthMatch) {
               progressValue = parseFloat(widthMatch[1]);
-              progressElement = progressBar;
-              progressText = `Progress Bar: ${progressValue}px`;
-            }
-            
-            // Also check computed style width
-            const computedWidth = style.width;
-            if (computedWidth && computedWidth.includes('px')) {
-              const computedValue = parseFloat(computedWidth.replace('px', ''));
-              if (computedValue > progressValue) {
-                progressValue = computedValue;
-                progressText = `Computed: ${computedValue}px`;
-              }
+              progressElement = exactProgressBar;
+              progressText = `Exact ID: ${progressValue}px`;
+              debugInfo.push(`Extracted width: ${progressValue}px`);
             }
           }
           
           // Strategy 2: Look for any div with width style that could be progress
           if (progressValue === 0) {
             const allDivs = document.querySelectorAll('div[style*="width"]');
+            debugInfo.push(`Found ${allDivs.length} divs with width style`);
+            
             for (const div of allDivs) {
               const style = div.getAttribute('style') || '';
+              const id = div.getAttribute('id') || 'no-id';
+              debugInfo.push(`Div ${id}: ${style}`);
+              
               const widthMatch = style.match(/width:\s*([0-9.]+)px/);
               if (widthMatch) {
                 const width = parseFloat(widthMatch[1]);
+                debugInfo.push(`Div ${id} width: ${width}px`);
                 if (width > progressValue && width <= 216) { // Max width is 216px
                   progressValue = width;
                   progressElement = div;
-                  progressText = `Div Width: ${width}px`;
+                  progressText = `Div ${id}: ${width}px`;
                 }
               }
             }
           }
           
-          // Strategy 3: Look for elements with specific IDs that might be progress bars
-          const progressIds = ['oHlwWeEQqwYPjwS', 'progress', 'bar', 'fill'];
-          for (const id of progressIds) {
-            const element = document.getElementById(id);
-            if (element) {
-              const style = element.getAttribute('style') || '';
+          // Strategy 3: Look for elements with partial ID matches
+          if (progressValue === 0) {
+            const partialMatches = document.querySelectorAll('div[id*="oHlwWeEQqwYPjwS"]');
+            debugInfo.push(`Found ${partialMatches.length} divs with partial ID match`);
+            
+            for (const div of partialMatches) {
+              const style = div.getAttribute('style') || '';
+              const id = div.getAttribute('id') || 'no-id';
+              debugInfo.push(`Partial match ${id}: ${style}`);
+              
               const widthMatch = style.match(/width:\s*([0-9.]+)px/);
               if (widthMatch) {
                 const width = parseFloat(widthMatch[1]);
                 if (width > progressValue) {
                   progressValue = width;
-                  progressElement = element;
-                  progressText = `ID ${id}: ${width}px`;
+                  progressElement = div;
+                  progressText = `Partial ID ${id}: ${width}px`;
                 }
+              }
+            }
+          }
+          
+          // Strategy 4: Look for any element with width style
+          if (progressValue === 0) {
+            const allElements = document.querySelectorAll('*[style*="width"]');
+            debugInfo.push(`Found ${allElements.length} elements with width style`);
+            
+            for (const element of allElements) {
+              const style = element.getAttribute('style') || '';
+              const tagName = element.tagName.toLowerCase();
+              const id = element.getAttribute('id') || 'no-id';
+              
+              const widthMatch = style.match(/width:\s*([0-9.]+)px/);
+              if (widthMatch) {
+                const width = parseFloat(widthMatch[1]);
+                if (width > 0 && width <= 216) {
+                  debugInfo.push(`${tagName}#${id}: ${width}px`);
+                  if (width > progressValue) {
+                    progressValue = width;
+                    progressElement = element;
+                    progressText = `${tagName}#${id}: ${width}px`;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Strategy 5: Look for any element with computed width that might be changing
+          if (progressValue === 0) {
+            const allElements = document.querySelectorAll('*');
+            debugInfo.push(`Checking ${allElements.length} elements for computed width`);
+            
+            for (const element of allElements) {
+              try {
+                const computedStyle = window.getComputedStyle(element);
+                const width = computedStyle.width;
+                const id = element.getAttribute('id') || 'no-id';
+                const tagName = element.tagName.toLowerCase();
+                
+                if (width && width.includes('px')) {
+                  const widthValue = parseFloat(width.replace('px', ''));
+                  if (widthValue > 0 && widthValue <= 216) {
+                    debugInfo.push(`Computed ${tagName}#${id}: ${widthValue}px`);
+                    if (widthValue > progressValue) {
+                      progressValue = widthValue;
+                      progressElement = element;
+                      progressText = `Computed ${tagName}#${id}: ${widthValue}px`;
+                    }
+                  }
+                }
+              } catch (e) {
+                // Skip elements that can't be computed
               }
             }
           }
@@ -506,10 +557,12 @@ async function createOutlookAccount(email, password, io = null) {
           return {
             progressValue,
             progressElement: progressElement ? progressElement.tagName : null,
+            progressText,
             buttonState,
             hasCheckmark,
             hasSuccessText,
-            isComplete: hasCheckmark || hasSuccessText || buttonState === 'completed'
+            isComplete: hasCheckmark || hasSuccessText || buttonState === 'completed',
+            debugInfo: debugInfo.slice(0, 10) // Limit debug info to first 10 items
           };
         });
         
@@ -525,6 +578,11 @@ async function createOutlookAccount(email, password, io = null) {
         if (holdTime % 2000 < 100) {
           const percentage = ((progressInfo.progressValue / 216) * 100).toFixed(1);
           await addDebugStep('Human Verification', 'info', `Hold time: ${holdTime}ms, Progress: ${progressInfo.progressValue}px (${percentage}%), Button: ${progressInfo.buttonState}, Checkmark: ${progressInfo.hasCheckmark}`, null, null, page);
+          
+          // Log debug information to help troubleshoot
+          if (progressInfo.debugInfo && progressInfo.debugInfo.length > 0) {
+            await addDebugStep('Human Verification', 'info', `Debug: ${progressInfo.debugInfo.join('; ')}`, null, null, page);
+          }
         }
         
         // Check if verification is complete
