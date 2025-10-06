@@ -731,16 +731,12 @@ async function loginToOutlook(email, password, io) {
               return null;
             });
             
-            if (directApiKey && directApiKey.length > 30) {
-              // Only use direct extraction if we got a full key (longer than 30 chars)
-              apiKey = directApiKey;
-              await addDebugStep('Kie.ai API Key', 'success', `Full API Key found in DOM: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+            // Always try copy button approach for full API key extraction
+            if (directApiKey) {
+              await addDebugStep('Kie.ai API Key', 'warning', `API Key found in DOM (${directApiKey.length} chars): ${directApiKey.substring(0, 15)}... - this appears to be truncated, trying copy button for full key`);
             } else {
-              if (directApiKey) {
-                await addDebugStep('Kie.ai API Key', 'warning', `Partial API Key found in DOM (${directApiKey.length} chars): ${directApiKey.substring(0, 10)}... - trying copy button for full key`);
-              } else {
-                await addDebugStep('Kie.ai API Key', 'info', 'API Key not found in DOM, trying copy button...');
-              }
+              await addDebugStep('Kie.ai API Key', 'info', 'API Key not found in DOM, trying copy button...');
+            }
               
               // Try to find and click the copy button
               await addDebugStep('Kie.ai API Key', 'info', 'Searching for copy button with multiple methods...');
@@ -865,6 +861,11 @@ async function loginToOutlook(email, password, io) {
                   // Already clicked in aggressive search
                   await addDebugStep('Kie.ai API Key', 'success', `Copy button clicked using ${usedSelector}`, null, null, page);
                 } else {
+                  // Hover over the copy button first
+                  await addDebugStep('Kie.ai API Key', 'info', 'Hovering over copy button...');
+                  await copyButton.hover();
+                  await randomHumanDelay(page, 500, 1000);
+                  
                   // Click the found element
                   await copyButton.click();
                   await addDebugStep('Kie.ai API Key', 'success', `Copy button clicked using selector: ${usedSelector}`, null, null, page);
