@@ -1050,38 +1050,91 @@ async function loginToOutlook(email, password, io) {
           await randomHumanDelay(page, 2000, 3000);
           
           try {
-            // Look for human verification checkbox
-            await page.waitForSelector('div[id="checkbox"][role="checkbox"]', { timeout: 10000 });
-            await page.click('div[id="checkbox"][role="checkbox"]');
-            await takeScreenshot('Human-Verification-Checked', page);
-            await addDebugStep('Kie.ai Login', 'success', 'Clicked human verification checkbox', null, null, page);
-          } catch (e) {
-            // Try alternative selectors for checkbox
-            const checkboxSelectors = [
-              'div[role="checkbox"]',
-              'input[type="checkbox"]',
-              'div[id*="checkbox"]',
-              'div[aria-checked="false"]'
-            ];
+            // Look for human verification checkbox with more specific detection
+            await addDebugStep('Kie.ai Login', 'info', 'Waiting for human verification checkbox...');
             
-            let clicked = false;
-            for (const selector of checkboxSelectors) {
+            // First try the exact selector from the HTML you provided
+            await page.waitForSelector('div#checkbox[role="checkbox"][aria-checked="false"]', { visible: true, timeout: 15000 });
+            
+            // Try multiple methods to click the checkbox
+            let checkboxClicked = false;
+            
+            // Method 1: Direct click on the specific element
+            try {
+              await addDebugStep('Kie.ai Login', 'info', 'Trying direct click on checkbox...');
+              await page.click('div#checkbox[role="checkbox"]');
+              checkboxClicked = true;
+              await addDebugStep('Kie.ai Login', 'success', 'Clicked checkbox using direct selector');
+            } catch (e) {
+              await addDebugStep('Kie.ai Login', 'info', `Direct click failed: ${e.message}`);
+            }
+            
+            // Method 2: Use page.evaluate for more reliable clicking
+            if (!checkboxClicked) {
               try {
-                await page.waitForSelector(selector, { timeout: 3000 });
-                await page.click(selector);
-                clicked = true;
-                break;
-              } catch (selectorError) {
-                continue;
+                await addDebugStep('Kie.ai Login', 'info', 'Trying evaluate method for checkbox...');
+                const clicked = await page.evaluate(() => {
+                  // Try multiple selectors in order of specificity
+                  const selectors = [
+                    'div#checkbox[role="checkbox"]',
+                    'div[id="checkbox"][role="checkbox"]',
+                    'div[role="checkbox"][aria-checked="false"]',
+                    'div[role="checkbox"]',
+                    'input[type="checkbox"]'
+                  ];
+                  
+                  for (const selector of selectors) {
+                    const element = document.querySelector(selector);
+                    if (element && element.offsetParent !== null) { // Check if visible
+                      element.click();
+                      return true;
+                    }
+                  }
+                  return false;
+                });
+                
+                if (clicked) {
+                  checkboxClicked = true;
+                  await addDebugStep('Kie.ai Login', 'success', 'Clicked checkbox using evaluate method');
+                }
+              } catch (e) {
+                await addDebugStep('Kie.ai Login', 'info', `Evaluate method failed: ${e.message}`);
               }
             }
             
-            if (clicked) {
-              await takeScreenshot('Human-Verification-Checked', page);
-              await addDebugStep('Kie.ai Login', 'success', 'Clicked human verification checkbox with alternative method', null, null, page);
-            } else {
-              await addDebugStep('Kie.ai Login', 'warning', 'Could not find human verification checkbox');
+            // Method 3: Try alternative selectors
+            if (!checkboxClicked) {
+              const checkboxSelectors = [
+                'div[role="checkbox"]',
+                'input[type="checkbox"]',
+                'div[id*="checkbox"]',
+                'div[aria-checked="false"]',
+                '[role="checkbox"]'
+              ];
+              
+              for (const selector of checkboxSelectors) {
+                try {
+                  await addDebugStep('Kie.ai Login', 'info', `Trying selector: ${selector}`);
+                  await page.waitForSelector(selector, { visible: true, timeout: 2000 });
+                  await page.click(selector);
+                  checkboxClicked = true;
+                  await addDebugStep('Kie.ai Login', 'success', `Clicked checkbox with selector: ${selector}`);
+                  break;
+                } catch (selectorError) {
+                  await addDebugStep('Kie.ai Login', 'info', `Selector ${selector} failed: ${selectorError.message}`);
+                }
+              }
             }
+            
+            if (checkboxClicked) {
+              await takeScreenshot('Human-Verification-Checked', page);
+              await addDebugStep('Kie.ai Login', 'success', 'Human verification checkbox clicked successfully', null, null, page);
+            } else {
+              await addDebugStep('Kie.ai Login', 'warning', 'Could not find or click human verification checkbox');
+            }
+            
+          } catch (e) {
+            await addDebugStep('Kie.ai Login', 'warning', `Human verification failed: ${e.message}`);
           }
           
           // Wait for login to complete
