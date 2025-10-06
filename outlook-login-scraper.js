@@ -658,6 +658,62 @@ async function loginToOutlook(email, password, io) {
                   await addDebugStep('Kie.ai Login', 'success', `Found Microsoft login page, switching to it...`);
                   page = currentPage;
                   await takeScreenshot('Microsoft-Login-Page-Detected', page);
+                  
+                  // Handle the Microsoft OAuth login (this is normal - each app needs separate auth)
+                  await addDebugStep('Kie.ai Login', 'info', 'Handling Microsoft OAuth login (this is normal - each app needs separate auth)...');
+                  
+                  // Wait for email input to be visible
+                  await addDebugStep('Kie.ai Login', 'info', 'Waiting for email input field...');
+                  await page.waitForSelector('input[type="email"], input[name="loginfmt"], input[placeholder*="email" i]', { visible: true, timeout: 10000 });
+                  
+                  // Clear any existing text and fill in email
+                  await addDebugStep('Kie.ai Login', 'info', `Filling in email: ${email}`);
+                  await page.click('input[type="email"], input[name="loginfmt"], input[placeholder*="email" i]');
+                  await page.keyboard.down('Control');
+                  await page.keyboard.press('a');
+                  await page.keyboard.up('Control');
+                  await page.type('input[type="email"], input[name="loginfmt"], input[placeholder*="email" i]', email, { delay: 100 });
+                  
+                  // Click Next button
+                  await addDebugStep('Kie.ai Login', 'info', 'Clicking Next button...');
+                  try {
+                    await page.click('input[type="submit"], button[type="submit"], input[value="Next"]');
+                  } catch (e) {
+                    // Try XPath for Next button
+                    await page.evaluate(() => {
+                      const nextButton = document.evaluate("//button[contains(text(), 'Next')] | //input[@value='Next']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                      if (nextButton) nextButton.click();
+                    });
+                  }
+                  
+                  // Wait for password page
+                  await addDebugStep('Kie.ai Login', 'info', 'Waiting for password page...');
+                  await page.waitForSelector('input[type="password"], input[name="passwd"]', { visible: true, timeout: 10000 });
+                  
+                  // Fill in password
+                  await addDebugStep('Kie.ai Login', 'info', 'Filling in password...');
+                  await page.click('input[type="password"], input[name="passwd"]');
+                  await page.keyboard.down('Control');
+                  await page.keyboard.press('a');
+                  await page.keyboard.up('Control');
+                  await page.type('input[type="password"], input[name="passwd"]', password, { delay: 100 });
+                  
+                  // Click Sign in button
+                  await addDebugStep('Kie.ai Login', 'info', 'Clicking Sign in button...');
+                  try {
+                    await page.click('input[type="submit"], button[type="submit"], input[value="Sign in"]');
+                  } catch (e) {
+                    // Try XPath for Sign in button
+                    await page.evaluate(() => {
+                      const signInButton = document.evaluate("//button[contains(text(), 'Sign in')] | //input[@value='Sign in']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                      if (signInButton) signInButton.click();
+                    });
+                  }
+                  
+                  // Wait for navigation
+                  await addDebugStep('Kie.ai Login', 'info', 'Waiting for OAuth login to complete...');
+                  await page.waitForNavigation({ timeout: 15000 });
+                  
                   break;
                 }
               } catch (pageError) {
