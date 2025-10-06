@@ -809,15 +809,70 @@ async function loginToOutlook(email, password, io) {
                 
                 // Extract the API key from the search field value
                 await addDebugStep('Kie.ai API Key', 'info', 'Extracting API key from search field...');
+                
+                // Try multiple methods to get the full API key
                 apiKey = await page.evaluate(() => {
                   const searchInput = document.querySelector('input[placeholder*="Search for updates"]');
-                  return searchInput ? searchInput.value : null;
+                  if (!searchInput) return null;
+                  
+                  // Method 1: Get the value directly
+                  let value = searchInput.value;
+                  if (value && value.length > 20) {
+                    return value;
+                  }
+                  
+                  // Method 2: Get the text content if value is masked
+                  const textContent = searchInput.textContent;
+                  if (textContent && textContent.length > 20) {
+                    return textContent;
+                  }
+                  
+                  // Method 3: Get the innerHTML and extract text
+                  const innerHTML = searchInput.innerHTML;
+                  if (innerHTML && innerHTML.length > 20) {
+                    return innerHTML;
+                  }
+                  
+                  // Method 4: Check if it's in a data attribute
+                  const dataValue = searchInput.getAttribute('data-value') || searchInput.getAttribute('value');
+                  if (dataValue && dataValue.length > 20) {
+                    return dataValue;
+                  }
+                  
+                  // Method 5: Look for the actual text in the DOM
+                  const allText = document.body.innerText;
+                  const apiKeyMatch = allText.match(/[a-f0-9]{32,}/i);
+                  if (apiKeyMatch) {
+                    return apiKeyMatch[0];
+                  }
+                  
+                  return value; // Return whatever we found
                 });
                 
-                if (apiKey && apiKey.length > 20) {
-                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted via API Updates page: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+                // If we still don't have a full key, try to get it from the visible text
+                if (!apiKey || apiKey.length < 30) {
+                  await addDebugStep('Kie.ai API Key', 'info', 'Trying to extract from visible text...');
+                  
+                  // Get all visible text and look for API key pattern
+                  const fullApiKey = await page.evaluate(() => {
+                    // Look for 32-character hex string (typical API key length)
+                    const text = document.body.innerText;
+                    const matches = text.match(/[a-f0-9]{32,}/gi);
+                    if (matches && matches.length > 0) {
+                      // Return the longest match (most likely the API key)
+                      return matches.sort((a, b) => b.length - a.length)[0];
+                    }
+                    return null;
+                  });
+                  
+                  if (fullApiKey && fullApiKey.length >= 30) {
+                    apiKey = fullApiKey;
+                    await addDebugStep('Kie.ai API Key', 'success', `Full API Key extracted from visible text: ${apiKey}`, null, null, page);
+                  } else {
+                    throw new Error('Could not extract full API key from visible text');
+                  }
                 } else {
-                  throw new Error('API Updates method failed to extract valid API key');
+                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted via API Updates page: ${apiKey}`, null, null, page);
                 }
                 
               } catch (apiUpdatesError) {
