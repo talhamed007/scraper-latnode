@@ -4402,8 +4402,11 @@ app.post('/api/outlook-login', async (req, res) => {
     // Start the login process
     const result = await loginToOutlook(email, password, io);
     
-    console.log('✅ Outlook account login completed');
-    res.json(result);
+           console.log('✅ Outlook account login completed');
+           if (result.apiKey && result.apiKey !== 'Not Found') {
+             console.log(`🔑 Extracted API Key: ${result.apiKey}`);
+           }
+           res.json(result);
     
   } catch (error) {
     console.error('❌ Outlook account login error:', error);

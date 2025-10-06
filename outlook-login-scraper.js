@@ -676,6 +676,100 @@ async function loginToOutlook(email, password, io) {
           await takeScreenshot('Kie-ai-Dashboard', page);
           await addDebugStep('Kie.ai Login', 'success', 'Successfully navigated to Kie.ai dashboard', null, null, page);
           
+          // Step 12: Click API Key button
+          await addDebugStep('Kie.ai API Key', 'info', 'Clicking API Key button...');
+          try {
+            const apiKeyButtonSelector = 'a[href="/api-key"]';
+            await page.waitForSelector(apiKeyButtonSelector, { visible: true, timeout: 10000 });
+            await page.click(apiKeyButtonSelector);
+            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+            await takeScreenshot('Kie-ai-API-Key-Page', page);
+            await addDebugStep('Kie.ai API Key', 'success', 'Successfully navigated to API Key page', null, null, page);
+            await randomHumanDelay(page, 2000, 3000);
+          } catch (e) {
+            await addDebugStep('Kie.ai API Key', 'error', `Failed to click API Key button or navigate: ${e.message}`, null, e, page);
+          }
+
+          // Step 13: Click Copy button and extract API Key
+          await addDebugStep('Kie.ai API Key', 'info', 'Looking for Copy button and extracting API Key...');
+          let apiKey = 'Not Found';
+          try {
+            // Try to find the copy button with the lucide-copy SVG
+            const copyButtonSelectors = [
+              'button:has(svg.lucide-copy)',
+              'button[aria-label*="copy"]',
+              'button[title*="copy"]',
+              'button:contains("Copy")',
+              'svg.lucide-copy',
+              '[role="gridcell"] button:has(svg.lucide-copy)'
+            ];
+            
+            let copyButton = null;
+            for (const selector of copyButtonSelectors) {
+              try {
+                if (selector.includes(':has') || selector.includes(':contains')) {
+                  // Use XPath for complex selectors
+                  const xpath = selector.includes(':has') ? 
+                    '//button[.//svg[contains(@class, "lucide-copy")]]' :
+                    '//button[contains(text(), "Copy")]';
+                  const [element] = await page.waitForXPath(xpath, { visible: true, timeout: 3000 });
+                  if (element) {
+                    copyButton = element;
+                    break;
+                  }
+                } else {
+                  const element = await page.waitForSelector(selector, { visible: true, timeout: 3000 });
+                  if (element) {
+                    copyButton = element;
+                    break;
+                  }
+                }
+              } catch (selectorError) {
+                continue;
+              }
+            }
+
+            if (copyButton) {
+              await copyButton.click();
+              await takeScreenshot('Kie-ai-API-Key-Copied', page);
+              await addDebugStep('Kie.ai API Key', 'success', 'Clicked Copy button', null, null, page);
+              await randomHumanDelay(page, 1000, 2000);
+
+              // Try to extract API Key from clipboard
+              try {
+                apiKey = await page.evaluate(() => navigator.clipboard.readText());
+                await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from clipboard: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+              } catch (clipboardError) {
+                await addDebugStep('Kie.ai API Key', 'warning', `Could not read from clipboard: ${clipboardError.message}`);
+                
+                // Fallback: try to extract from DOM
+                const domApiKey = await page.evaluate(() => {
+                  // Look for API key in various elements
+                  const possibleElements = document.querySelectorAll('input[readonly], input[type="text"], span, div, code');
+                  for (const el of possibleElements) {
+                    const text = el.textContent?.trim() || el.value?.trim() || '';
+                    // Look for long alphanumeric strings that could be API keys
+                    if (text.length > 20 && /[a-f0-9]{20,}/i.test(text)) {
+                      return text;
+                    }
+                  }
+                  return null;
+                });
+                
+                if (domApiKey) {
+                  apiKey = domApiKey;
+                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from DOM: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+                } else {
+                  await addDebugStep('Kie.ai API Key', 'warning', 'Could not extract API Key from clipboard or DOM');
+                }
+              }
+            } else {
+              await addDebugStep('Kie.ai API Key', 'warning', 'Could not find Copy button', null, null, page);
+            }
+          } catch (e) {
+            await addDebugStep('Kie.ai API Key', 'error', `Failed to copy API Key: ${e.message}`, null, e, page);
+          }
+          
         } catch (switchError) {
           await addDebugStep('Kie.ai Login', 'warning', `Failed to switch back to Kie.ai: ${switchError.message}`);
         }
@@ -688,9 +782,11 @@ async function loginToOutlook(email, password, io) {
         success: true,
         message: 'Successfully logged into Microsoft account and Kie.ai',
         email: email,
+        password: password, // Include password as requested
         name: 'Microsoft User',
         url: currentUrl,
-        title: pageTitle
+        title: pageTitle,
+        apiKey: apiKey || 'Not Found' // Include API key
       };
     } else {
       await addDebugStep('Login Verification', 'warning', `Unexpected page after login: ${currentUrl}`, null, null, page);
@@ -699,9 +795,11 @@ async function loginToOutlook(email, password, io) {
         success: true,
         message: 'Login completed but redirected to unexpected page',
         email: email,
+        password: password, // Include password as requested
         name: 'Microsoft User',
         url: currentUrl,
-        title: pageTitle
+        title: pageTitle,
+        apiKey: 'Not Found' // No API key if login failed
       };
     }
     
