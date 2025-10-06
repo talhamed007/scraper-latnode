@@ -763,37 +763,37 @@ async function loginToOutlook(email, password, io) {
               await addDebugStep('Kie.ai API Key', 'success', 'Clicked Copy button', null, null, page);
               await randomHumanDelay(page, 1000, 2000);
 
-              // Try to extract API Key using notepad method
-              await addDebugStep('Kie.ai API Key', 'info', 'Using notepad method to extract API key...');
+              // Try to extract API Key using API Updates page method
+              await addDebugStep('Kie.ai API Key', 'info', 'Using API Updates page method to extract API key...');
               
               try {
-                // Open notepad using Windows Run dialog
-                await addDebugStep('Kie.ai API Key', 'info', 'Opening notepad via Windows+R...');
-                
-                // Press Windows+R to open Run dialog
-                await page.keyboard.down('MetaLeft'); // Windows key
-                await page.keyboard.press('r');
-                await page.keyboard.up('MetaLeft');
-                
-                await randomHumanDelay(page, 1000, 1500);
-                
-                // Type "notepad" in the Run dialog
-                await page.keyboard.type('notepad');
-                await randomHumanDelay(page, 500, 1000);
-                
-                // Press Enter to open notepad
-                await page.keyboard.press('Enter');
+                // Click on API Updates button
+                await addDebugStep('Kie.ai API Key', 'info', 'Clicking on API Updates button...');
+                const apiUpdatesButton = await page.waitForSelector('a[href="/api-updates"]', { visible: true, timeout: 10000 });
+                await apiUpdatesButton.click();
                 await randomHumanDelay(page, 2000, 3000);
                 
-                // Paste the copied API key into notepad
-                await addDebugStep('Kie.ai API Key', 'info', 'Pasting API key into notepad...');
+                // Wait for API Updates page to load
+                await page.waitForFunction(() => window.location.href.includes('/api-updates'), { timeout: 10000 });
+                await addDebugStep('Kie.ai API Key', 'success', 'Successfully navigated to API Updates page');
+                
+                // Find the search input field
+                await addDebugStep('Kie.ai API Key', 'info', 'Looking for search input field...');
+                const searchInput = await page.waitForSelector('input[placeholder*="Search for updates"]', { visible: true, timeout: 10000 });
+                
+                // Click on the search input to focus it
+                await searchInput.click();
+                await randomHumanDelay(page, 500, 1000);
+                
+                // Paste the copied API key into the search field
+                await addDebugStep('Kie.ai API Key', 'info', 'Pasting API key into search field...');
                 await page.keyboard.down('Control');
                 await page.keyboard.press('v');
                 await page.keyboard.up('Control');
                 
                 await randomHumanDelay(page, 1000, 1500);
                 
-                // Select all text in notepad
+                // Select all text in the search field
                 await page.keyboard.down('Control');
                 await page.keyboard.press('a');
                 await page.keyboard.up('Control');
@@ -807,27 +807,21 @@ async function loginToOutlook(email, password, io) {
                 
                 await randomHumanDelay(page, 1000, 1500);
                 
-                // Try to read from clipboard again
-                apiKey = await page.evaluate(() => navigator.clipboard.readText());
+                // Extract the API key from the search field value
+                await addDebugStep('Kie.ai API Key', 'info', 'Extracting API key from search field...');
+                apiKey = await page.evaluate(() => {
+                  const searchInput = document.querySelector('input[placeholder*="Search for updates"]');
+                  return searchInput ? searchInput.value : null;
+                });
                 
                 if (apiKey && apiKey.length > 20) {
-                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted via notepad: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted via API Updates page: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
                 } else {
-                  throw new Error('Notepad method failed to extract valid API key');
+                  throw new Error('API Updates method failed to extract valid API key');
                 }
                 
-                // Close notepad
-                await addDebugStep('Kie.ai API Key', 'info', 'Closing notepad...');
-                await page.keyboard.down('Alt');
-                await page.keyboard.press('F4');
-                await page.keyboard.up('Alt');
-                
-                // If notepad asks to save, press 'n' for No
-                await randomHumanDelay(page, 500, 1000);
-                await page.keyboard.press('n');
-                
-              } catch (notepadError) {
-                await addDebugStep('Kie.ai API Key', 'warning', `Notepad method failed: ${notepadError.message}`);
+              } catch (apiUpdatesError) {
+                await addDebugStep('Kie.ai API Key', 'warning', `API Updates method failed: ${apiUpdatesError.message}`);
                 
                 // Fallback: try direct clipboard extraction
                 try {
