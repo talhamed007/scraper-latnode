@@ -683,38 +683,48 @@ async function loginToOutlook(email, password, io) {
           
           // Try multiple ways to detect consent page
           let consentPageLoaded = false;
-          const consentPageIndicators = [
-            () => window.location.href.includes('account.live.com'),
-            () => window.location.href.includes('login.live.com'),
-            () => window.location.href.includes('consent'),
-            () => document.title.toLowerCase().includes('let this app'),
-            () => document.title.toLowerCase().includes('consent'),
-            () => document.title.toLowerCase().includes('permission'),
-            () => document.body.innerText.toLowerCase().includes('let this app'),
-            () => document.body.innerText.toLowerCase().includes('consent'),
-            () => document.body.innerText.toLowerCase().includes('permission')
-          ];
+          
+          // First, wait for navigation away from login page
+          await addDebugStep('Kie.ai Login', 'info', 'Waiting for navigation from login page...');
           
           for (let i = 0; i < 30; i++) { // Try for 30 seconds
             try {
-              consentPageLoaded = await page.evaluate(() => {
-                return window.location.href.includes('account.live.com') || 
-                       window.location.href.includes('login.live.com') ||
-                       window.location.href.includes('consent') ||
-                       document.title.toLowerCase().includes('let this app') ||
-                       document.title.toLowerCase().includes('consent') ||
-                       document.title.toLowerCase().includes('permission') ||
-                       document.body.innerText.toLowerCase().includes('let this app') ||
-                       document.body.innerText.toLowerCase().includes('consent') ||
-                       document.body.innerText.toLowerCase().includes('permission');
+              const pageInfo = await page.evaluate(() => {
+                const url = window.location.href;
+                const title = document.title;
+                const bodyText = document.body.innerText.toLowerCase();
+                
+                return {
+                  url: url,
+                  title: title,
+                  bodyText: bodyText,
+                  hasConsentButton: !!document.querySelector('button[data-testid="appConsentPrimaryButton"]'),
+                  hasAcceptButton: !!document.querySelector('button:contains("Accept")') || 
+                                 bodyText.includes('accept') && document.querySelector('button'),
+                  isConsentPage: url.includes('account.live.com') || 
+                                url.includes('consent') ||
+                                title.toLowerCase().includes('let this app') ||
+                                title.toLowerCase().includes('consent') ||
+                                bodyText.includes('let this app') ||
+                                bodyText.includes('consent')
+                };
               });
               
-              if (consentPageLoaded) {
-                await addDebugStep('Kie.ai Login', 'success', 'Consent page detected');
+              await addDebugStep('Kie.ai Login', 'info', `Page check ${i+1}/30: URL=${pageInfo.url}, Title=${pageInfo.title}, HasConsentButton=${pageInfo.hasConsentButton}, IsConsentPage=${pageInfo.isConsentPage}`);
+              
+              if (pageInfo.isConsentPage || pageInfo.hasConsentButton) {
+                consentPageLoaded = true;
+                await addDebugStep('Kie.ai Login', 'success', `Consent page detected: ${pageInfo.url}`);
                 break;
               }
+              
+              // If we're still on login page, wait for navigation
+              if (pageInfo.url.includes('login.microsoftonline.com')) {
+                await addDebugStep('Kie.ai Login', 'info', 'Still on login page, waiting for navigation...');
+              }
+              
             } catch (e) {
-              // Continue trying
+              await addDebugStep('Kie.ai Login', 'warning', `Page evaluation error: ${e.message}`);
             }
             
             await randomHumanDelay(page, 1000, 1000);
@@ -766,14 +776,19 @@ async function loginToOutlook(email, password, io) {
           // Try multiple methods to find and click Accept button
           let acceptClicked = false;
           
-          // Method 1: Try specific data-testid selector
+          // Method 1: Try specific data-testid selector (most reliable)
           try {
-            await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { timeout: 5000 });
-            await page.click('button[data-testid="appConsentPrimaryButton"]');
-            await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button using data-testid', null, null, page);
-            acceptClicked = true;
+            await addDebugStep('Kie.ai Login', 'info', 'Looking for appConsentPrimaryButton...');
+            await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { visible: true, timeout: 10000 });
+            const consentButton = await page.$('button[data-testid="appConsentPrimaryButton"]');
+            if (consentButton) {
+              await addDebugStep('Kie.ai Login', 'info', 'Found appConsentPrimaryButton, clicking...');
+              await consentButton.click();
+              await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button using data-testid', null, null, page);
+              acceptClicked = true;
+            }
           } catch (e) {
-            await addDebugStep('Kie.ai Login', 'info', 'data-testid selector failed, trying alternatives...');
+            await addDebugStep('Kie.ai Login', 'info', `data-testid selector failed: ${e.message}, trying alternatives...`);
           }
           
           // Method 2: Try XPath for Accept button
