@@ -4369,6 +4369,51 @@ app.post('/api/outlook-account', async (req, res) => {
   }
 });
 
+// Outlook account login endpoint
+app.post('/api/outlook-login', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email and password are required' 
+      });
+    }
+
+    console.log('🔐 Starting Outlook account login...');
+    
+    // Import the Outlook login scraper
+    const { loginToOutlook } = require('./outlook-login-scraper');
+    
+    // Reset global control flags
+    globalScraperPaused = false;
+    globalScraperStopped = false;
+    
+    // Start the login process
+    const result = await loginToOutlook(email, password, io);
+    
+    console.log('✅ Outlook account login completed');
+    res.json(result);
+    
+  } catch (error) {
+    console.error('❌ Outlook account login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);

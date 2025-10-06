@@ -299,10 +299,26 @@
                 </div>
             </div>
 
+            <!-- Login Account Form -->
+            <div class="form-section">
+                <h2>🔐 Login Account</h2>
+                <div class="form-group">
+                    <label for="loginEmail">Login Email:</label>
+                    <input type="email" id="loginEmail" placeholder="Enter existing email for login" value="">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Login Password:</label>
+                    <input type="password" id="loginPassword" placeholder="Enter existing password for login" value="">
+                </div>
+            </div>
+
             <!-- Control Buttons -->
             <div class="control-buttons">
                 <button class="btn btn-primary" id="startBtn">
                     🚀 Start Creation
+                </button>
+                <button class="btn btn-secondary" id="loginBtn">
+                    🔐 Login Account
                 </button>
                 <button class="btn btn-warning" id="pauseBtn" disabled>
                     ⏸️ Pause
@@ -516,6 +532,83 @@
             }
         }
 
+        // Start account login
+        async function startAccountLogin() {
+            const loginEmail = document.getElementById('loginEmail').value.trim();
+            const loginPassword = document.getElementById('loginPassword').value.trim();
+            
+            if (!loginEmail || !loginPassword) {
+                addLogEntry({
+                    step: 'Validation',
+                    type: 'error',
+                    message: 'Please enter both login email and password'
+                });
+                return;
+            }
+            
+            isRunning = true;
+            isPaused = false;
+            updateStatus('running', 'Logging into Outlook account...');
+            updateButtons();
+            
+            addLogEntry({
+                step: 'Account Login',
+                type: 'info',
+                message: `Starting Outlook account login for ${loginEmail}`
+            });
+            
+            try {
+                const response = await fetch('/api/outlook-login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: loginEmail,
+                        password: loginPassword
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLogEntry({
+                        step: 'Account Login',
+                        type: 'success',
+                        message: `✅ Successfully logged into Outlook account!`
+                    });
+                    addLogEntry({
+                        step: 'Account Details',
+                        type: 'info',
+                        message: `📧 Email: ${result.email}`
+                    });
+                    addLogEntry({
+                        step: 'Account Details',
+                        type: 'info',
+                        message: `👤 Name: ${result.name || 'N/A'}`
+                    });
+                } else {
+                    addLogEntry({
+                        step: 'Account Login',
+                        type: 'error',
+                        message: `❌ Login failed: ${result.error || 'Unknown error'}`
+                    });
+                }
+                
+            } catch (error) {
+                addLogEntry({
+                    step: 'Account Login',
+                    type: 'error',
+                    message: `❌ Error: ${error.message}`
+                });
+            } finally {
+                isRunning = false;
+                isPaused = false;
+                updateStatus('ready', 'Login process completed');
+                updateButtons();
+            }
+        }
+
         // Pause process
         async function pauseProcess() {
             try {
@@ -622,6 +715,7 @@
 
         // Event listeners
         startBtn.addEventListener('click', startAccountCreation);
+        loginBtn.addEventListener('click', startAccountLogin);
         pauseBtn.addEventListener('click', pauseProcess);
         resumeBtn.addEventListener('click', resumeProcess);
         stopBtn.addEventListener('click', stopProcess);
