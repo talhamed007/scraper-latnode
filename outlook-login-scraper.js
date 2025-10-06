@@ -731,17 +731,13 @@ async function loginToOutlook(email, password, io) {
         // Wait for Microsoft consent page
         await randomHumanDelay(page, 3000, 5000);
         
-        // Handle Microsoft consent page
-        await addDebugStep('Kie.ai Login', 'info', 'Handling Microsoft consent page...');
+        // Handle Microsoft pages dynamically (consent, stay signed in, etc.)
+        await addDebugStep('Kie.ai Login', 'info', 'Handling Microsoft pages dynamically...');
         try {
-          // Wait for consent page to load with more flexible detection
-          await addDebugStep('Kie.ai Login', 'info', 'Waiting for consent page to load...');
+          // Wait for any Microsoft page to load
+          await addDebugStep('Kie.ai Login', 'info', 'Waiting for Microsoft page to load...');
           
-          // Try multiple ways to detect consent page
-          let consentPageLoaded = false;
-          
-          // First, wait for navigation away from login page
-          await addDebugStep('Kie.ai Login', 'info', 'Waiting for navigation from login page...');
+          let microsoftPageHandled = false;
           
           for (let i = 0; i < 30; i++) { // Try for 30 seconds
             try {
@@ -750,33 +746,55 @@ async function loginToOutlook(email, password, io) {
                 const title = document.title;
                 const bodyText = document.body.innerText.toLowerCase();
                 
+                // Detect different Microsoft page types
+                const isConsentPage = url.includes('account.live.com') || 
+                                    url.includes('consent') ||
+                                    title.toLowerCase().includes('let this app') ||
+                                    bodyText.includes('let this app');
+                
+                const isStaySignedInPage = title.toLowerCase().includes('stay signed in') ||
+                                         bodyText.includes('stay signed in') ||
+                                         bodyText.includes('do you want to stay signed in');
+                
+                const isSignInPage = url.includes('login.microsoftonline.com') ||
+                                   title.toLowerCase().includes('sign in') ||
+                                   bodyText.includes('sign in to your account');
+                
+                // Find available buttons
+                const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                const buttonTexts = buttons.map(btn => btn.textContent?.toLowerCase().trim() || btn.value?.toLowerCase().trim() || '');
+                
                 return {
                   url: url,
                   title: title,
                   bodyText: bodyText,
+                  isConsentPage: isConsentPage,
+                  isStaySignedInPage: isStaySignedInPage,
+                  isSignInPage: isSignInPage,
                   hasConsentButton: !!document.querySelector('button[data-testid="appConsentPrimaryButton"]'),
-                  hasAcceptButton: !!document.querySelector('button:contains("Accept")') || 
-                                 bodyText.includes('accept') && document.querySelector('button'),
-                  isConsentPage: url.includes('account.live.com') || 
-                                url.includes('consent') ||
-                                title.toLowerCase().includes('let this app') ||
-                                title.toLowerCase().includes('consent') ||
-                                bodyText.includes('let this app') ||
-                                bodyText.includes('consent')
+                  hasAcceptButton: buttonTexts.includes('accept'),
+                  hasYesButton: buttonTexts.includes('yes'),
+                  hasNextButton: buttonTexts.includes('next'),
+                  hasSignInButton: buttonTexts.includes('sign in'),
+                  availableButtons: buttonTexts.filter(text => text.length > 0)
                 };
               });
               
-              await addDebugStep('Kie.ai Login', 'info', `Page check ${i+1}/30: URL=${pageInfo.url}, Title=${pageInfo.title}, HasConsentButton=${pageInfo.hasConsentButton}, IsConsentPage=${pageInfo.isConsentPage}`);
+              await addDebugStep('Kie.ai Login', 'info', `Page check ${i+1}/30: URL=${pageInfo.url}, Title=${pageInfo.title}`);
+              await addDebugStep('Kie.ai Login', 'info', `Page type: Consent=${pageInfo.isConsentPage}, StaySignedIn=${pageInfo.isStaySignedInPage}, SignIn=${pageInfo.isSignInPage}`);
+              await addDebugStep('Kie.ai Login', 'info', `Available buttons: ${pageInfo.availableButtons.join(', ')}`);
               
+              // Handle different page types
               if (pageInfo.isConsentPage || pageInfo.hasConsentButton) {
-                consentPageLoaded = true;
                 await addDebugStep('Kie.ai Login', 'success', `Consent page detected: ${pageInfo.url}`);
+                microsoftPageHandled = true;
                 break;
-              }
-              
-              // If we're still on login page, wait for navigation
-              if (pageInfo.url.includes('login.microsoftonline.com')) {
-                await addDebugStep('Kie.ai Login', 'info', 'Still on login page, waiting for navigation...');
+              } else if (pageInfo.isStaySignedInPage) {
+                await addDebugStep('Kie.ai Login', 'info', `Stay signed in page detected: ${pageInfo.url}`);
+                microsoftPageHandled = true;
+                break;
+              } else if (pageInfo.isSignInPage) {
+                await addDebugStep('Kie.ai Login', 'info', `Still on sign in page, waiting for navigation...`);
               }
               
             } catch (e) {
@@ -786,8 +804,8 @@ async function loginToOutlook(email, password, io) {
             await randomHumanDelay(page, 1000, 1000);
           }
           
-          if (!consentPageLoaded) {
-            await addDebugStep('Kie.ai Login', 'warning', 'Consent page not detected, proceeding anyway...');
+          if (!microsoftPageHandled) {
+            await addDebugStep('Kie.ai Login', 'warning', 'Microsoft page not detected, proceeding anyway...');
           }
           
           await takeScreenshot('Microsoft-Consent-Page', page);
@@ -826,29 +844,74 @@ async function loginToOutlook(email, password, io) {
             }
           }
           
-          // Look for Accept button
-          await addDebugStep('Kie.ai Login', 'info', 'Looking for Accept button...');
+          // Smart button detection and clicking based on page type
+          await addDebugStep('Kie.ai Login', 'info', 'Looking for appropriate button...');
           
-          // Try multiple methods to find and click Accept button
-          let acceptClicked = false;
+          let buttonClicked = false;
           
-          // Method 1: Try specific data-testid selector (most reliable)
+          // Method 1: Try specific data-testid selector for consent page
           try {
             await addDebugStep('Kie.ai Login', 'info', 'Looking for appConsentPrimaryButton...');
-            await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { visible: true, timeout: 10000 });
+            await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { visible: true, timeout: 5000 });
             const consentButton = await page.$('button[data-testid="appConsentPrimaryButton"]');
             if (consentButton) {
               await addDebugStep('Kie.ai Login', 'info', 'Found appConsentPrimaryButton, clicking...');
               await consentButton.click();
               await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button using data-testid', null, null, page);
-              acceptClicked = true;
+              buttonClicked = true;
             }
           } catch (e) {
             await addDebugStep('Kie.ai Login', 'info', `data-testid selector failed: ${e.message}, trying alternatives...`);
           }
           
-          // Method 2: Try XPath for Accept button
-          if (!acceptClicked) {
+          // Method 2: Smart button detection using page.evaluate
+          if (!buttonClicked) {
+            try {
+              await addDebugStep('Kie.ai Login', 'info', 'Using smart button detection...');
+              const clicked = await page.evaluate(() => {
+                // Get all buttons and their text
+                const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                
+                // Priority order for button text
+                const buttonPriorities = [
+                  'accept',
+                  'yes', 
+                  'continue',
+                  'next',
+                  'sign in',
+                  'allow',
+                  'ok'
+                ];
+                
+                // Try to find and click the most appropriate button
+                for (const priority of buttonPriorities) {
+                  const button = buttons.find(btn => {
+                    const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+                    return text.includes(priority);
+                  });
+                  
+                  if (button && button.offsetParent !== null) { // Check if visible
+                    button.click();
+                    return { success: true, button: priority };
+                  }
+                }
+                
+                return { success: false, availableButtons: buttons.map(btn => (btn.textContent || btn.value || '').trim()).filter(t => t.length > 0) };
+              });
+              
+              if (clicked.success) {
+                buttonClicked = true;
+                await addDebugStep('Kie.ai Login', 'success', `Clicked button: ${clicked.button}`);
+              } else {
+                await addDebugStep('Kie.ai Login', 'info', `Available buttons: ${clicked.availableButtons.join(', ')}`);
+              }
+            } catch (e) {
+              await addDebugStep('Kie.ai Login', 'info', `Smart detection failed: ${e.message}`);
+            }
+          }
+          
+          // Method 3: Try XPath for Accept button
+          if (!buttonClicked) {
             try {
               const acceptXPaths = [
                 '//button[contains(text(), "Accept")]',
@@ -1053,20 +1116,43 @@ async function loginToOutlook(email, password, io) {
             // Look for human verification checkbox with more specific detection
             await addDebugStep('Kie.ai Login', 'info', 'Waiting for human verification checkbox...');
             
-            // First try the exact selector from the HTML you provided
-            await page.waitForSelector('div#checkbox[role="checkbox"][aria-checked="false"]', { visible: true, timeout: 15000 });
+            // Try multiple selectors for human verification checkbox
+            await page.waitForSelector('div#checkbox[role="checkbox"], [role="checkbox"], input[type="checkbox"], [aria-checked]', { visible: true, timeout: 15000 });
             
             // Try multiple methods to click the checkbox
             let checkboxClicked = false;
             
-            // Method 1: Direct click on the specific element
+            // Method 1: Smart checkbox detection and clicking
             try {
-              await addDebugStep('Kie.ai Login', 'info', 'Trying direct click on checkbox...');
-              await page.click('div#checkbox[role="checkbox"]');
-              checkboxClicked = true;
-              await addDebugStep('Kie.ai Login', 'success', 'Clicked checkbox using direct selector');
+              await addDebugStep('Kie.ai Login', 'info', 'Using smart checkbox detection...');
+              const clicked = await page.evaluate(() => {
+                // Try multiple selectors in order of specificity
+                const selectors = [
+                  'div#checkbox[role="checkbox"]',
+                  'div[id="checkbox"][role="checkbox"]',
+                  'div[role="checkbox"][aria-checked="false"]',
+                  'div[role="checkbox"]',
+                  'input[type="checkbox"]',
+                  '[aria-checked="false"]',
+                  '[role="checkbox"]'
+                ];
+                
+                for (const selector of selectors) {
+                  const element = document.querySelector(selector);
+                  if (element && element.offsetParent !== null) { // Check if visible
+                    element.click();
+                    return { success: true, selector: selector };
+                  }
+                }
+                return { success: false };
+              });
+              
+              if (clicked.success) {
+                checkboxClicked = true;
+                await addDebugStep('Kie.ai Login', 'success', `Clicked checkbox using: ${clicked.selector}`);
+              }
             } catch (e) {
-              await addDebugStep('Kie.ai Login', 'info', `Direct click failed: ${e.message}`);
+              await addDebugStep('Kie.ai Login', 'info', `Smart checkbox detection failed: ${e.message}`);
             }
             
             // Method 2: Use page.evaluate for more reliable clicking
