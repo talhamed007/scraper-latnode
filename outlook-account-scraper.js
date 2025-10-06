@@ -382,41 +382,120 @@ async function createOutlookAccount(email, password, io = null) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     
-    // Hold the button and wait for verification to complete
+    // Hold the button and monitor progress bar
     let verificationComplete = false;
     let holdTime = 0;
-    const maxHoldTime = 15000; // 15 seconds max
+    const maxHoldTime = 20000; // 20 seconds max
+    let progressDetected = false;
+    let lastProgress = 0;
+    
+    await addDebugStep('Human Verification', 'info', 'Starting to hold button and monitor progress...', null, null, page);
     
     while (!verificationComplete && holdTime < maxHoldTime) {
-      await page.waitForTimeout(200);
-      holdTime += 200;
+      await page.waitForTimeout(100);
+      holdTime += 100;
       
-      // Check for verification completion indicators
+      // Monitor progress bar and button state
       try {
-        verificationComplete = await page.evaluate(() => {
-          // Look for visual indicators of completion
+        const progressInfo = await page.evaluate(() => {
+          // Look for progress bar elements
+          const progressBars = document.querySelectorAll('[class*="progress"], [class*="bar"], [style*="width"], [style*="transform"]');
+          let progressValue = 0;
+          let progressElement = null;
+          
+          // Check for progress indicators
+          for (const element of progressBars) {
+            const style = window.getComputedStyle(element);
+            const width = style.width;
+            const transform = style.transform;
+            
+            // Look for width-based progress (0-100%)
+            if (width && width.includes('%')) {
+              const percent = parseFloat(width.replace('%', ''));
+              if (percent > progressValue) {
+                progressValue = percent;
+                progressElement = element;
+              }
+            }
+            
+            // Look for transform-based progress
+            if (transform && transform.includes('translateX')) {
+              const match = transform.match(/translateX\(([^)]+)\)/);
+              if (match) {
+                const translateX = parseFloat(match[1]);
+                if (translateX > progressValue) {
+                  progressValue = translateX;
+                  progressElement = element;
+                }
+              }
+            }
+          }
+          
+          // Look for button state changes
+          const button = document.querySelector('button[type="button"]') || 
+                       document.querySelector('button[aria-label*="hold"]') ||
+                       document.querySelector('button[class*="hold"]');
+          
+          let buttonState = 'unknown';
+          if (button) {
+            const buttonStyle = window.getComputedStyle(button);
+            const buttonText = button.textContent || '';
+            
+            if (buttonText.includes('Press and hold') || buttonText.includes('Hold')) {
+              buttonState = 'holding';
+            } else if (buttonText.includes('Release') || buttonText.includes('Complete')) {
+              buttonState = 'ready_to_release';
+            } else if (buttonText.includes('✓') || buttonText.includes('Complete')) {
+              buttonState = 'completed';
+            }
+          }
+          
+          // Look for visual completion indicators
           const hasCheckmark = document.querySelector('svg[data-testid="checkmark"]') !== null ||
                               document.querySelector('.checkmark') !== null ||
                               document.querySelector('[class*="success"]') !== null ||
-                              document.querySelector('[class*="complete"]') !== null;
+                              document.querySelector('[class*="complete"]') !== null ||
+                              document.querySelector('[class*="verified"]') !== null;
           
-          // Look for text indicators
+          // Look for text completion indicators
           const hasSuccessText = document.body.textContent.includes('verified') ||
                                document.body.textContent.includes('success') ||
                                document.body.textContent.includes('complete') ||
-                               document.body.textContent.includes('continue');
+                               document.body.textContent.includes('continue') ||
+                               document.body.textContent.includes('next');
           
-          // Look for page navigation (next button appears)
-          const hasNextButton = document.querySelector('button[type="submit"]') !== null ||
-                              document.querySelector('input[type="submit"]') !== null;
-          
-          // Look for form progression (new form elements appear)
-          const hasNewForm = document.querySelector('input[name="FirstName"]') !== null ||
-                            document.querySelector('input[name="LastName"]') !== null ||
-                            document.querySelector('input[placeholder*="name"]') !== null;
-          
-          return hasCheckmark || hasSuccessText || hasNextButton || hasNewForm;
+          return {
+            progressValue,
+            progressElement: progressElement ? progressElement.tagName : null,
+            buttonState,
+            hasCheckmark,
+            hasSuccessText,
+            isComplete: hasCheckmark || hasSuccessText || buttonState === 'completed'
+          };
         });
+        
+        // Log progress if detected
+        if (progressInfo.progressValue > lastProgress) {
+          lastProgress = progressInfo.progressValue;
+          progressDetected = true;
+          await addDebugStep('Human Verification', 'info', `Progress: ${progressInfo.progressValue.toFixed(1)}% (Button: ${progressInfo.buttonState})`, null, null, page);
+        }
+        
+        // Check if verification is complete
+        verificationComplete = progressInfo.isComplete;
+        
+        // Smart release: if progress is near completion (80%+) and button state indicates ready
+        if (!verificationComplete && progressInfo.progressValue >= 80 && 
+            (progressInfo.buttonState === 'ready_to_release' || progressInfo.buttonState === 'completed')) {
+          await addDebugStep('Human Verification', 'info', 'Progress near completion, releasing button...', null, null, page);
+          break;
+        }
+        
+        // If we've been holding for a while and have good progress, release
+        if (!verificationComplete && holdTime > 5000 && progressInfo.progressValue >= 70) {
+          await addDebugStep('Human Verification', 'info', 'Good progress detected, releasing button...', null, null, page);
+          break;
+        }
         
         if (verificationComplete) {
           await addDebugStep('Human Verification', 'success', 'Verification completed successfully!', null, null, page);
@@ -436,8 +515,8 @@ async function createOutlookAccount(email, password, io = null) {
     // Release the button
     await page.mouse.up();
     
-    if (!verificationComplete) {
-      throw new Error('Human verification failed - verification did not complete within timeout');
+    if (!verificationComplete && !progressDetected) {
+      throw new Error('Human verification failed - no progress detected within timeout');
     }
     
     await addDebugStep('Human Verification', 'success', 'Button released after verification', null, null, page);
