@@ -36,6 +36,23 @@ app.use(express.static('public'));
 app.use('/files', express.static('public'));
 app.use('/screenshots', express.static('screenshots'));
 
+// Test endpoint to check if screenshots are being served
+app.get('/test-screenshots', (req, res) => {
+  const fs = require('fs');
+  const screenshotsDir = path.join(__dirname, 'screenshots');
+  
+  if (!fs.existsSync(screenshotsDir)) {
+    return res.json({ error: 'Screenshots directory does not exist' });
+  }
+  
+  const files = fs.readdirSync(screenshotsDir);
+  res.json({ 
+    screenshotsDir,
+    files: files.filter(f => f.endsWith('.png')),
+    count: files.filter(f => f.endsWith('.png')).length
+  });
+});
+
 // Serve the main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));

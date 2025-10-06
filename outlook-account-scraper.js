@@ -31,6 +31,9 @@ async function addDebugStep(step, type, message, screenshot = null, error = null
   };
   
   console.log(`[${timestamp}] ${step}: ${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'} ${message}`);
+  if (screenshot) {
+    console.log(`[${timestamp}] ${step}: Screenshot: ${screenshot}`);
+  }
   
   // Emit to all connected clients
   if (globalIO) {
@@ -143,7 +146,7 @@ async function createOutlookAccount(email, password, io = null) {
     addDebugStep('Navigation', 'info', 'Navigating to Outlook signup...');
     await page.goto('https://signup.live.com/signup', { waitUntil: 'networkidle2' });
     await takeScreenshot('Outlook-Signup-Initial', page);
-    addDebugStep('Navigation', 'success', 'Successfully navigated to Outlook signup');
+    await addDebugStep('Navigation', 'success', 'Successfully navigated to Outlook signup', null, null, page);
     
     // Wait for page to load
     await randomHumanDelay(page, 2000, 3000);
@@ -162,13 +165,13 @@ async function createOutlookAccount(email, password, io = null) {
     await page.type('input[type="email"][name="Email"]', email, { delay: 100 });
     
     await takeScreenshot('Email-Entered', page);
-    addDebugStep('Email Entry', 'success', 'Email entered successfully');
+    await addDebugStep('Email Entry', 'success', 'Email entered successfully', null, null, page);
     
     // Step 3: Click Next button
     addDebugStep('Email Entry', 'info', 'Clicking Next button...');
     await page.click('button[type="submit"][data-testid="primaryButton"]');
     await takeScreenshot('Email-Next-Clicked', page);
-    addDebugStep('Email Entry', 'success', 'Next button clicked');
+    await addDebugStep('Email Entry', 'success', 'Next button clicked', null, null, page);
     
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);
@@ -184,13 +187,13 @@ async function createOutlookAccount(email, password, io = null) {
     await page.type('input[type="password"]', password, { delay: 100 });
     
     await takeScreenshot('Password-Entered', page);
-    addDebugStep('Password Entry', 'success', 'Password entered successfully');
+    await addDebugStep('Password Entry', 'success', 'Password entered successfully', null, null, page);
     
     // Step 5: Click Next button for password
     addDebugStep('Password Entry', 'info', 'Clicking Next button...');
     await page.click('button[type="submit"][data-testid="primaryButton"]');
     await takeScreenshot('Password-Next-Clicked', page);
-    addDebugStep('Password Entry', 'success', 'Next button clicked');
+    await addDebugStep('Password Entry', 'success', 'Next button clicked', null, null, page);
     
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);
@@ -228,7 +231,7 @@ async function createOutlookAccount(email, password, io = null) {
         await page.click('[role="option"]:first-child');
       }
       
-      addDebugStep('Birthdate Entry', 'success', 'Month selected successfully');
+      await addDebugStep('Birthdate Entry', 'success', 'Month selected successfully', null, null, page);
     } catch (e) {
       addDebugStep('Birthdate Entry', 'warning', `Month selection failed: ${e.message}`);
     }
@@ -260,7 +263,7 @@ async function createOutlookAccount(email, password, io = null) {
         await page.click('[role="option"]:first-child');
       }
       
-      addDebugStep('Birthdate Entry', 'success', 'Day selected successfully');
+      await addDebugStep('Birthdate Entry', 'success', 'Day selected successfully', null, null, page);
     } catch (e) {
       addDebugStep('Birthdate Entry', 'warning', `Day selection failed: ${e.message}`);
     }
@@ -271,13 +274,13 @@ async function createOutlookAccount(email, password, io = null) {
     await page.type('input[name="BirthYear"]', '1986', { delay: 100 });
     
     await takeScreenshot('Birthdate-Entered', page);
-    addDebugStep('Birthdate Entry', 'success', 'Birthdate entered successfully');
+    await addDebugStep('Birthdate Entry', 'success', 'Birthdate entered successfully', null, null, page);
     
     // Click Next button
     addDebugStep('Birthdate Entry', 'info', 'Clicking Next button...');
     await page.click('button[type="submit"][data-testid="primaryButton"]');
     await takeScreenshot('Birthdate-Next-Clicked', page);
-    addDebugStep('Birthdate Entry', 'success', 'Next button clicked');
+    await addDebugStep('Birthdate Entry', 'success', 'Next button clicked', null, null, page);
     
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);
@@ -302,13 +305,13 @@ async function createOutlookAccount(email, password, io = null) {
     await page.type('input[name="lastNameInput"]', lastName, { delay: 100 });
     
     await takeScreenshot('Name-Entered', page);
-    addDebugStep('Name Entry', 'success', `Name entered: ${firstName} ${lastName}`);
+    await addDebugStep('Name Entry', 'success', `Name entered: ${firstName} ${lastName}`, null, null, page);
     
     // Click Next button
     addDebugStep('Name Entry', 'info', 'Clicking Next button...');
     await page.click('button[type="submit"][data-testid="primaryButton"]');
     await takeScreenshot('Name-Next-Clicked', page);
-    addDebugStep('Name Entry', 'success', 'Next button clicked');
+    await addDebugStep('Name Entry', 'success', 'Next button clicked', null, null, page);
     
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);
