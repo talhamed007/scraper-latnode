@@ -422,6 +422,31 @@ async function createOutlookAccount(email, password, io = null) {
             }
           }
           
+          // Strategy 1.5: Look for any div with the exact ID pattern (dynamic IDs)
+          if (progressValue === 0) {
+            const allDivs = document.querySelectorAll('div');
+            for (const div of allDivs) {
+              const id = div.getAttribute('id') || '';
+              const style = div.getAttribute('style') || '';
+              
+              // Look for divs with width style that could be progress bars
+              if (style.includes('width') && style.includes('px')) {
+                debugInfo.push(`Found div with width: ${id} - ${style}`);
+                
+                const widthMatch = style.match(/width:\s*([0-9.]+)px/);
+                if (widthMatch) {
+                  const width = parseFloat(widthMatch[1]);
+                  if (width > 0 && width <= 216) {
+                    progressValue = width;
+                    progressElement = div;
+                    progressText = `Div ${id}: ${width}px`;
+                    debugInfo.push(`Div ${id} width: ${width}px`);
+                  }
+                }
+              }
+            }
+          }
+          
           // Strategy 2: Look for any div with width style that could be progress
           if (progressValue === 0) {
             const allDivs = document.querySelectorAll('div[style*="width"]');
@@ -517,6 +542,73 @@ async function createOutlookAccount(email, password, io = null) {
                 }
               } catch (e) {
                 // Skip elements that can't be computed
+              }
+            }
+          }
+          
+          // Strategy 6: Look for the specific container structure you mentioned
+          if (progressValue === 0) {
+            // Look for the container div with dir="auto"
+            const containerDivs = document.querySelectorAll('div[dir="auto"]');
+            debugInfo.push(`Found ${containerDivs.length} divs with dir="auto"`);
+            
+            for (const container of containerDivs) {
+              // Look for child divs with width style
+              const childDivs = container.querySelectorAll('div[style*="width"]');
+              debugInfo.push(`Container has ${childDivs.length} child divs with width`);
+              
+              for (const child of childDivs) {
+                const id = child.getAttribute('id') || 'no-id';
+                const style = child.getAttribute('style') || '';
+                debugInfo.push(`Child div ${id}: ${style}`);
+                
+                const widthMatch = style.match(/width:\s*([0-9.]+)px/);
+                if (widthMatch) {
+                  const width = parseFloat(widthMatch[1]);
+                  if (width > 0 && width <= 216) {
+                    progressValue = width;
+                    progressElement = child;
+                    progressText = `Container child ${id}: ${width}px`;
+                    debugInfo.push(`Container child ${id} width: ${width}px`);
+                  }
+                }
+              }
+            }
+          }
+          
+          // Strategy 7: Look for progress bar near the "Press and hold" button
+          if (progressValue === 0) {
+            // Find the "Press and hold" button first
+            const pressHoldButton = document.querySelector('button[type="button"]') ||
+                                 document.querySelector('button[aria-label*="hold"]') ||
+                                 document.querySelector('button[class*="hold"]') ||
+                                 document.querySelector('p[style*="animation"]');
+            
+            if (pressHoldButton) {
+              debugInfo.push(`Found Press and hold button: ${pressHoldButton.tagName}`);
+              
+              // Look for progress bar in the same container or nearby
+              const parent = pressHoldButton.parentElement;
+              if (parent) {
+                const siblings = parent.querySelectorAll('div[style*="width"]');
+                debugInfo.push(`Found ${siblings.length} sibling divs with width`);
+                
+                for (const sibling of siblings) {
+                  const id = sibling.getAttribute('id') || 'no-id';
+                  const style = sibling.getAttribute('style') || '';
+                  debugInfo.push(`Sibling div ${id}: ${style}`);
+                  
+                  const widthMatch = style.match(/width:\s*([0-9.]+)px/);
+                  if (widthMatch) {
+                    const width = parseFloat(widthMatch[1]);
+                    if (width > 0 && width <= 216) {
+                      progressValue = width;
+                      progressElement = sibling;
+                      progressText = `Button sibling ${id}: ${width}px`;
+                      debugInfo.push(`Button sibling ${id} width: ${width}px`);
+                    }
+                  }
+                }
               }
             }
           }
