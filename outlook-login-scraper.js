@@ -280,6 +280,8 @@ async function loginToOutlook(email, password, io) {
       // Step 11: Navigate to Kie.ai and login
       await addDebugStep('Kie.ai Login', 'info', 'Starting Kie.ai login process...');
       
+      let apiKey = 'Not Found'; // Initialize API key variable
+      
       try {
         // Navigate to Kie.ai
         await addDebugStep('Kie.ai Login', 'info', 'Navigating to Kie.ai...');
@@ -682,92 +684,142 @@ async function loginToOutlook(email, password, io) {
             const apiKeyButtonSelector = 'a[href="/api-key"]';
             await page.waitForSelector(apiKeyButtonSelector, { visible: true, timeout: 10000 });
             await page.click(apiKeyButtonSelector);
-            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+            
+            // Wait for navigation with shorter timeout and fallback
+            try {
+              await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+            } catch (navError) {
+              // Fallback: just wait for URL change
+              await page.waitForFunction(() => window.location.href.includes('/api-key'), { timeout: 10000 });
+            }
+            
             await takeScreenshot('Kie-ai-API-Key-Page', page);
             await addDebugStep('Kie.ai API Key', 'success', 'Successfully navigated to API Key page', null, null, page);
             await randomHumanDelay(page, 2000, 3000);
           } catch (e) {
-            await addDebugStep('Kie.ai API Key', 'error', `Failed to click API Key button or navigate: ${e.message}`, null, e, page);
+            await addDebugStep('Kie.ai API Key', 'warning', `API Key button click failed, trying direct navigation: ${e.message}`);
+            // Fallback: try direct navigation
+            try {
+              await page.goto('https://kie.ai/api-key', { waitUntil: 'networkidle2', timeout: 15000 });
+              await takeScreenshot('Kie-ai-API-Key-Direct', page);
+              await addDebugStep('Kie.ai API Key', 'success', 'Successfully navigated to API Key page directly', null, null, page);
+            } catch (directError) {
+              await addDebugStep('Kie.ai API Key', 'error', `Direct navigation also failed: ${directError.message}`, null, directError, page);
+            }
           }
 
-          // Step 13: Click Copy button and extract API Key
-          await addDebugStep('Kie.ai API Key', 'info', 'Looking for Copy button and extracting API Key...');
-          let apiKey = 'Not Found';
+          // Step 13: Extract API Key with smart logic
+          await addDebugStep('Kie.ai API Key', 'info', 'Looking for API Key and Copy button...');
+          
           try {
-            // Try to find the copy button with the lucide-copy SVG
-            const copyButtonSelectors = [
-              'button:has(svg.lucide-copy)',
-              'button[aria-label*="copy"]',
-              'button[title*="copy"]',
-              'button:contains("Copy")',
-              'svg.lucide-copy',
-              '[role="gridcell"] button:has(svg.lucide-copy)'
-            ];
-            
-            let copyButton = null;
-            for (const selector of copyButtonSelectors) {
-              try {
-                if (selector.includes(':has') || selector.includes(':contains')) {
-                  // Use XPath for complex selectors
-                  const xpath = selector.includes(':has') ? 
-                    '//button[.//svg[contains(@class, "lucide-copy")]]' :
-                    '//button[contains(text(), "Copy")]';
-                  const [element] = await page.waitForXPath(xpath, { visible: true, timeout: 3000 });
-                  if (element) {
-                    copyButton = element;
-                    break;
-                  }
-                } else {
-                  const element = await page.waitForSelector(selector, { visible: true, timeout: 3000 });
-                  if (element) {
-                    copyButton = element;
-                    break;
-                  }
+            // First, try to extract API key directly from DOM before clicking copy
+            await addDebugStep('Kie.ai API Key', 'info', 'Attempting to extract API Key from DOM first...');
+            const directApiKey = await page.evaluate(() => {
+              // Look for API key in various elements
+              const possibleElements = document.querySelectorAll('input[readonly], input[type="text"], span, div, code, pre');
+              for (const el of possibleElements) {
+                const text = el.textContent?.trim() || el.value?.trim() || '';
+                // Look for long alphanumeric strings that could be API keys
+                if (text.length > 20 && /[a-f0-9]{20,}/i.test(text) && !text.includes('****')) {
+                  return text;
                 }
-              } catch (selectorError) {
-                continue;
+                // Also check for masked keys
+                if (text.includes('****') && text.length > 20 && /[a-f0-9]{4,}\*{4,}[a-f0-9]{4,}/i.test(text)) {
+                  return text;
+                }
               }
-            }
-
-            if (copyButton) {
-              await copyButton.click();
-              await takeScreenshot('Kie-ai-API-Key-Copied', page);
-              await addDebugStep('Kie.ai API Key', 'success', 'Clicked Copy button', null, null, page);
-              await randomHumanDelay(page, 1000, 2000);
-
-              // Try to extract API Key from clipboard
-              try {
-                apiKey = await page.evaluate(() => navigator.clipboard.readText());
-                await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from clipboard: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
-              } catch (clipboardError) {
-                await addDebugStep('Kie.ai API Key', 'warning', `Could not read from clipboard: ${clipboardError.message}`);
-                
-                // Fallback: try to extract from DOM
-                const domApiKey = await page.evaluate(() => {
-                  // Look for API key in various elements
-                  const possibleElements = document.querySelectorAll('input[readonly], input[type="text"], span, div, code');
-                  for (const el of possibleElements) {
-                    const text = el.textContent?.trim() || el.value?.trim() || '';
-                    // Look for long alphanumeric strings that could be API keys
-                    if (text.length > 20 && /[a-f0-9]{20,}/i.test(text)) {
-                      return text;
+              return null;
+            });
+            
+            if (directApiKey) {
+              apiKey = directApiKey;
+              await addDebugStep('Kie.ai API Key', 'success', `API Key found in DOM: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+            } else {
+              await addDebugStep('Kie.ai API Key', 'info', 'API Key not found in DOM, trying copy button...');
+              
+              // Try to find and click the copy button
+              const copyButtonSelectors = [
+                'button:has(svg.lucide-copy)',
+                'button[aria-label*="copy"]',
+                'button[title*="copy"]',
+                'button:contains("Copy")',
+                'svg.lucide-copy',
+                '[role="gridcell"] button:has(svg.lucide-copy)',
+                'button[class*="copy"]',
+                'button[class*="Copy"]'
+              ];
+              
+              let copyButton = null;
+              for (const selector of copyButtonSelectors) {
+                try {
+                  if (selector.includes(':has') || selector.includes(':contains')) {
+                    // Use XPath for complex selectors
+                    const xpath = selector.includes(':has') ? 
+                      '//button[.//svg[contains(@class, "lucide-copy")]]' :
+                      '//button[contains(text(), "Copy")]';
+                    const [element] = await page.waitForXPath(xpath, { visible: true, timeout: 2000 });
+                    if (element) {
+                      copyButton = element;
+                      break;
+                    }
+                  } else {
+                    const element = await page.waitForSelector(selector, { visible: true, timeout: 2000 });
+                    if (element) {
+                      copyButton = element;
+                      break;
                     }
                   }
-                  return null;
-                });
-                
-                if (domApiKey) {
-                  apiKey = domApiKey;
-                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from DOM: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
-                } else {
-                  await addDebugStep('Kie.ai API Key', 'warning', 'Could not extract API Key from clipboard or DOM');
+                } catch (selectorError) {
+                  continue;
                 }
               }
-            } else {
-              await addDebugStep('Kie.ai API Key', 'warning', 'Could not find Copy button', null, null, page);
+
+              if (copyButton) {
+                await copyButton.click();
+                await takeScreenshot('Kie-ai-API-Key-Copied', page);
+                await addDebugStep('Kie.ai API Key', 'success', 'Clicked Copy button', null, null, page);
+                await randomHumanDelay(page, 1000, 2000);
+
+                // Try to extract API Key from clipboard with timeout
+                try {
+                  apiKey = await Promise.race([
+                    page.evaluate(() => navigator.clipboard.readText()),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Clipboard timeout')), 5000))
+                  ]);
+                  
+                  if (apiKey && apiKey.length > 10) {
+                    await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from clipboard: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+                  } else {
+                    throw new Error('Empty or invalid API key from clipboard');
+                  }
+                } catch (clipboardError) {
+                  await addDebugStep('Kie.ai API Key', 'warning', `Clipboard extraction failed: ${clipboardError.message}`);
+                  
+                  // Fallback: try to extract from DOM again after clicking
+                  const domApiKey = await page.evaluate(() => {
+                    const possibleElements = document.querySelectorAll('input[readonly], input[type="text"], span, div, code, pre');
+                    for (const el of possibleElements) {
+                      const text = el.textContent?.trim() || el.value?.trim() || '';
+                      if (text.length > 20 && /[a-f0-9]{20,}/i.test(text)) {
+                        return text;
+                      }
+                    }
+                    return null;
+                  });
+                  
+                  if (domApiKey) {
+                    apiKey = domApiKey;
+                    await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from DOM after copy: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+                  } else {
+                    await addDebugStep('Kie.ai API Key', 'warning', 'Could not extract API Key from clipboard or DOM');
+                  }
+                }
+              } else {
+                await addDebugStep('Kie.ai API Key', 'warning', 'Could not find Copy button', null, null, page);
+              }
             }
           } catch (e) {
-            await addDebugStep('Kie.ai API Key', 'error', `Failed to copy API Key: ${e.message}`, null, e, page);
+            await addDebugStep('Kie.ai API Key', 'error', `Failed to extract API Key: ${e.message}`, null, e, page);
           }
           
         } catch (switchError) {
