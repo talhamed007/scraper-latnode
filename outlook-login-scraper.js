@@ -1170,6 +1170,10 @@ async function loginToOutlook(email, password, io) {
           await addDebugStep('Kie.ai Login', 'info', 'Looking for human verification popup...');
           await randomHumanDelay(page, 2000, 3000);
           
+          // Wait for hCaptcha to load (it might take time)
+          await addDebugStep('Kie.ai Login', 'info', 'Waiting for hCaptcha to load...');
+          await randomHumanDelay(page, 5000, 8000);
+          
           try {
             // Look for human verification checkbox with more specific detection
             await addDebugStep('Kie.ai Login', 'info', 'Waiting for human verification checkbox...');
@@ -1212,9 +1216,11 @@ async function loginToOutlook(email, password, io) {
                   });
                 });
                 
-                if (humanElements.length > 0) {
+                if (humanElements && humanElements.length > 0) {
                   await addDebugStep('Kie.ai Login', 'info', `Found ${humanElements.length} elements with human/verification text`);
                   checkboxFound = true;
+                } else {
+                  await addDebugStep('Kie.ai Login', 'info', 'No elements found with human/verification text');
                 }
               } catch (e) {
                 await addDebugStep('Kie.ai Login', 'info', `Text search failed: ${e.message}`);
@@ -1230,23 +1236,84 @@ async function loginToOutlook(email, password, io) {
                   return elements.filter(el => el.offsetParent !== null); // Only visible elements
                 });
                 
-                if (clickableElements.length > 0) {
+                if (clickableElements && clickableElements.length > 0) {
                   await addDebugStep('Kie.ai Login', 'info', `Found ${clickableElements.length} clickable checkbox-like elements`);
                   checkboxFound = true;
+                } else {
+                  await addDebugStep('Kie.ai Login', 'info', 'No clickable checkbox-like elements found');
                 }
               } catch (e) {
                 await addDebugStep('Kie.ai Login', 'info', `Clickable search failed: ${e.message}`);
               }
             }
             
+            // Approach 4: Wait for hCaptcha iframe to load
             if (!checkboxFound) {
-              throw new Error('No checkbox found with any approach');
+              try {
+                await addDebugStep('Kie.ai Login', 'info', 'Waiting for hCaptcha iframe to load...');
+                await page.waitForSelector('iframe[src*="hcaptcha"], iframe[title*="hCaptcha"], .h-captcha iframe', { timeout: 10000 });
+                await addDebugStep('Kie.ai Login', 'success', 'hCaptcha iframe found, waiting for checkbox to appear...');
+                await randomHumanDelay(page, 3000, 5000);
+                
+                // Try to find checkbox again after iframe loads
+                const iframeCheckbox = await page.evaluate(() => {
+                  const selectors = ['div#checkbox[role="checkbox"]', '[role="checkbox"]', 'input[type="checkbox"]'];
+                  for (const selector of selectors) {
+                    const element = document.querySelector(selector);
+                    if (element && element.offsetParent !== null) {
+                      return true;
+                    }
+                  }
+                  return false;
+                });
+                
+                if (iframeCheckbox) {
+                  checkboxFound = true;
+                  await addDebugStep('Kie.ai Login', 'success', 'Checkbox found after iframe loaded');
+                }
+              } catch (e) {
+                await addDebugStep('Kie.ai Login', 'info', `hCaptcha iframe search failed: ${e.message}`);
+              }
             }
             
-            // Try multiple methods to click the checkbox
+            // Approach 5: Check if verification is already completed or not needed
+            if (!checkboxFound) {
+              try {
+                await addDebugStep('Kie.ai Login', 'info', 'Checking if verification is already completed...');
+                const verificationStatus = await page.evaluate(() => {
+                  const bodyText = document.body.innerText.toLowerCase();
+                  return {
+                    hasVerificationText: bodyText.includes('verification') || bodyText.includes('human'),
+                    hasCompletedText: bodyText.includes('verified') || bodyText.includes('completed') || bodyText.includes('success'),
+                    hasErrorText: bodyText.includes('error') || bodyText.includes('failed') || bodyText.includes('try again')
+                  };
+                });
+                
+                if (verificationStatus.hasCompletedText) {
+                  await addDebugStep('Kie.ai Login', 'success', 'Verification appears to be already completed');
+                  checkboxFound = true;
+                } else if (verificationStatus.hasErrorText) {
+                  await addDebugStep('Kie.ai Login', 'warning', 'Verification error detected, continuing anyway');
+                  checkboxFound = true;
+                } else if (!verificationStatus.hasVerificationText) {
+                  await addDebugStep('Kie.ai Login', 'info', 'No verification text found, may not be required');
+                  checkboxFound = true;
+                }
+              } catch (e) {
+                await addDebugStep('Kie.ai Login', 'info', `Verification status check failed: ${e.message}`);
+              }
+            }
+            
+            if (!checkboxFound) {
+              await addDebugStep('Kie.ai Login', 'warning', 'No checkbox found with any approach, continuing anyway...');
+              // Don't throw error, just continue
+            }
+            
+            // Try multiple methods to click the checkbox (only if we found one)
             let checkboxClicked = false;
             
-            // Method 1: Smart checkbox detection and clicking
+            if (checkboxFound) {
+              // Method 1: Smart checkbox detection and clicking
             try {
               await addDebugStep('Kie.ai Login', 'info', 'Using smart checkbox detection...');
               const clicked = await page.evaluate(() => {
@@ -1336,11 +1403,14 @@ async function loginToOutlook(email, password, io) {
               }
             }
             
-            if (checkboxClicked) {
-              await takeScreenshot('Human-Verification-Checked', page);
-              await addDebugStep('Kie.ai Login', 'success', 'Human verification checkbox clicked successfully', null, null, page);
+              if (checkboxClicked) {
+                await takeScreenshot('Human-Verification-Checked', page);
+                await addDebugStep('Kie.ai Login', 'success', 'Human verification checkbox clicked successfully', null, null, page);
+              } else {
+                await addDebugStep('Kie.ai Login', 'warning', 'Could not find or click human verification checkbox');
+              }
             } else {
-              await addDebugStep('Kie.ai Login', 'warning', 'Could not find or click human verification checkbox');
+              await addDebugStep('Kie.ai Login', 'info', 'No checkbox found, skipping verification step');
             }
             
           } catch (e) {
