@@ -731,16 +731,13 @@ async function loginToOutlook(email, password, io) {
               return null;
             });
             
-            // Always try copy button approach for full API key extraction
             if (directApiKey) {
-              await addDebugStep('Kie.ai API Key', 'warning', `API Key found in DOM (${directApiKey.length} chars): ${directApiKey.substring(0, 15)}... - this appears to be truncated, trying copy button for full key`);
+              apiKey = directApiKey;
+              await addDebugStep('Kie.ai API Key', 'success', `API Key found in DOM: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
             } else {
               await addDebugStep('Kie.ai API Key', 'info', 'API Key not found in DOM, trying copy button...');
-            }
               
               // Try to find and click the copy button
-              await addDebugStep('Kie.ai API Key', 'info', 'Searching for copy button with multiple methods...');
-              
               const copyButtonSelectors = [
                 'button:has(svg.lucide-copy)',
                 'button[aria-label*="copy"]',
@@ -749,14 +746,10 @@ async function loginToOutlook(email, password, io) {
                 'svg.lucide-copy',
                 '[role="gridcell"] button:has(svg.lucide-copy)',
                 'button[class*="copy"]',
-                'button[class*="Copy"]',
-                'button[data-testid*="copy"]',
-                'button[aria-label*="Copy"]'
+                'button[class*="Copy"]'
               ];
               
               let copyButton = null;
-              let usedSelector = '';
-              
               for (const selector of copyButtonSelectors) {
                 try {
                   if (selector.includes(':has') || selector.includes(':contains')) {
@@ -767,14 +760,12 @@ async function loginToOutlook(email, password, io) {
                     const [element] = await page.waitForXPath(xpath, { visible: true, timeout: 2000 });
                     if (element) {
                       copyButton = element;
-                      usedSelector = selector;
                       break;
                     }
                   } else {
                     const element = await page.waitForSelector(selector, { visible: true, timeout: 2000 });
                     if (element) {
                       copyButton = element;
-                      usedSelector = selector;
                       break;
                     }
                   }
@@ -782,95 +773,16 @@ async function loginToOutlook(email, password, io) {
                   continue;
                 }
               }
-              
-              // If no copy button found with selectors, try a more aggressive approach
-              if (!copyButton) {
-                await addDebugStep('Kie.ai API Key', 'info', 'No copy button found with selectors, trying aggressive search...');
-                
-                const aggressiveSearch = await page.evaluate(() => {
-                  // Look for any button that might be a copy button
-                  const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a'));
-                  for (const button of allButtons) {
-                    const text = button.textContent?.toLowerCase() || '';
-                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                    const title = button.getAttribute('title')?.toLowerCase() || '';
-                    const className = button.className?.toLowerCase() || '';
-                    
-                    // Check for copy-related text or attributes
-                    if (text.includes('copy') || ariaLabel.includes('copy') || title.includes('copy') || className.includes('copy')) {
-                      return {
-                        found: true,
-                        element: button,
-                        reason: `Found by ${text.includes('copy') ? 'text' : ariaLabel.includes('copy') ? 'aria-label' : title.includes('copy') ? 'title' : 'class'}`
-                      };
-                    }
-                    
-                    // Check for SVG copy icon
-                    const svg = button.querySelector('svg');
-                    if (svg) {
-                      const svgClass = svg.className?.toLowerCase() || '';
-                      if (svgClass.includes('copy') || svgClass.includes('lucide-copy')) {
-                        return {
-                          found: true,
-                          element: button,
-                          reason: 'Found by SVG copy icon'
-                        };
-                      }
-                    }
-                  }
-                  return { found: false };
-                });
-                
-                if (aggressiveSearch.found) {
-                  await addDebugStep('Kie.ai API Key', 'success', `Copy button found with aggressive search: ${aggressiveSearch.reason}`);
-                  // We can't return the actual element from evaluate, so we'll try to click it directly
-                  const clicked = await page.evaluate(() => {
-                    const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a'));
-                    for (const button of allButtons) {
-                      const text = button.textContent?.toLowerCase() || '';
-                      const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                      const title = button.getAttribute('title')?.toLowerCase() || '';
-                      const className = button.className?.toLowerCase() || '';
-                      
-                      if (text.includes('copy') || ariaLabel.includes('copy') || title.includes('copy') || className.includes('copy')) {
-                        button.click();
-                        return true;
-                      }
-                      
-                      const svg = button.querySelector('svg');
-                      if (svg) {
-                        const svgClass = svg.className?.toLowerCase() || '';
-                        if (svgClass.includes('copy') || svgClass.includes('lucide-copy')) {
-                          button.click();
-                          return true;
-                        }
-                      }
-                    }
-                    return false;
-                  });
-                  
-                  if (clicked) {
-                    copyButton = { clicked: true }; // Mark as found
-                    usedSelector = 'aggressive-search';
-                  }
-                }
-              }
 
               if (copyButton) {
-                if (copyButton.clicked) {
-                  // Already clicked in aggressive search
-                  await addDebugStep('Kie.ai API Key', 'success', `Copy button clicked using ${usedSelector}`, null, null, page);
-                } else {
-                  // Hover over the copy button first
-                  await addDebugStep('Kie.ai API Key', 'info', 'Hovering over copy button...');
-                  await copyButton.hover();
-                  await randomHumanDelay(page, 500, 1000);
-                  
-                  // Click the found element
-                  await copyButton.click();
-                  await addDebugStep('Kie.ai API Key', 'success', `Copy button clicked using selector: ${usedSelector}`, null, null, page);
-                }
+                // Hover over the copy button first
+                await addDebugStep('Kie.ai API Key', 'info', 'Hovering over copy button...');
+                await copyButton.hover();
+                await randomHumanDelay(page, 500, 1000);
+                
+                await copyButton.click();
                 await takeScreenshot('Kie-ai-API-Key-Copied', page);
+                await addDebugStep('Kie.ai API Key', 'success', 'Clicked Copy button', null, null, page);
                 await randomHumanDelay(page, 1000, 2000);
 
                 // Try to extract API Key from clipboard with timeout
