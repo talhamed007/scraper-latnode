@@ -277,11 +277,288 @@ async function loginToOutlook(email, password, io) {
     if (isLoggedIn) {
       await addDebugStep('Login Verification', 'success', 'Successfully logged into Microsoft account!', null, null, page);
       
+      // Step 11: Navigate to Kie.ai and login
+      await addDebugStep('Kie.ai Login', 'info', 'Starting Kie.ai login process...');
+      
+      try {
+        // Navigate to Kie.ai
+        await addDebugStep('Kie.ai Login', 'info', 'Navigating to Kie.ai...');
+        await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
+        await takeScreenshot('Kie-ai-Initial', page);
+        await addDebugStep('Kie.ai Login', 'success', 'Successfully navigated to Kie.ai', null, null, page);
+        
+        // Wait for page to load
+        await randomHumanDelay(page, 2000, 3000);
+        
+        // Click on "Get Started" button
+        await addDebugStep('Kie.ai Login', 'info', 'Looking for Get Started button...');
+        try {
+          await page.waitForSelector('button:contains("Get Started")', { timeout: 10000 });
+          await page.click('button:contains("Get Started")');
+          await takeScreenshot('Get-Started-Clicked', page);
+          await addDebugStep('Kie.ai Login', 'success', 'Clicked Get Started button', null, null, page);
+        } catch (e) {
+          // Try alternative selectors
+          const getStartedSelectors = [
+            'button[class*="Get Started"]',
+            'a[class*="Get Started"]',
+            '[data-testid*="get-started"]',
+            'button:contains("Get Started")',
+            'a:contains("Get Started")'
+          ];
+          
+          let clicked = false;
+          for (const selector of getStartedSelectors) {
+            try {
+              if (selector.includes(':contains')) {
+                const xpath = selector.includes('button') ? 
+                  '//button[contains(text(), "Get Started")]' : 
+                  '//a[contains(text(), "Get Started")]';
+                await page.waitForXPath(xpath, { timeout: 3000 });
+                const [button] = await page.$x(xpath);
+                if (button) {
+                  await button.click();
+                  clicked = true;
+                  break;
+                }
+              } else {
+                await page.waitForSelector(selector, { timeout: 3000 });
+                await page.click(selector);
+                clicked = true;
+                break;
+              }
+            } catch (selectorError) {
+              continue;
+            }
+          }
+          
+          if (clicked) {
+            await takeScreenshot('Get-Started-Clicked', page);
+            await addDebugStep('Kie.ai Login', 'success', 'Clicked Get Started button with alternative method', null, null, page);
+          } else {
+            await addDebugStep('Kie.ai Login', 'warning', 'Could not find Get Started button');
+          }
+        }
+        
+        // Wait for popup to appear
+        await randomHumanDelay(page, 2000, 3000);
+        
+        // Look for "Sign in with Microsoft" button in popup
+        await addDebugStep('Kie.ai Login', 'info', 'Looking for Sign in with Microsoft button...');
+        try {
+          await page.waitForSelector('button:contains("Sign in with Microsoft")', { timeout: 10000 });
+          await page.click('button:contains("Sign in with Microsoft")');
+          await takeScreenshot('Microsoft-Signin-Clicked', page);
+          await addDebugStep('Kie.ai Login', 'success', 'Clicked Sign in with Microsoft button', null, null, page);
+        } catch (e) {
+          // Try alternative selectors for Microsoft button
+          const microsoftSelectors = [
+            'button[class*="microsoft"]',
+            'button[data-testid*="microsoft"]',
+            'button:contains("Sign in with Microsoft")',
+            'button:contains("Se connecter avec Microsoft")',
+            'button:contains("Microsoft")'
+          ];
+          
+          let clicked = false;
+          for (const selector of microsoftSelectors) {
+            try {
+              if (selector.includes(':contains')) {
+                const xpath = '//button[contains(text(), "Sign in with Microsoft") or contains(text(), "Se connecter avec Microsoft") or contains(text(), "Microsoft")]';
+                await page.waitForXPath(xpath, { timeout: 3000 });
+                const [button] = await page.$x(xpath);
+                if (button) {
+                  await button.click();
+                  clicked = true;
+                  break;
+                }
+              } else {
+                await page.waitForSelector(selector, { timeout: 3000 });
+                await page.click(selector);
+                clicked = true;
+                break;
+              }
+            } catch (selectorError) {
+              continue;
+            }
+          }
+          
+          if (clicked) {
+            await takeScreenshot('Microsoft-Signin-Clicked', page);
+            await addDebugStep('Kie.ai Login', 'success', 'Clicked Sign in with Microsoft button with alternative method', null, null, page);
+          } else {
+            await addDebugStep('Kie.ai Login', 'warning', 'Could not find Sign in with Microsoft button');
+          }
+        }
+        
+        // Wait for Microsoft consent page
+        await randomHumanDelay(page, 3000, 5000);
+        
+        // Handle Microsoft consent page
+        await addDebugStep('Kie.ai Login', 'info', 'Handling Microsoft consent page...');
+        try {
+          // Wait for consent page to load
+          await page.waitForFunction(() => {
+            return window.location.href.includes('account.live.com') || 
+                   window.location.href.includes('login.live.com') ||
+                   document.title.includes('Let this app access');
+          }, { timeout: 15000 });
+          
+          await takeScreenshot('Microsoft-Consent-Page', page);
+          await addDebugStep('Kie.ai Login', 'success', 'Microsoft consent page loaded', null, null, page);
+          
+          // Scroll down to find Accept button
+          await addDebugStep('Kie.ai Login', 'info', 'Scrolling down to find Accept button...');
+          await page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+          });
+          await randomHumanDelay(page, 1000, 2000);
+          
+          // Look for Accept button
+          await addDebugStep('Kie.ai Login', 'info', 'Looking for Accept button...');
+          try {
+            await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { timeout: 10000 });
+            await page.click('button[data-testid="appConsentPrimaryButton"]');
+            await takeScreenshot('Accept-Button-Clicked', page);
+            await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button', null, null, page);
+          } catch (e) {
+            // Try alternative selectors for Accept button
+            const acceptSelectors = [
+              'button:contains("Accept")',
+              'button[type="submit"]',
+              'button[class*="primary"]',
+              'button[class*="accept"]'
+            ];
+            
+            let clicked = false;
+            for (const selector of acceptSelectors) {
+              try {
+                if (selector.includes(':contains')) {
+                  const xpath = '//button[contains(text(), "Accept")]';
+                  await page.waitForXPath(xpath, { timeout: 3000 });
+                  const [button] = await page.$x(xpath);
+                  if (button) {
+                    await button.click();
+                    clicked = true;
+                    break;
+                  }
+                } else {
+                  await page.waitForSelector(selector, { timeout: 3000 });
+                  await page.click(selector);
+                  clicked = true;
+                  break;
+                }
+              } catch (selectorError) {
+                continue;
+              }
+            }
+            
+            if (clicked) {
+              await takeScreenshot('Accept-Button-Clicked', page);
+              await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button with alternative method', null, null, page);
+            } else {
+              await addDebugStep('Kie.ai Login', 'warning', 'Could not find Accept button');
+            }
+          }
+          
+          // Wait for navigation back to Kie.ai
+          await randomHumanDelay(page, 3000, 5000);
+          
+        } catch (consentError) {
+          await addDebugStep('Kie.ai Login', 'warning', `Microsoft consent page handling failed: ${consentError.message}`);
+        }
+        
+        // Switch back to Kie.ai page and handle human verification
+        await addDebugStep('Kie.ai Login', 'info', 'Switching back to Kie.ai page...');
+        try {
+          // Get all open pages and find Kie.ai page
+          const pages = await browser.pages();
+          let kiePage = null;
+          
+          for (const p of pages) {
+            try {
+              const url = p.url();
+              if (url.includes('kie.ai')) {
+                kiePage = p;
+                break;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          
+          if (kiePage) {
+            page = kiePage;
+            await takeScreenshot('Kie-ai-After-Consent', page);
+            await addDebugStep('Kie.ai Login', 'success', 'Switched back to Kie.ai page', null, null, page);
+          } else {
+            // Navigate back to Kie.ai
+            await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
+            await takeScreenshot('Kie-ai-After-Consent', page);
+            await addDebugStep('Kie.ai Login', 'success', 'Navigated back to Kie.ai page', null, null, page);
+          }
+          
+          // Wait for human verification popup
+          await addDebugStep('Kie.ai Login', 'info', 'Looking for human verification popup...');
+          await randomHumanDelay(page, 2000, 3000);
+          
+          try {
+            // Look for human verification checkbox
+            await page.waitForSelector('div[id="checkbox"][role="checkbox"]', { timeout: 10000 });
+            await page.click('div[id="checkbox"][role="checkbox"]');
+            await takeScreenshot('Human-Verification-Checked', page);
+            await addDebugStep('Kie.ai Login', 'success', 'Clicked human verification checkbox', null, null, page);
+          } catch (e) {
+            // Try alternative selectors for checkbox
+            const checkboxSelectors = [
+              'div[role="checkbox"]',
+              'input[type="checkbox"]',
+              'div[id*="checkbox"]',
+              'div[aria-checked="false"]'
+            ];
+            
+            let clicked = false;
+            for (const selector of checkboxSelectors) {
+              try {
+                await page.waitForSelector(selector, { timeout: 3000 });
+                await page.click(selector);
+                clicked = true;
+                break;
+              } catch (selectorError) {
+                continue;
+              }
+            }
+            
+            if (clicked) {
+              await takeScreenshot('Human-Verification-Checked', page);
+              await addDebugStep('Kie.ai Login', 'success', 'Clicked human verification checkbox with alternative method', null, null, page);
+            } else {
+              await addDebugStep('Kie.ai Login', 'warning', 'Could not find human verification checkbox');
+            }
+          }
+          
+          // Wait for login to complete
+          await randomHumanDelay(page, 3000, 5000);
+          
+          // Navigate to dashboard
+          await addDebugStep('Kie.ai Login', 'info', 'Navigating to Kie.ai dashboard...');
+          await page.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2', timeout: 30000 });
+          await takeScreenshot('Kie-ai-Dashboard', page);
+          await addDebugStep('Kie.ai Login', 'success', 'Successfully navigated to Kie.ai dashboard', null, null, page);
+          
+        } catch (switchError) {
+          await addDebugStep('Kie.ai Login', 'warning', `Failed to switch back to Kie.ai: ${switchError.message}`);
+        }
+        
+      } catch (kieError) {
+        await addDebugStep('Kie.ai Login', 'error', `Kie.ai login failed: ${kieError.message}`);
+      }
+      
       return {
         success: true,
-        message: 'Successfully logged into Microsoft account',
+        message: 'Successfully logged into Microsoft account and Kie.ai',
         email: email,
-        name: 'Microsoft User', // We can't easily extract the name from the login process
+        name: 'Microsoft User',
         url: currentUrl,
         title: pageTitle
       };
