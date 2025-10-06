@@ -413,7 +413,8 @@
                 screenshotHtml = `
                     <div class="log-screenshot" style="margin-top: 8px;">
                         <img src="/screenshots/${entry.screenshot}" alt="Screenshot" 
-                             style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; display: block;">
+                             style="max-width: 300px; max-height: 200px; width: auto; height: auto; border: 1px solid #ddd; border-radius: 4px; display: block; object-fit: contain;"
+                             onerror="this.style.display='none';">
                     </div>
                 `;
             }
