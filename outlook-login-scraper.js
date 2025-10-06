@@ -340,55 +340,185 @@ async function loginToOutlook(email, password, io) {
           }
         }
         
-        // Wait for popup to appear
+        // Wait for popup to appear and use comprehensive detection like Kie.ai scraper
         await randomHumanDelay(page, 2000, 3000);
         
-        // Look for "Sign in with Microsoft" button in popup
-        await addDebugStep('Kie.ai Login', 'info', 'Looking for Sign in with Microsoft button...');
+        // Check for "Sign in with Microsoft" popup (sometimes appears at bottom of page)
+        await addDebugStep('Kie.ai Login', 'info', 'Looking for Sign in with Microsoft popup...');
+        
+        // First check if popup is visible without scrolling
+        let microsoftPopupFound = false;
         try {
-          await page.waitForSelector('button:contains("Sign in with Microsoft")', { timeout: 10000 });
-          await page.click('button:contains("Sign in with Microsoft")');
-          await takeScreenshot('Microsoft-Signin-Clicked', page);
-          await addDebugStep('Kie.ai Login', 'success', 'Clicked Sign in with Microsoft button', null, null, page);
-        } catch (e) {
-          // Try alternative selectors for Microsoft button
-          const microsoftSelectors = [
-            'button[class*="microsoft"]',
-            'button[data-testid*="microsoft"]',
-            'button:contains("Sign in with Microsoft")',
-            'button:contains("Se connecter avec Microsoft")',
-            'button:contains("Microsoft")'
-          ];
+          // Use proper XPath selectors for Microsoft popup detection
+          await page.waitForXPath('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]', { timeout: 3000 });
+          await addDebugStep('Kie.ai Login', 'success', 'Sign in with Microsoft popup detected at top', null, null, page);
+          await takeScreenshot('Microsoft-Popup-Top', page);
+          microsoftPopupFound = true;
+        } catch (topError) {
+          await addDebugStep('Kie.ai Login', 'info', 'No Microsoft popup found at top - scrolling down to check bottom of page');
           
-          let clicked = false;
-          for (const selector of microsoftSelectors) {
-            try {
-              if (selector.includes(':contains')) {
-                const xpath = '//button[contains(text(), "Sign in with Microsoft") or contains(text(), "Se connecter avec Microsoft") or contains(text(), "Microsoft")]';
-                await page.waitForXPath(xpath, { timeout: 3000 });
-                const [button] = await page.$x(xpath);
-                if (button) {
-                  await button.click();
-                  clicked = true;
-                  break;
-                }
-              } else {
-                await page.waitForSelector(selector, { timeout: 3000 });
-                await page.click(selector);
-                clicked = true;
-                break;
+          // Scroll down to look for popup at bottom of page
+          await page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+          });
+          await randomHumanDelay(page, 2000, 3000);
+          await takeScreenshot('Scrolled-Down-Looking-For-Popup', page);
+          
+          // Check again after scrolling with multiple methods
+          try {
+            // Try XPath first
+            await page.waitForXPath('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]', { timeout: 3000 });
+            await addDebugStep('Kie.ai Login', 'success', 'Sign in with Microsoft popup detected at bottom after scrolling', null, null, page);
+            await takeScreenshot('Microsoft-Popup-Bottom', page);
+            microsoftPopupFound = true;
+          } catch (bottomError) {
+            // Try alternative detection methods
+            await addDebugStep('Kie.ai Login', 'info', 'XPath detection failed, trying alternative methods...');
+            
+            // Check for any popup or modal elements
+            const popupDetected = await page.evaluate(() => {
+              // Look for common popup indicators
+              const popups = document.querySelectorAll('[role="dialog"], [class*="popup"], [class*="modal"], [class*="overlay"], [class*="popup"], [class*="dialog"]');
+              if (popups.length > 0) {
+                return {
+                  found: true,
+                  count: popups.length,
+                  elements: Array.from(popups).map(el => ({
+                    tagName: el.tagName,
+                    className: el.className,
+                    textContent: el.textContent?.substring(0, 100)
+                  }))
+                };
               }
-            } catch (selectorError) {
-              continue;
+              
+              // Look for Microsoft-related text anywhere on page
+              const microsoftElements = document.querySelectorAll('*');
+              for (const el of microsoftElements) {
+                const text = el.textContent?.toLowerCase() || '';
+                if (text.includes('sign in with microsoft') || text.includes('inloggen met microsoft') || text.includes('microsoft')) {
+                  return {
+                    found: true,
+                    element: {
+                      tagName: el.tagName,
+                      className: el.className,
+                      textContent: el.textContent?.substring(0, 100)
+                    }
+                  };
+                }
+              }
+              
+              return { found: false };
+            });
+            
+            if (popupDetected.found) {
+              await addDebugStep('Kie.ai Login', 'success', `Microsoft popup detected using alternative method: ${JSON.stringify(popupDetected)}`, null, null, page);
+              await takeScreenshot('Microsoft-Popup-Alternative', page);
+              microsoftPopupFound = true;
+            } else {
+              await addDebugStep('Kie.ai Login', 'info', 'No Microsoft popup found at bottom either');
+            }
+          }
+        }
+        
+        if (microsoftPopupFound) {
+          // Click "Sign in with Microsoft" button using proper selectors
+          await addDebugStep('Kie.ai Login', 'info', 'Clicking Sign in with Microsoft button...');
+          
+          try {
+            // Try XPath first
+            await page.waitForXPath('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]', { timeout: 5000 });
+            await page.click('//button[contains(text(), "Sign in with Microsoft")] | //button[contains(text(), "Inloggen met Microsoft")] | //*[contains(@data-testid, "microsoft")] | //*[contains(@class, "microsoft")]');
+            await addDebugStep('Kie.ai Login', 'success', 'Clicked Sign in with Microsoft button using XPath', null, null, page);
+          } catch (xpathError) {
+            // Fallback to evaluate method
+            await addDebugStep('Kie.ai Login', 'info', 'XPath click failed, trying evaluate method...');
+            
+            const clicked = await page.evaluate(() => {
+              // Look for Microsoft button by text content
+              const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+              for (const button of buttons) {
+                const text = button.textContent?.toLowerCase() || '';
+                if (text.includes('sign in with microsoft') || text.includes('inloggen met microsoft') || text.includes('microsoft')) {
+                  button.click();
+                  return true;
+                }
+              }
+              return false;
+            });
+            
+            if (clicked) {
+              await addDebugStep('Kie.ai Login', 'success', 'Clicked Sign in with Microsoft button using evaluate method', null, null, page);
+            } else {
+              await addDebugStep('Kie.ai Login', 'warning', 'Could not click Microsoft button with any method');
             }
           }
           
-          if (clicked) {
-            await takeScreenshot('Microsoft-Signin-Clicked', page);
-            await addDebugStep('Kie.ai Login', 'success', 'Clicked Sign in with Microsoft button with alternative method', null, null, page);
-          } else {
-            await addDebugStep('Kie.ai Login', 'warning', 'Could not find Sign in with Microsoft button');
+          await takeScreenshot('Microsoft-Signin-Clicked', page);
+          
+          // Wait for popup to appear and analyze what opens
+          await addDebugStep('Kie.ai Login', 'info', 'Waiting for Microsoft login popup to appear...');
+          await randomHumanDelay(page, 3000, 5000);
+          
+          // Check what pages/tabs are now open
+          await addDebugStep('Kie.ai Login', 'info', 'Analyzing all open pages after Microsoft login click...');
+          
+          try {
+            const allPages = await Promise.race([
+              browser.pages(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Browser pages timeout')), 5000))
+            ]);
+            await addDebugStep('Kie.ai Login', 'info', `Total pages open: ${allPages.length}`);
+            
+            for (let i = 0; i < allPages.length; i++) {
+              const currentPage = allPages[i];
+              try {
+                const pageInfo = await Promise.race([
+                  currentPage.evaluate(() => {
+                    return {
+                      url: window.location.href,
+                      title: document.title,
+                      domain: window.location.hostname,
+                      pathname: window.location.pathname,
+                      hasEmailInput: document.querySelectorAll('input[name="loginfmt"], input[id="i0116"], input[type="email"]').length > 0,
+                      hasPasswordInput: document.querySelectorAll('input[name="passwd"], input[type="password"]').length > 0,
+                      buttonCount: document.querySelectorAll('button, a, [role="button"]').length,
+                      inputCount: document.querySelectorAll('input, textarea, select').length,
+                      visibleText: document.body.textContent?.substring(0, 200) || '',
+                      isMicrosoftLogin: window.location.hostname.includes('login.live.com') || 
+                                     window.location.hostname.includes('microsoft.com') ||
+                                     document.body.textContent.toLowerCase().includes('microsoft') ||
+                                     document.querySelectorAll('input[name="loginfmt"]').length > 0
+                    };
+                  }),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('Page analysis timeout')), 3000))
+                ]);
+                
+                await addDebugStep('Kie.ai Login', 'info', `Page ${i + 1}:`);
+                await addDebugStep('Kie.ai Login', 'info', `  - URL: ${pageInfo.url}`);
+                await addDebugStep('Kie.ai Login', 'info', `  - Title: ${pageInfo.title}`);
+                await addDebugStep('Kie.ai Login', 'info', `  - Domain: ${pageInfo.domain}`);
+                await addDebugStep('Kie.ai Login', 'info', `  - Buttons: ${pageInfo.buttonCount}, Inputs: ${pageInfo.inputCount}`);
+                await addDebugStep('Kie.ai Login', 'info', `  - Email Input: ${pageInfo.hasEmailInput}, Password Input: ${pageInfo.hasPasswordInput}`);
+                await addDebugStep('Kie.ai Login', 'info', `  - Is Microsoft Login: ${pageInfo.isMicrosoftLogin}`);
+                await addDebugStep('Kie.ai Login', 'info', `  - Text: "${pageInfo.visibleText}"`);
+                
+                // If this is a Microsoft login page, switch to it
+                if (pageInfo.isMicrosoftLogin && currentPage !== page) {
+                  await addDebugStep('Kie.ai Login', 'success', `Found Microsoft login page, switching to it...`);
+                  page = currentPage;
+                  await takeScreenshot('Microsoft-Login-Page-Detected', page);
+                  break;
+                }
+              } catch (pageError) {
+                await addDebugStep('Kie.ai Login', 'warning', `Could not analyze page ${i + 1}: ${pageError.message}`);
+              }
+            }
+          } catch (browserError) {
+            await addDebugStep('Kie.ai Login', 'warning', `Could not get browser pages: ${browserError.message}`);
           }
+          
+        } else {
+          await addDebugStep('Kie.ai Login', 'warning', 'No Microsoft popup found, continuing without Microsoft login');
         }
         
         // Wait for Microsoft consent page
