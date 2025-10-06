@@ -678,22 +678,87 @@ async function loginToOutlook(email, password, io) {
         // Handle Microsoft consent page
         await addDebugStep('Kie.ai Login', 'info', 'Handling Microsoft consent page...');
         try {
-          // Wait for consent page to load
-          await page.waitForFunction(() => {
-            return window.location.href.includes('account.live.com') || 
-                   window.location.href.includes('login.live.com') ||
-                   document.title.includes('Let this app access');
-          }, { timeout: 15000 });
+          // Wait for consent page to load with more flexible detection
+          await addDebugStep('Kie.ai Login', 'info', 'Waiting for consent page to load...');
+          
+          // Try multiple ways to detect consent page
+          let consentPageLoaded = false;
+          const consentPageIndicators = [
+            () => window.location.href.includes('account.live.com'),
+            () => window.location.href.includes('login.live.com'),
+            () => window.location.href.includes('consent'),
+            () => document.title.toLowerCase().includes('let this app'),
+            () => document.title.toLowerCase().includes('consent'),
+            () => document.title.toLowerCase().includes('permission'),
+            () => document.body.innerText.toLowerCase().includes('let this app'),
+            () => document.body.innerText.toLowerCase().includes('consent'),
+            () => document.body.innerText.toLowerCase().includes('permission')
+          ];
+          
+          for (let i = 0; i < 30; i++) { // Try for 30 seconds
+            try {
+              consentPageLoaded = await page.evaluate(() => {
+                return window.location.href.includes('account.live.com') || 
+                       window.location.href.includes('login.live.com') ||
+                       window.location.href.includes('consent') ||
+                       document.title.toLowerCase().includes('let this app') ||
+                       document.title.toLowerCase().includes('consent') ||
+                       document.title.toLowerCase().includes('permission') ||
+                       document.body.innerText.toLowerCase().includes('let this app') ||
+                       document.body.innerText.toLowerCase().includes('consent') ||
+                       document.body.innerText.toLowerCase().includes('permission');
+              });
+              
+              if (consentPageLoaded) {
+                await addDebugStep('Kie.ai Login', 'success', 'Consent page detected');
+                break;
+              }
+            } catch (e) {
+              // Continue trying
+            }
+            
+            await randomHumanDelay(page, 1000, 1000);
+          }
+          
+          if (!consentPageLoaded) {
+            await addDebugStep('Kie.ai Login', 'warning', 'Consent page not detected, proceeding anyway...');
+          }
           
           await takeScreenshot('Microsoft-Consent-Page', page);
           await addDebugStep('Kie.ai Login', 'success', 'Microsoft consent page loaded', null, null, page);
           
           // Scroll down to find Accept button
           await addDebugStep('Kie.ai Login', 'info', 'Scrolling down to find Accept button...');
-          await page.evaluate(() => {
-            window.scrollTo(0, document.body.scrollHeight);
-          });
-          await randomHumanDelay(page, 1000, 2000);
+          
+          // Try multiple scroll positions to find the button
+          const scrollPositions = [
+            () => window.scrollTo(0, document.body.scrollHeight), // Bottom
+            () => window.scrollTo(0, document.body.scrollHeight * 0.8), // 80% down
+            () => window.scrollTo(0, document.body.scrollHeight * 0.6), // 60% down
+            () => window.scrollTo(0, 0) // Top
+          ];
+          
+          for (const scrollFunc of scrollPositions) {
+            await page.evaluate(scrollFunc);
+            await randomHumanDelay(page, 1000, 1500);
+            
+            // Check if Accept button is visible after scrolling
+            const hasAcceptButton = await page.evaluate(() => {
+              const buttons = document.querySelectorAll('button, input[type="submit"]');
+              for (const button of buttons) {
+                const text = (button.textContent || button.value || button.getAttribute('aria-label') || '').toLowerCase();
+                if (text.includes('accept') || text.includes('allow') || text.includes('continue') || text.includes('yes')) {
+                  return true;
+                }
+              }
+              return false;
+            });
+            
+            if (hasAcceptButton) {
+              await addDebugStep('Kie.ai Login', 'info', 'Accept button found after scrolling');
+              break;
+            }
+          }
           
           // Look for Accept button
           await addDebugStep('Kie.ai Login', 'info', 'Looking for Accept button...');
@@ -812,6 +877,43 @@ async function loginToOutlook(email, password, io) {
           
         } catch (consentError) {
           await addDebugStep('Kie.ai Login', 'warning', `Microsoft consent page handling failed: ${consentError.message}`);
+          
+          // Try to handle the consent page anyway by looking for any Accept button
+          await addDebugStep('Kie.ai Login', 'info', 'Trying fallback consent handling...');
+          try {
+            // Look for any button that might be an Accept button
+            const allButtons = await page.$$('button, input[type="submit"], a[role="button"]');
+            let fallbackClicked = false;
+            
+            for (const button of allButtons) {
+              try {
+                const buttonText = await page.evaluate(el => {
+                  return (el.textContent || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+                }, button);
+                
+                if (buttonText.includes('accept') || buttonText.includes('allow') || 
+                    buttonText.includes('continue') || buttonText.includes('yes') ||
+                    buttonText.includes('ok') || buttonText.includes('confirm')) {
+                  
+                  await addDebugStep('Kie.ai Login', 'info', `Trying fallback button: ${buttonText}`);
+                  await button.click();
+                  await randomHumanDelay(page, 2000, 3000);
+                  await takeScreenshot('Fallback-Button-Clicked', page);
+                  await addDebugStep('Kie.ai Login', 'success', `Clicked fallback button: ${buttonText}`, null, null, page);
+                  fallbackClicked = true;
+                  break;
+                }
+              } catch (e) {
+                continue;
+              }
+            }
+            
+            if (!fallbackClicked) {
+              await addDebugStep('Kie.ai Login', 'warning', 'No fallback button found');
+            }
+          } catch (fallbackError) {
+            await addDebugStep('Kie.ai Login', 'warning', `Fallback consent handling failed: ${fallbackError.message}`);
+          }
         }
         
         // Switch back to Kie.ai page and handle human verification
@@ -842,6 +944,34 @@ async function loginToOutlook(email, password, io) {
             await page.goto('https://kie.ai/', { waitUntil: 'networkidle2', timeout: 30000 });
             await takeScreenshot('Kie-ai-After-Consent', page);
             await addDebugStep('Kie.ai Login', 'success', 'Navigated back to Kie.ai page', null, null, page);
+          }
+          
+          // Check if we're actually logged into Kie.ai
+          await addDebugStep('Kie.ai Login', 'info', 'Checking if logged into Kie.ai...');
+          const isLoggedIntoKie = await page.evaluate(() => {
+            // Look for signs that we're logged in
+            const bodyText = document.body.innerText.toLowerCase();
+            const hasLoginIndicators = bodyText.includes('dashboard') || 
+                                     bodyText.includes('api key') || 
+                                     bodyText.includes('logout') ||
+                                     bodyText.includes('profile') ||
+                                     bodyText.includes('account') ||
+                                     bodyText.includes('settings');
+            
+            // Check if we're on a logged-in page
+            const currentUrl = window.location.href;
+            const isLoggedInUrl = currentUrl.includes('/dashboard') || 
+                                 currentUrl.includes('/api-key') ||
+                                 currentUrl.includes('/profile') ||
+                                 currentUrl.includes('/account');
+            
+            return hasLoginIndicators || isLoggedInUrl;
+          });
+          
+          if (isLoggedIntoKie) {
+            await addDebugStep('Kie.ai Login', 'success', 'Successfully logged into Kie.ai!', null, null, page);
+          } else {
+            await addDebugStep('Kie.ai Login', 'warning', 'Not logged into Kie.ai yet, continuing with login process...');
           }
           
           // Wait for human verification popup
