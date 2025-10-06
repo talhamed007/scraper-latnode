@@ -734,6 +734,11 @@ async function loginToOutlook(email, password, io) {
         // Handle Microsoft pages dynamically (consent, stay signed in, etc.)
         await addDebugStep('Kie.ai Login', 'info', 'Handling Microsoft pages dynamically...');
         try {
+          // Wait for page to be ready after navigation
+          await addDebugStep('Kie.ai Login', 'info', 'Waiting for page to be ready after navigation...');
+          await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+          await randomHumanDelay(page, 2000, 3000);
+          
           // Wait for any Microsoft page to load
           await addDebugStep('Kie.ai Login', 'info', 'Waiting for Microsoft page to load...');
           
@@ -741,6 +746,9 @@ async function loginToOutlook(email, password, io) {
           
           for (let i = 0; i < 30; i++) { // Try for 30 seconds
             try {
+              // Add small delay to ensure page is ready
+              await randomHumanDelay(page, 500, 1000);
+              
               const pageInfo = await page.evaluate(() => {
                 const url = window.location.href;
                 const title = document.title;
@@ -798,14 +806,48 @@ async function loginToOutlook(email, password, io) {
               }
               
             } catch (e) {
-              await addDebugStep('Kie.ai Login', 'warning', `Page evaluation error: ${e.message}`);
+              if (e.message.includes('Requesting main frame too early')) {
+                await addDebugStep('Kie.ai Login', 'info', 'Page not ready yet, waiting longer...');
+                await randomHumanDelay(page, 2000, 3000);
+              } else {
+                await addDebugStep('Kie.ai Login', 'warning', `Page evaluation error: ${e.message}`);
+              }
             }
             
             await randomHumanDelay(page, 1000, 1000);
           }
           
           if (!microsoftPageHandled) {
-            await addDebugStep('Kie.ai Login', 'warning', 'Microsoft page not detected, proceeding anyway...');
+            await addDebugStep('Kie.ai Login', 'warning', 'Microsoft page not detected, waiting longer...');
+            // Wait a bit more and try again
+            await randomHumanDelay(page, 3000, 5000);
+            
+            // Try one more time to detect the page
+            try {
+              const finalCheck = await page.evaluate(() => {
+                const url = window.location.href;
+                const title = document.title;
+                const bodyText = document.body.innerText.toLowerCase();
+                
+                return {
+                  url: url,
+                  title: title,
+                  isConsentPage: url.includes('account.live.com') || url.includes('consent'),
+                  isStaySignedInPage: title.toLowerCase().includes('stay signed in'),
+                  hasButtons: document.querySelectorAll('button, input[type="submit"]').length > 0
+                };
+              });
+              
+              await addDebugStep('Kie.ai Login', 'info', `Final check - URL: ${finalCheck.url}, Title: ${finalCheck.title}`);
+              await addDebugStep('Kie.ai Login', 'info', `Consent: ${finalCheck.isConsentPage}, StaySignedIn: ${finalCheck.isStaySignedInPage}, HasButtons: ${finalCheck.hasButtons}`);
+              
+              if (finalCheck.isConsentPage || finalCheck.isStaySignedInPage) {
+                microsoftPageHandled = true;
+                await addDebugStep('Kie.ai Login', 'success', 'Microsoft page detected on final check');
+              }
+            } catch (e) {
+              await addDebugStep('Kie.ai Login', 'warning', `Final check failed: ${e.message}`);
+            }
           }
           
           await takeScreenshot('Microsoft-Consent-Page', page);
@@ -1048,6 +1090,22 @@ async function loginToOutlook(email, password, io) {
           } catch (fallbackError) {
             await addDebugStep('Kie.ai Login', 'warning', `Fallback consent handling failed: ${fallbackError.message}`);
           }
+        }
+        
+        // Check if we're still on a Microsoft page that needs handling
+        try {
+          const currentUrl = page.url();
+          const isStillOnMicrosoft = currentUrl.includes('login.microsoftonline.com') || 
+                                   currentUrl.includes('account.live.com') || 
+                                   currentUrl.includes('microsoft.com');
+          
+          if (isStillOnMicrosoft) {
+            await addDebugStep('Kie.ai Login', 'warning', 'Still on Microsoft page, waiting for navigation to complete...');
+            await page.waitForNavigation({ timeout: 15000 }).catch(() => {});
+            await randomHumanDelay(page, 2000, 3000);
+          }
+        } catch (e) {
+          await addDebugStep('Kie.ai Login', 'info', `Navigation check failed: ${e.message}`);
         }
         
         // Switch back to Kie.ai page and handle human verification
