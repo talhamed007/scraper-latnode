@@ -170,8 +170,21 @@ async function loginToOutlook(email, password, io) {
     // Step 7: Click Next button for password
     addDebugStep('Password Entry', 'info', 'Clicking Next button...');
     await page.click('button[type="submit"][data-testid="primaryButton"]');
-    await takeScreenshot('Password-Next-Clicked', page);
-    await addDebugStep('Password Entry', 'success', 'Next button clicked', null, null, page);
+    
+    // Wait for navigation after password submission
+    try {
+      await page.waitForNavigation({ timeout: 10000 });
+      await takeScreenshot('Password-Next-Clicked', page);
+      await addDebugStep('Password Entry', 'success', 'Next button clicked and navigated', null, null, page);
+    } catch (navError) {
+      addDebugStep('Password Entry', 'warning', `Navigation timeout: ${navError.message}`);
+      // Try to take screenshot anyway
+      try {
+        await takeScreenshot('Password-Next-Clicked', page);
+      } catch (screenshotError) {
+        addDebugStep('Password Entry', 'warning', `Screenshot failed: ${screenshotError.message}`);
+      }
+    }
     
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);
@@ -183,8 +196,21 @@ async function loginToOutlook(email, password, io) {
       // Look for "Yes" button
       await page.waitForSelector('button[type="submit"][data-testid="primaryButton"]', { timeout: 10000 });
       await page.click('button[type="submit"][data-testid="primaryButton"]');
-      await takeScreenshot('Stay-Signed-In-Yes', page);
-      await addDebugStep('Stay Signed In', 'success', 'Stay signed in confirmed', null, null, page);
+      
+      // Wait for navigation after stay signed in
+      try {
+        await page.waitForNavigation({ timeout: 10000 });
+        await takeScreenshot('Stay-Signed-In-Yes', page);
+        await addDebugStep('Stay Signed In', 'success', 'Stay signed in confirmed and navigated', null, null, page);
+      } catch (navError) {
+        addDebugStep('Stay Signed In', 'warning', `Navigation timeout: ${navError.message}`);
+        // Try to take screenshot anyway
+        try {
+          await takeScreenshot('Stay-Signed-In-Yes', page);
+        } catch (screenshotError) {
+          addDebugStep('Stay Signed In', 'warning', `Screenshot failed: ${screenshotError.message}`);
+        }
+      }
     } catch (e) {
       addDebugStep('Stay Signed In', 'info', 'Stay signed in prompt not found or already handled');
     }
@@ -213,22 +239,49 @@ async function loginToOutlook(email, password, io) {
     addDebugStep('Login Verification', 'info', 'Verifying login success...');
     
     // Wait for page to load completely
-    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
+    try {
+      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
+    } catch (e) {
+      addDebugStep('Login Verification', 'warning', `Page load timeout: ${e.message}`);
+    }
+    
+    // Take final screenshot to verify login state
+    await takeScreenshot('Login-Final-Verification', page);
+    
+    // Try to navigate to Outlook specifically
+    addDebugStep('Login Verification', 'info', 'Attempting to navigate to Outlook...');
+    try {
+      await page.goto('https://outlook.com', { waitUntil: 'networkidle2', timeout: 30000 });
+      await takeScreenshot('Outlook-Redirect', page);
+      await addDebugStep('Login Verification', 'success', 'Successfully navigated to Outlook', null, null, page);
+    } catch (outlookError) {
+      addDebugStep('Login Verification', 'warning', `Could not navigate to Outlook: ${outlookError.message}`);
+    }
     
     // Check if we're on a Microsoft dashboard or Outlook
     const currentUrl = page.url();
     const pageTitle = await page.title();
     
-    await takeScreenshot('Login-Success', page);
+    addDebugStep('Login Verification', 'info', `Current URL: ${currentUrl}`);
+    addDebugStep('Login Verification', 'info', `Page Title: ${pageTitle}`);
     
-    if (currentUrl.includes('office.com') || currentUrl.includes('outlook.com') || 
-        pageTitle.toLowerCase().includes('outlook') || pageTitle.toLowerCase().includes('microsoft')) {
+    // Check for login success indicators
+    const isLoggedIn = currentUrl.includes('office.com') || 
+                      currentUrl.includes('outlook.com') || 
+                      currentUrl.includes('m365.cloud.microsoft') ||
+                      currentUrl.includes('portal.office.com') ||
+                      pageTitle.toLowerCase().includes('outlook') || 
+                      pageTitle.toLowerCase().includes('microsoft') ||
+                      pageTitle.toLowerCase().includes('office');
+    
+    if (isLoggedIn) {
       await addDebugStep('Login Verification', 'success', 'Successfully logged into Microsoft account!', null, null, page);
       
       return {
         success: true,
         message: 'Successfully logged into Microsoft account',
         email: email,
+        name: 'Microsoft User', // We can't easily extract the name from the login process
         url: currentUrl,
         title: pageTitle
       };
@@ -239,6 +292,7 @@ async function loginToOutlook(email, password, io) {
         success: true,
         message: 'Login completed but redirected to unexpected page',
         email: email,
+        name: 'Microsoft User',
         url: currentUrl,
         title: pageTitle
       };
