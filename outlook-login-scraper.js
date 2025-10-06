@@ -265,6 +265,89 @@ async function loginToOutlook(email, password, io) {
     addDebugStep('Login Verification', 'info', `Current URL: ${currentUrl}`);
     addDebugStep('Login Verification', 'info', `Page Title: ${pageTitle}`);
     
+    // Check if we're on Microsoft marketing page instead of actual Outlook
+    if (currentUrl.includes('microsoft.com') && !currentUrl.includes('outlook.live.com')) {
+      await addDebugStep('Login Verification', 'info', 'Detected Microsoft marketing page - handling cookie consent and redirecting...');
+      
+      // Handle cookie consent if present
+      try {
+        await addDebugStep('Cookie Consent', 'info', 'Looking for cookie consent banner...');
+        
+        // Try multiple cookie accept selectors
+        const cookieSelectors = [
+          '[data-testid*="accept"]',
+          '[data-testid*="Accept"]',
+          'button[class*="accept"]',
+          'button[class*="Accept"]',
+          'button[aria-label*="Accept"]',
+          'button[aria-label*="accept"]',
+          'button[type="button"]'
+        ];
+        
+        let cookieAccepted = false;
+        for (const selector of cookieSelectors) {
+          try {
+            const cookieButton = await page.waitForSelector(selector, { visible: true, timeout: 2000 });
+            if (cookieButton) {
+              // Check if button text contains "Accept"
+              const buttonText = await page.evaluate(el => el.textContent, cookieButton);
+              if (buttonText && (buttonText.toLowerCase().includes('accept') || buttonText.toLowerCase().includes('accept all'))) {
+                await addDebugStep('Cookie Consent', 'info', `Found cookie button: ${selector} with text: ${buttonText}`);
+                await cookieButton.click();
+                await randomHumanDelay(page, 1000, 2000);
+                await takeScreenshot('Cookie-Consent-Accepted', page);
+                cookieAccepted = true;
+                break;
+              }
+            }
+          } catch (e) {
+            // Continue to next selector
+          }
+        }
+        
+        // If no specific accept button found, try to find any button with "Accept" text
+        if (!cookieAccepted) {
+          try {
+            const acceptButtons = await page.$$x('//button[contains(text(), "Accept") or contains(text(), "Accept all") or contains(text(), "Accept All")]');
+            if (acceptButtons.length > 0) {
+              await addDebugStep('Cookie Consent', 'info', `Found ${acceptButtons.length} Accept button(s) using XPath`);
+              await acceptButtons[0].click();
+              await randomHumanDelay(page, 1000, 2000);
+              await takeScreenshot('Cookie-Consent-Accepted', page);
+              cookieAccepted = true;
+            }
+          } catch (e) {
+            // XPath also failed
+          }
+        }
+        
+        if (!cookieAccepted) {
+          await addDebugStep('Cookie Consent', 'info', 'No cookie consent banner found or already accepted');
+        }
+      } catch (cookieError) {
+        await addDebugStep('Cookie Consent', 'warning', `Cookie handling failed: ${cookieError.message}`);
+      }
+      
+      // Now navigate directly to Outlook Live
+      await addDebugStep('Login Verification', 'info', 'Navigating directly to Outlook Live...');
+      try {
+        await page.goto('https://outlook.live.com/', { waitUntil: 'networkidle2', timeout: 30000 });
+        await randomHumanDelay(page, 3000, 5000);
+        await takeScreenshot('Outlook-Live-Redirect', page);
+        
+        const finalUrl = page.url();
+        await addDebugStep('Login Verification', 'info', `Final URL after redirect: ${finalUrl}`);
+        
+        if (finalUrl.includes('outlook.live.com')) {
+          await addDebugStep('Login Verification', 'success', 'Successfully navigated to Outlook Live');
+        } else {
+          await addDebugStep('Login Verification', 'warning', `Still not on Outlook Live - current URL: ${finalUrl}`);
+        }
+      } catch (redirectError) {
+        await addDebugStep('Login Verification', 'warning', `Failed to redirect to Outlook Live: ${redirectError.message}`);
+      }
+    }
+    
     // Check for login success indicators
     const isLoggedIn = currentUrl.includes('office.com') || 
                       currentUrl.includes('outlook.com') || 
