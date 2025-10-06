@@ -763,38 +763,83 @@ async function loginToOutlook(email, password, io) {
               await addDebugStep('Kie.ai API Key', 'success', 'Clicked Copy button', null, null, page);
               await randomHumanDelay(page, 1000, 2000);
 
-              // Try to extract API Key from clipboard with timeout
+              // Try to extract API Key using notepad method
+              await addDebugStep('Kie.ai API Key', 'info', 'Using notepad method to extract API key...');
+              
               try {
-                apiKey = await Promise.race([
-                  page.evaluate(() => navigator.clipboard.readText()),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('Clipboard timeout')), 5000))
-                ]);
+                // Open notepad using Windows Run dialog
+                await addDebugStep('Kie.ai API Key', 'info', 'Opening notepad via Windows+R...');
                 
-                if (apiKey && apiKey.length > 10) {
-                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from clipboard: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+                // Press Windows+R to open Run dialog
+                await page.keyboard.down('MetaLeft'); // Windows key
+                await page.keyboard.press('r');
+                await page.keyboard.up('MetaLeft');
+                
+                await randomHumanDelay(page, 1000, 1500);
+                
+                // Type "notepad" in the Run dialog
+                await page.keyboard.type('notepad');
+                await randomHumanDelay(page, 500, 1000);
+                
+                // Press Enter to open notepad
+                await page.keyboard.press('Enter');
+                await randomHumanDelay(page, 2000, 3000);
+                
+                // Paste the copied API key into notepad
+                await addDebugStep('Kie.ai API Key', 'info', 'Pasting API key into notepad...');
+                await page.keyboard.down('Control');
+                await page.keyboard.press('v');
+                await page.keyboard.up('Control');
+                
+                await randomHumanDelay(page, 1000, 1500);
+                
+                // Select all text in notepad
+                await page.keyboard.down('Control');
+                await page.keyboard.press('a');
+                await page.keyboard.up('Control');
+                
+                await randomHumanDelay(page, 500, 1000);
+                
+                // Copy the selected text
+                await page.keyboard.down('Control');
+                await page.keyboard.press('c');
+                await page.keyboard.up('Control');
+                
+                await randomHumanDelay(page, 1000, 1500);
+                
+                // Try to read from clipboard again
+                apiKey = await page.evaluate(() => navigator.clipboard.readText());
+                
+                if (apiKey && apiKey.length > 20) {
+                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted via notepad: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
                 } else {
-                  throw new Error('Empty or invalid API key from clipboard');
+                  throw new Error('Notepad method failed to extract valid API key');
                 }
-              } catch (clipboardError) {
-                await addDebugStep('Kie.ai API Key', 'warning', `Clipboard extraction failed: ${clipboardError.message}`);
                 
-                // Fallback: try to extract from DOM again after clicking
-                const domApiKey = await page.evaluate(() => {
-                  const possibleElements = document.querySelectorAll('input[readonly], input[type="text"], span, div, code, pre');
-                  for (const el of possibleElements) {
-                    const text = el.textContent?.trim() || el.value?.trim() || '';
-                    if (text.length > 20 && /[a-f0-9]{20,}/i.test(text)) {
-                      return text;
-                    }
+                // Close notepad
+                await addDebugStep('Kie.ai API Key', 'info', 'Closing notepad...');
+                await page.keyboard.down('Alt');
+                await page.keyboard.press('F4');
+                await page.keyboard.up('Alt');
+                
+                // If notepad asks to save, press 'n' for No
+                await randomHumanDelay(page, 500, 1000);
+                await page.keyboard.press('n');
+                
+              } catch (notepadError) {
+                await addDebugStep('Kie.ai API Key', 'warning', `Notepad method failed: ${notepadError.message}`);
+                
+                // Fallback: try direct clipboard extraction
+                try {
+                  apiKey = await page.evaluate(() => navigator.clipboard.readText());
+                  if (apiKey && apiKey.length > 10) {
+                    await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from clipboard: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
+                  } else {
+                    throw new Error('Empty or invalid API key from clipboard');
                   }
-                  return null;
-                });
-                
-                if (domApiKey) {
-                  apiKey = domApiKey;
-                  await addDebugStep('Kie.ai API Key', 'success', `API Key extracted from DOM after copy: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`, null, null, page);
-                } else {
-                  await addDebugStep('Kie.ai API Key', 'warning', 'Could not extract API Key from clipboard or DOM');
+                } catch (clipboardError) {
+                  await addDebugStep('Kie.ai API Key', 'warning', `Clipboard extraction also failed: ${clipboardError.message}`);
+                  await addDebugStep('Kie.ai API Key', 'warning', 'Could not extract API Key using any method');
                 }
               }
             } else {
