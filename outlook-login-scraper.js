@@ -697,49 +697,114 @@ async function loginToOutlook(email, password, io) {
           
           // Look for Accept button
           await addDebugStep('Kie.ai Login', 'info', 'Looking for Accept button...');
+          
+          // Try multiple methods to find and click Accept button
+          let acceptClicked = false;
+          
+          // Method 1: Try specific data-testid selector
           try {
-            await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { timeout: 10000 });
+            await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { timeout: 5000 });
             await page.click('button[data-testid="appConsentPrimaryButton"]');
-            await takeScreenshot('Accept-Button-Clicked', page);
-            await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button', null, null, page);
+            await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button using data-testid', null, null, page);
+            acceptClicked = true;
           } catch (e) {
-            // Try alternative selectors for Accept button
-            const acceptSelectors = [
-              'button:contains("Accept")',
-              'button[type="submit"]',
-              'button[class*="primary"]',
-              'button[class*="accept"]'
-            ];
-            
-            let clicked = false;
-            for (const selector of acceptSelectors) {
-              try {
-                if (selector.includes(':contains')) {
-                  const xpath = '//button[contains(text(), "Accept")]';
-                  await page.waitForXPath(xpath, { timeout: 3000 });
+            await addDebugStep('Kie.ai Login', 'info', 'data-testid selector failed, trying alternatives...');
+          }
+          
+          // Method 2: Try XPath for Accept button
+          if (!acceptClicked) {
+            try {
+              const acceptXPaths = [
+                '//button[contains(text(), "Accept")]',
+                '//button[contains(text(), "Allow")]',
+                '//button[contains(text(), "Continue")]',
+                '//button[contains(text(), "Yes")]',
+                '//input[@type="submit" and contains(@value, "Accept")]',
+                '//input[@type="submit" and contains(@value, "Allow")]'
+              ];
+              
+              for (const xpath of acceptXPaths) {
+                try {
+                  await page.waitForXPath(xpath, { visible: true, timeout: 3000 });
                   const [button] = await page.$x(xpath);
                   if (button) {
                     await button.click();
-                    clicked = true;
+                    await addDebugStep('Kie.ai Login', 'success', `Clicked Accept button using XPath: ${xpath}`, null, null, page);
+                    acceptClicked = true;
                     break;
                   }
-                } else {
-                  await page.waitForSelector(selector, { timeout: 3000 });
-                  await page.click(selector);
-                  clicked = true;
-                  break;
+                } catch (xpathError) {
+                  continue;
+                }
+              }
+            } catch (e) {
+              await addDebugStep('Kie.ai Login', 'info', 'XPath methods failed, trying CSS selectors...');
+            }
+          }
+          
+          // Method 3: Try CSS selectors
+          if (!acceptClicked) {
+            const acceptSelectors = [
+              'button[type="submit"]',
+              'button[class*="primary"]',
+              'button[class*="accept"]',
+              'button[class*="allow"]',
+              'button[class*="continue"]',
+              'input[type="submit"]',
+              'button[data-testid*="accept"]',
+              'button[data-testid*="allow"]',
+              'button[data-testid*="primary"]'
+            ];
+            
+            for (const selector of acceptSelectors) {
+              try {
+                await page.waitForSelector(selector, { visible: true, timeout: 3000 });
+                const button = await page.$(selector);
+                if (button) {
+                  // Check if button text contains Accept/Allow/Continue
+                  const buttonText = await page.evaluate(el => el.textContent || el.value, button);
+                  if (buttonText && (buttonText.toLowerCase().includes('accept') || 
+                                    buttonText.toLowerCase().includes('allow') || 
+                                    buttonText.toLowerCase().includes('continue') ||
+                                    buttonText.toLowerCase().includes('yes'))) {
+                    await button.click();
+                    await addDebugStep('Kie.ai Login', 'success', `Clicked Accept button using CSS selector: ${selector} (text: ${buttonText})`, null, null, page);
+                    acceptClicked = true;
+                    break;
+                  }
                 }
               } catch (selectorError) {
                 continue;
               }
             }
-            
-            if (clicked) {
-              await takeScreenshot('Accept-Button-Clicked', page);
-              await addDebugStep('Kie.ai Login', 'success', 'Clicked Accept button with alternative method', null, null, page);
-            } else {
-              await addDebugStep('Kie.ai Login', 'warning', 'Could not find Accept button');
+          }
+          
+          // Method 4: Try to find any button and check its text
+          if (!acceptClicked) {
+            try {
+              const allButtons = await page.$$('button, input[type="submit"]');
+              for (const button of allButtons) {
+                const buttonText = await page.evaluate(el => el.textContent || el.value || el.getAttribute('aria-label'), button);
+                if (buttonText && (buttonText.toLowerCase().includes('accept') || 
+                                  buttonText.toLowerCase().includes('allow') || 
+                                  buttonText.toLowerCase().includes('continue') ||
+                                  buttonText.toLowerCase().includes('yes'))) {
+                  await button.click();
+                  await addDebugStep('Kie.ai Login', 'success', `Clicked Accept button by text matching: ${buttonText}`, null, null, page);
+                  acceptClicked = true;
+                  break;
+                }
+              }
+            } catch (e) {
+              await addDebugStep('Kie.ai Login', 'warning', 'Text matching method failed');
             }
+          }
+          
+          if (acceptClicked) {
+            await takeScreenshot('Accept-Button-Clicked', page);
+          } else {
+            await addDebugStep('Kie.ai Login', 'warning', 'Could not find Accept button - taking screenshot for debugging');
+            await takeScreenshot('Accept-Button-Not-Found', page);
           }
           
           // Wait for navigation back to Kie.ai
