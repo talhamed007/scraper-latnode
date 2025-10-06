@@ -401,83 +401,72 @@ async function createOutlookAccount(email, password, io = null) {
       // Monitor progress bar and button state
       try {
         const progressInfo = await page.evaluate(() => {
-          // Look for progress bar elements with multiple strategies
-          const allElements = document.querySelectorAll('*');
+          // Target the specific progress bar element
           let progressValue = 0;
           let progressElement = null;
           let progressText = '';
           
-          // Strategy 1: Look for elements with progress-related classes
-          const progressSelectors = [
-            '[class*="progress"]',
-            '[class*="bar"]',
-            '[class*="fill"]',
-            '[class*="complete"]',
-            '[class*="loading"]',
-            '[class*="hold"]',
-            '[style*="width"]',
-            '[style*="transform"]',
-            '[data-testid*="progress"]',
-            '[data-testid*="bar"]'
-          ];
+          // Strategy 1: Look for the specific progress bar div
+          const progressBar = document.querySelector('div[id*="oHlwWeEQqwYPjwS"]') || 
+                             document.querySelector('div[style*="width"]') ||
+                             document.querySelector('div[id*="progress"]') ||
+                             document.querySelector('div[class*="progress"]');
           
-          for (const selector of progressSelectors) {
-            const elements = document.querySelectorAll(selector);
-            for (const element of elements) {
-              const style = window.getComputedStyle(element);
-              const width = style.width;
-              const transform = style.transform;
-              const opacity = style.opacity;
-              const display = style.display;
-              
-              // Skip hidden elements
-              if (display === 'none' || opacity === '0') continue;
-              
-              // Look for width-based progress (0-100%)
-              if (width && width.includes('%')) {
-                const percent = parseFloat(width.replace('%', ''));
-                if (percent > progressValue && percent <= 100) {
-                  progressValue = percent;
-                  progressElement = element;
-                  progressText = `Width: ${width}`;
-                }
+          if (progressBar) {
+            const style = window.getComputedStyle(progressBar);
+            const inlineStyle = progressBar.getAttribute('style') || '';
+            
+            // Extract width from inline style (e.g., "width: 123.45px;")
+            const widthMatch = inlineStyle.match(/width:\s*([0-9.]+)px/);
+            if (widthMatch) {
+              progressValue = parseFloat(widthMatch[1]);
+              progressElement = progressBar;
+              progressText = `Progress Bar: ${progressValue}px`;
+            }
+            
+            // Also check computed style width
+            const computedWidth = style.width;
+            if (computedWidth && computedWidth.includes('px')) {
+              const computedValue = parseFloat(computedWidth.replace('px', ''));
+              if (computedValue > progressValue) {
+                progressValue = computedValue;
+                progressText = `Computed: ${computedValue}px`;
               }
-              
-              // Look for transform-based progress
-              if (transform && transform.includes('translateX')) {
-                const match = transform.match(/translateX\(([^)]+)\)/);
-                if (match) {
-                  const translateX = parseFloat(match[1]);
-                  if (translateX > progressValue) {
-                    progressValue = translateX;
-                    progressElement = element;
-                    progressText = `Transform: ${transform}`;
-                  }
-                }
-              }
-              
-              // Look for scale-based progress
-              if (transform && transform.includes('scale')) {
-                const match = transform.match(/scale\(([^)]+)\)/);
-                if (match) {
-                  const scale = parseFloat(match[1]);
-                  if (scale > progressValue && scale <= 1) {
-                    progressValue = scale * 100;
-                    progressElement = element;
-                    progressText = `Scale: ${scale}`;
-                  }
+            }
+          }
+          
+          // Strategy 2: Look for any div with width style that could be progress
+          if (progressValue === 0) {
+            const allDivs = document.querySelectorAll('div[style*="width"]');
+            for (const div of allDivs) {
+              const style = div.getAttribute('style') || '';
+              const widthMatch = style.match(/width:\s*([0-9.]+)px/);
+              if (widthMatch) {
+                const width = parseFloat(widthMatch[1]);
+                if (width > progressValue && width <= 216) { // Max width is 216px
+                  progressValue = width;
+                  progressElement = div;
+                  progressText = `Div Width: ${width}px`;
                 }
               }
             }
           }
           
-          // Strategy 2: Look for text-based progress indicators
-          const textProgress = document.body.textContent.match(/(\d+)%/);
-          if (textProgress) {
-            const textPercent = parseFloat(textProgress[1]);
-            if (textPercent > progressValue) {
-              progressValue = textPercent;
-              progressText = `Text: ${textPercent}%`;
+          // Strategy 3: Look for elements with specific IDs that might be progress bars
+          const progressIds = ['oHlwWeEQqwYPjwS', 'progress', 'bar', 'fill'];
+          for (const id of progressIds) {
+            const element = document.getElementById(id);
+            if (element) {
+              const style = element.getAttribute('style') || '';
+              const widthMatch = style.match(/width:\s*([0-9.]+)px/);
+              if (widthMatch) {
+                const width = parseFloat(widthMatch[1]);
+                if (width > progressValue) {
+                  progressValue = width;
+                  progressElement = element;
+                  progressText = `ID ${id}: ${width}px`;
+                }
+              }
             }
           }
           
@@ -528,39 +517,46 @@ async function createOutlookAccount(email, password, io = null) {
         if (progressInfo.progressValue > lastProgress) {
           lastProgress = progressInfo.progressValue;
           progressDetected = true;
-          await addDebugStep('Human Verification', 'info', `Progress: ${progressInfo.progressValue.toFixed(1)}% (Button: ${progressInfo.buttonState}) - ${progressInfo.progressText || 'Unknown method'}`, null, null, page);
+          const percentage = ((progressInfo.progressValue / 216) * 100).toFixed(1);
+          await addDebugStep('Human Verification', 'info', `Progress: ${progressInfo.progressValue}px (${percentage}%) - ${progressInfo.progressText || 'Unknown method'}`, null, null, page);
         }
         
         // Log detailed progress info every 2 seconds
         if (holdTime % 2000 < 100) {
-          await addDebugStep('Human Verification', 'info', `Hold time: ${holdTime}ms, Progress: ${progressInfo.progressValue.toFixed(1)}%, Button: ${progressInfo.buttonState}, Checkmark: ${progressInfo.hasCheckmark}`, null, null, page);
+          const percentage = ((progressInfo.progressValue / 216) * 100).toFixed(1);
+          await addDebugStep('Human Verification', 'info', `Hold time: ${holdTime}ms, Progress: ${progressInfo.progressValue}px (${percentage}%), Button: ${progressInfo.buttonState}, Checkmark: ${progressInfo.hasCheckmark}`, null, null, page);
         }
         
         // Check if verification is complete
         verificationComplete = progressInfo.isComplete;
         
-        // Smart release: if progress is near completion (80%+) and button state indicates ready
-        if (!verificationComplete && progressInfo.progressValue >= 80 && 
-            (progressInfo.buttonState === 'ready_to_release' || progressInfo.buttonState === 'completed')) {
-          await addDebugStep('Human Verification', 'info', 'Progress near completion, releasing button...', null, null, page);
+        // Smart release: if progress is near completion (80%+ of 216px = 172px+)
+        if (!verificationComplete && progressInfo.progressValue >= 172) {
+          await addDebugStep('Human Verification', 'info', `Progress near completion (${progressInfo.progressValue}px/216px), releasing button...`, null, null, page);
           break;
         }
         
-        // If we've been holding for a while and have good progress, release
-        if (!verificationComplete && holdTime > 5000 && progressInfo.progressValue >= 70) {
-          await addDebugStep('Human Verification', 'info', 'Good progress detected, releasing button...', null, null, page);
+        // If we've been holding for a while and have good progress (70%+ of 216px = 151px+)
+        if (!verificationComplete && holdTime > 5000 && progressInfo.progressValue >= 151) {
+          await addDebugStep('Human Verification', 'info', `Good progress detected (${progressInfo.progressValue}px/216px), releasing button...`, null, null, page);
+          break;
+        }
+        
+        // If progress is at 50%+ (108px+) and we've been holding for a while
+        if (!verificationComplete && holdTime > 7000 && progressInfo.progressValue >= 108) {
+          await addDebugStep('Human Verification', 'info', `Moderate progress (${progressInfo.progressValue}px/216px), releasing button...`, null, null, page);
           break;
         }
         
         // Fallback: if no progress detected but we've been holding for a reasonable time, release
-        if (!verificationComplete && holdTime > 8000 && progressInfo.progressValue === 0) {
+        if (!verificationComplete && holdTime > 10000 && progressInfo.progressValue === 0) {
           await addDebugStep('Human Verification', 'info', 'No progress detected, releasing after timeout...', null, null, page);
           break;
         }
         
-        // Time-based fallback: hold for 5-8 seconds minimum, then release
-        if (!verificationComplete && holdTime > 5000 && holdTime < 8000) {
-          await addDebugStep('Human Verification', 'info', 'Time-based release (5-8 seconds)...', null, null, page);
+        // Time-based fallback: hold for 8-12 seconds minimum, then release
+        if (!verificationComplete && holdTime > 8000 && holdTime < 12000) {
+          await addDebugStep('Human Verification', 'info', 'Time-based release (8-12 seconds)...', null, null, page);
           break;
         }
         
