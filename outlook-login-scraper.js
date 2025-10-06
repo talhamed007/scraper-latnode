@@ -360,7 +360,19 @@ async function loginToOutlook(email, password, io) {
     if (isLoggedIn) {
       await addDebugStep('Login Verification', 'success', 'Successfully logged into Microsoft account!', null, null, page);
       
-      // Step 11: Navigate to Kie.ai and login
+      // Step 11: Wait for Outlook to fully load, then navigate to Kie.ai
+      await addDebugStep('Kie.ai Login', 'info', 'Waiting for Outlook login to complete...');
+      
+      // Wait longer to ensure Outlook is fully loaded and any modals are handled
+      await randomHumanDelay(page, 5000, 7000);
+      
+      // Check if we're still on Outlook and wait for it to be ready
+      const currentUrl = page.url();
+      if (currentUrl.includes('outlook.live.com') || currentUrl.includes('outlook.com')) {
+        await addDebugStep('Kie.ai Login', 'info', 'Outlook is loaded, waiting for any modals to clear...');
+        await randomHumanDelay(page, 3000, 5000);
+      }
+      
       await addDebugStep('Kie.ai Login', 'info', 'Starting Kie.ai login process...');
       
       let apiKey = 'Not Found'; // Initialize API key variable
@@ -374,6 +386,60 @@ async function loginToOutlook(email, password, io) {
         
         // Wait for page to load
         await randomHumanDelay(page, 2000, 3000);
+        
+        // Check for and handle "Unleash AI Power" modal popup
+        await addDebugStep('Kie.ai Login', 'info', 'Checking for modal popups...');
+        try {
+          // Look for the "Unleash AI Power" modal
+          const modalSelectors = [
+            'div[class*="modal"]',
+            'div[class*="popup"]',
+            'div[class*="dialog"]',
+            'div[role="dialog"]',
+            'div[class*="overlay"]'
+          ];
+          
+          let modalFound = false;
+          for (const selector of modalSelectors) {
+            try {
+              const modal = await page.waitForSelector(selector, { visible: true, timeout: 3000 });
+              if (modal) {
+                // Check if it contains "Unleash AI Power" text
+                const modalText = await page.evaluate(el => el.textContent, modal);
+                if (modalText && modalText.includes('Unleash AI Power')) {
+                  await addDebugStep('Kie.ai Login', 'info', 'Found "Unleash AI Power" modal popup');
+                  await takeScreenshot('Kie-ai-Modal-Detected', page);
+                  
+                  // Look for close button (X) in the modal
+                  const closeButton = await modal.$('button[aria-label*="close"], button[aria-label*="Close"], svg[aria-hidden="true"], button:has(svg)');
+                  if (closeButton) {
+                    await addDebugStep('Kie.ai Login', 'info', 'Closing modal popup...');
+                    await closeButton.click();
+                    await randomHumanDelay(page, 1000, 2000);
+                    await takeScreenshot('Kie-ai-Modal-Closed', page);
+                    await addDebugStep('Kie.ai Login', 'success', 'Modal popup closed successfully', null, null, page);
+                  } else {
+                    // Try to click outside the modal or press Escape
+                    await addDebugStep('Kie.ai Login', 'info', 'No close button found, trying to close modal...');
+                    await page.keyboard.press('Escape');
+                    await randomHumanDelay(page, 1000, 2000);
+                    await takeScreenshot('Kie-ai-Modal-Escape', page);
+                  }
+                  modalFound = true;
+                  break;
+                }
+              }
+            } catch (e) {
+              // Continue to next selector
+            }
+          }
+          
+          if (!modalFound) {
+            await addDebugStep('Kie.ai Login', 'info', 'No modal popup found');
+          }
+        } catch (modalError) {
+          await addDebugStep('Kie.ai Login', 'warning', `Modal handling failed: ${modalError.message}`);
+        }
         
         // Click on "Get Started" button
         await addDebugStep('Kie.ai Login', 'info', 'Looking for Get Started button...');
