@@ -1174,8 +1174,74 @@ async function loginToOutlook(email, password, io) {
             // Look for human verification checkbox with more specific detection
             await addDebugStep('Kie.ai Login', 'info', 'Waiting for human verification checkbox...');
             
-            // Try multiple selectors for human verification checkbox
-            await page.waitForSelector('div#checkbox[role="checkbox"], [role="checkbox"], input[type="checkbox"], [aria-checked]', { visible: true, timeout: 15000 });
+            // First, scroll down to find the checkbox
+            await addDebugStep('Kie.ai Login', 'info', 'Scrolling down to find human verification checkbox...');
+            await page.evaluate(() => {
+              window.scrollTo(0, document.body.scrollHeight);
+            });
+            await randomHumanDelay(page, 1000, 2000);
+            
+            // Try scrolling up a bit to see if checkbox is in middle area
+            await addDebugStep('Kie.ai Login', 'info', 'Scrolling up to check middle area...');
+            await page.evaluate(() => {
+              window.scrollTo(0, document.body.scrollHeight / 2);
+            });
+            await randomHumanDelay(page, 1000, 2000);
+            
+            // Try to find checkbox with multiple approaches
+            let checkboxFound = false;
+            
+            // Approach 1: Try to find any checkbox-like element
+            try {
+              await addDebugStep('Kie.ai Login', 'info', 'Looking for any checkbox-like element...');
+              await page.waitForSelector('div#checkbox[role="checkbox"], [role="checkbox"], input[type="checkbox"], [aria-checked]', { visible: true, timeout: 5000 });
+              checkboxFound = true;
+            } catch (e) {
+              await addDebugStep('Kie.ai Login', 'info', `Standard selectors failed: ${e.message}`);
+            }
+            
+            // Approach 2: Look for elements with "human" or "verification" in text
+            if (!checkboxFound) {
+              try {
+                await addDebugStep('Kie.ai Login', 'info', 'Looking for human verification text...');
+                const humanElements = await page.evaluate(() => {
+                  const elements = Array.from(document.querySelectorAll('*'));
+                  return elements.filter(el => {
+                    const text = el.textContent?.toLowerCase() || '';
+                    return text.includes('human') || text.includes('verification') || text.includes('checkbox');
+                  });
+                });
+                
+                if (humanElements.length > 0) {
+                  await addDebugStep('Kie.ai Login', 'info', `Found ${humanElements.length} elements with human/verification text`);
+                  checkboxFound = true;
+                }
+              } catch (e) {
+                await addDebugStep('Kie.ai Login', 'info', `Text search failed: ${e.message}`);
+              }
+            }
+            
+            // Approach 3: Look for any clickable element that might be a checkbox
+            if (!checkboxFound) {
+              try {
+                await addDebugStep('Kie.ai Login', 'info', 'Looking for any clickable checkbox-like element...');
+                const clickableElements = await page.evaluate(() => {
+                  const elements = Array.from(document.querySelectorAll('[role="checkbox"], input[type="checkbox"], [aria-checked], [tabindex="0"]'));
+                  return elements.filter(el => el.offsetParent !== null); // Only visible elements
+                });
+                
+                if (clickableElements.length > 0) {
+                  await addDebugStep('Kie.ai Login', 'info', `Found ${clickableElements.length} clickable checkbox-like elements`);
+                  checkboxFound = true;
+                }
+              } catch (e) {
+                await addDebugStep('Kie.ai Login', 'info', `Clickable search failed: ${e.message}`);
+              }
+            }
+            
+            if (!checkboxFound) {
+              throw new Error('No checkbox found with any approach');
+            }
             
             // Try multiple methods to click the checkbox
             let checkboxClicked = false;
