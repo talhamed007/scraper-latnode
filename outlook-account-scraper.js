@@ -382,28 +382,44 @@ async function createOutlookAccount(email, password, io = null) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     
-    // Hold the button and wait for checkmark
-    let checkmarkFound = false;
+    // Hold the button and wait for verification to complete
+    let verificationComplete = false;
     let holdTime = 0;
-    const maxHoldTime = 10000; // 10 seconds max
+    const maxHoldTime = 15000; // 15 seconds max
     
-    while (!checkmarkFound && holdTime < maxHoldTime) {
-      await page.waitForTimeout(100);
-      holdTime += 100;
+    while (!verificationComplete && holdTime < maxHoldTime) {
+      await page.waitForTimeout(200);
+      holdTime += 200;
       
-      // Check for checkmark or success indicator
+      // Check for verification completion indicators
       try {
-        checkmarkFound = await page.evaluate(() => {
-          return document.querySelector('svg[data-testid="checkmark"]') !== null ||
-                 document.querySelector('.checkmark') !== null ||
-                 document.querySelector('[class*="success"]') !== null ||
-                 document.body.textContent.includes('verified') ||
-                 document.body.textContent.includes('success') ||
-                 document.body.textContent.includes('complete');
+        verificationComplete = await page.evaluate(() => {
+          // Look for visual indicators of completion
+          const hasCheckmark = document.querySelector('svg[data-testid="checkmark"]') !== null ||
+                              document.querySelector('.checkmark') !== null ||
+                              document.querySelector('[class*="success"]') !== null ||
+                              document.querySelector('[class*="complete"]') !== null;
+          
+          // Look for text indicators
+          const hasSuccessText = document.body.textContent.includes('verified') ||
+                               document.body.textContent.includes('success') ||
+                               document.body.textContent.includes('complete') ||
+                               document.body.textContent.includes('continue');
+          
+          // Look for page navigation (next button appears)
+          const hasNextButton = document.querySelector('button[type="submit"]') !== null ||
+                              document.querySelector('input[type="submit"]') !== null;
+          
+          // Look for form progression (new form elements appear)
+          const hasNewForm = document.querySelector('input[name="FirstName"]') !== null ||
+                            document.querySelector('input[name="LastName"]') !== null ||
+                            document.querySelector('input[placeholder*="name"]') !== null;
+          
+          return hasCheckmark || hasSuccessText || hasNextButton || hasNewForm;
         });
         
-        if (checkmarkFound) {
-          await addDebugStep('Human Verification', 'success', 'Checkmark detected!', null, null, page);
+        if (verificationComplete) {
+          await addDebugStep('Human Verification', 'success', 'Verification completed successfully!', null, null, page);
           break;
         }
       } catch (e) {
@@ -412,15 +428,23 @@ async function createOutlookAccount(email, password, io = null) {
       
       // Check if we should stop (global stop flag)
       if (globalScraperStopped) {
-        addDebugStep('Human Verification', 'warning', 'Scraper stopped during human verification');
+        await addDebugStep('Human Verification', 'warning', 'Scraper stopped during human verification', null, null, page);
         return { success: false, error: 'Scraper stopped' };
       }
     }
     
     // Release the button
     await page.mouse.up();
-    addDebugStep('Human Verification', 'success', 'Button released after verification');
+    
+    if (!verificationComplete) {
+      throw new Error('Human verification failed - verification did not complete within timeout');
+    }
+    
+    await addDebugStep('Human Verification', 'success', 'Button released after verification', null, null, page);
     await takeScreenshot('Human-Verification-Complete', page);
+    
+    // Wait for page to fully load after verification
+    await randomHumanDelay(page, 2000, 3000);
     
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);

@@ -235,38 +235,7 @@
         .log-type-warning { color: #ffc107; }
         .log-type-info { color: #17a2b8; }
 
-        .screenshot-section {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 25px;
-        }
 
-        .screenshot-section h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 1.2em;
-        }
-
-        .screenshot-container {
-            text-align: center;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            border: 2px dashed #dee2e6;
-        }
-
-        .screenshot-container img {
-            max-width: 100%;
-            max-height: 300px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-
-        .screenshot-placeholder {
-            color: #6c757d;
-            font-style: italic;
-        }
 
         .loading {
             display: inline-block;
@@ -371,12 +340,6 @@
             </div>
 
             <!-- Screenshot Section -->
-            <div class="screenshot-section">
-                <h3>📸 Latest Screenshot</h3>
-                <div class="screenshot-container" id="screenshotContainer">
-                    <div class="screenshot-placeholder">No screenshot available yet</div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -390,10 +353,6 @@
             addLogEntry(logEntry);
         });
         
-        // Listen for screenshots
-        socket.on('screenshot', function(screenshotData) {
-            updateScreenshot(screenshotData.filename);
-        });
         
         // DOM elements
         const emailInput = document.getElementById('email');
@@ -407,7 +366,6 @@
         const statusDisplay = document.getElementById('statusDisplay');
         const statusText = document.getElementById('statusText');
         const logsContainer = document.getElementById('logsContainer');
-        const screenshotContainer = document.getElementById('screenshotContainer');
 
         // State variables
         let isRunning = false;
@@ -468,15 +426,6 @@
             logsContainer.scrollTop = logsContainer.scrollHeight;
         }
 
-        // Update screenshot display
-        function updateScreenshot(screenshotName) {
-            if (screenshotName) {
-                screenshotContainer.innerHTML = `
-                    <img src="/screenshots/${screenshotName}" alt="Latest Screenshot" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                    <div class="screenshot-placeholder" style="display: none;">Screenshot not available</div>
-                `;
-            }
-        }
 
         // Start account creation
         async function startAccountCreation() {
