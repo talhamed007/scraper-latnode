@@ -521,15 +521,26 @@ async function createOutlookAccount(email, password, io = null) {
             }
           }
           
-          // Look for button state changes
+          // Look for button state changes and animation timing
           const button = document.querySelector('button[type="button"]') || 
                        document.querySelector('button[aria-label*="hold"]') ||
                        document.querySelector('button[class*="hold"]');
           
           let buttonState = 'unknown';
+          let animationDuration = 0;
+          let animationProgress = 0;
+          
           if (button) {
             const buttonStyle = window.getComputedStyle(button);
             const buttonText = button.textContent || '';
+            
+            // Extract animation duration from button's style
+            const buttonInlineStyle = button.getAttribute('style') || '';
+            const animationMatch = buttonInlineStyle.match(/animation:\s*([0-9.]+)ms/);
+            if (animationMatch) {
+              animationDuration = parseFloat(animationMatch[1]);
+              debugInfo.push(`Button animation duration: ${animationDuration}ms`);
+            }
             
             if (buttonText.includes('Press and hold') || buttonText.includes('Hold')) {
               buttonState = 'holding';
@@ -538,6 +549,29 @@ async function createOutlookAccount(email, password, io = null) {
             } else if (buttonText.includes('✓') || buttonText.includes('Complete')) {
               buttonState = 'completed';
             }
+          }
+          
+          // Also check for animation in the "Press and hold" text element
+          const pressHoldText = document.querySelector('p[style*="animation"]') ||
+                               document.querySelector('p[id*="zwNTvjKBlPSPuOj"]') ||
+                               document.querySelector('p[class*="JDHpitXjyUXyEhc"]');
+          
+          if (pressHoldText && !animationDuration) {
+            const textStyle = pressHoldText.getAttribute('style') || '';
+            const textAnimationMatch = textStyle.match(/animation:\s*([0-9.]+)ms/);
+            if (textAnimationMatch) {
+              animationDuration = parseFloat(textAnimationMatch[1]);
+              debugInfo.push(`Text animation duration: ${animationDuration}ms`);
+            }
+          }
+          
+          // Calculate animation progress if we have duration
+          if (animationDuration > 0) {
+            // Try to estimate progress based on animation timing
+            // This is a rough estimate - the actual progress might be different
+            const estimatedProgress = Math.min(100, (holdTime / animationDuration) * 100);
+            animationProgress = estimatedProgress;
+            debugInfo.push(`Animation progress: ${animationProgress.toFixed(1)}%`);
           }
           
           // Look for visual completion indicators
@@ -562,6 +596,8 @@ async function createOutlookAccount(email, password, io = null) {
             hasCheckmark,
             hasSuccessText,
             isComplete: hasCheckmark || hasSuccessText || buttonState === 'completed',
+            animationDuration,
+            animationProgress,
             debugInfo: debugInfo.slice(0, 10) // Limit debug info to first 10 items
           };
         });
@@ -577,7 +613,9 @@ async function createOutlookAccount(email, password, io = null) {
         // Log detailed progress info every 2 seconds
         if (holdTime % 2000 < 100) {
           const percentage = ((progressInfo.progressValue / 216) * 100).toFixed(1);
-          await addDebugStep('Human Verification', 'info', `Hold time: ${holdTime}ms, Progress: ${progressInfo.progressValue}px (${percentage}%), Button: ${progressInfo.buttonState}, Checkmark: ${progressInfo.hasCheckmark}`, null, null, page);
+          const animationInfo = progressInfo.animationDuration > 0 ? 
+            `, Animation: ${progressInfo.animationDuration}ms (${progressInfo.animationProgress.toFixed(1)}%)` : '';
+          await addDebugStep('Human Verification', 'info', `Hold time: ${holdTime}ms, Progress: ${progressInfo.progressValue}px (${percentage}%), Button: ${progressInfo.buttonState}, Checkmark: ${progressInfo.hasCheckmark}${animationInfo}`, null, null, page);
           
           // Log debug information to help troubleshoot
           if (progressInfo.debugInfo && progressInfo.debugInfo.length > 0) {
@@ -594,15 +632,33 @@ async function createOutlookAccount(email, password, io = null) {
           break;
         }
         
+        // Animation-based release: if animation is near completion (90%+ of animation duration)
+        if (!verificationComplete && progressInfo.animationDuration > 0 && progressInfo.animationProgress >= 90) {
+          await addDebugStep('Human Verification', 'info', `Animation near completion (${progressInfo.animationProgress.toFixed(1)}% of ${progressInfo.animationDuration}ms), releasing button...`, null, null, page);
+          break;
+        }
+        
         // If we've been holding for a while and have good progress (70%+ of 216px = 151px+)
         if (!verificationComplete && holdTime > 5000 && progressInfo.progressValue >= 151) {
           await addDebugStep('Human Verification', 'info', `Good progress detected (${progressInfo.progressValue}px/216px), releasing button...`, null, null, page);
           break;
         }
         
+        // Animation-based release: if animation is at 80%+ and we've been holding for a while
+        if (!verificationComplete && progressInfo.animationDuration > 0 && progressInfo.animationProgress >= 80 && holdTime > 3000) {
+          await addDebugStep('Human Verification', 'info', `Animation progress good (${progressInfo.animationProgress.toFixed(1)}% of ${progressInfo.animationDuration}ms), releasing button...`, null, null, page);
+          break;
+        }
+        
         // If progress is at 50%+ (108px+) and we've been holding for a while
         if (!verificationComplete && holdTime > 7000 && progressInfo.progressValue >= 108) {
           await addDebugStep('Human Verification', 'info', `Moderate progress (${progressInfo.progressValue}px/216px), releasing button...`, null, null, page);
+          break;
+        }
+        
+        // Animation-based release: if animation is at 70%+ and we've been holding for a while
+        if (!verificationComplete && progressInfo.animationDuration > 0 && progressInfo.animationProgress >= 70 && holdTime > 5000) {
+          await addDebugStep('Human Verification', 'info', `Animation progress moderate (${progressInfo.animationProgress.toFixed(1)}% of ${progressInfo.animationDuration}ms), releasing button...`, null, null, page);
           break;
         }
         
