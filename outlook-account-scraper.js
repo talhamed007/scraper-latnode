@@ -555,9 +555,9 @@ async function createOutlookAccount(email, password, io = null) {
           break;
         }
         
-        // Time-based fallback: hold for 3-5 seconds minimum, then release
-        if (!verificationComplete && holdTime > 3000 && holdTime < 6000) {
-          await addDebugStep('Human Verification', 'info', 'Time-based release (3-5 seconds)...', null, null, page);
+        // Time-based fallback: hold for 5-8 seconds minimum, then release
+        if (!verificationComplete && holdTime > 5000 && holdTime < 8000) {
+          await addDebugStep('Human Verification', 'info', 'Time-based release (5-8 seconds)...', null, null, page);
           break;
         }
         

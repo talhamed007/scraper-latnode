@@ -353,7 +353,13 @@
         
         // Listen for real-time logs
         socket.on('log', function(logEntry) {
+            console.log('Received log entry:', logEntry);
             addLogEntry(logEntry);
+        });
+        
+        // Listen for screenshots
+        socket.on('screenshot', function(screenshotData) {
+            console.log('Received screenshot:', screenshotData);
         });
         
         
@@ -410,11 +416,13 @@
             // Create screenshot HTML if available
             let screenshotHtml = '';
             if (entry.screenshot) {
+                console.log('Adding screenshot to log:', entry.screenshot);
                 screenshotHtml = `
-                    <div class="log-screenshot" style="margin-top: 8px;">
+                    <div class="log-screenshot" style="margin-top: 8px; padding: 4px; background: #1a1a1a; border-radius: 4px;">
                         <img src="/screenshots/${entry.screenshot}" alt="Screenshot" 
-                             style="max-width: 300px; max-height: 200px; width: auto; height: auto; border: 1px solid #ddd; border-radius: 4px; display: block; object-fit: contain;"
-                             onerror="this.style.display='none';">
+                             style="max-width: 300px; max-height: 200px; width: auto; height: auto; border: 1px solid #444; border-radius: 4px; display: block; object-fit: contain;"
+                             onload="console.log('Screenshot loaded successfully:', this.src);"
+                             onerror="console.log('Screenshot failed to load:', this.src); this.style.display='none';">
                     </div>
                 `;
             }
