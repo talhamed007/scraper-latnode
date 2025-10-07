@@ -736,7 +736,8 @@ async function loginToOutlook(email, password, io) {
         try {
           // Wait for page to be ready after navigation
           await addDebugStep('Kie.ai Login', 'info', 'Waiting for page to be ready after navigation...');
-          await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+          // Wait for page to be ready (Puppeteer equivalent of waitForLoadState)
+          await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 }).catch(() => {});
           await randomHumanDelay(page, 2000, 3000);
           
           // Wait for any Microsoft page to load
@@ -795,8 +796,81 @@ async function loginToOutlook(email, password, io) {
               // Handle different page types
               if (pageInfo.isConsentPage || pageInfo.hasConsentButton) {
                 await addDebugStep('Kie.ai Login', 'success', `Consent page detected: ${pageInfo.url}`);
-                microsoftPageHandled = true;
-                break;
+                
+                // Try to click Accept button
+                try {
+                  await addDebugStep('Kie.ai Login', 'info', 'Looking for Accept button...');
+                  
+                  // Approach 1: Try specific data-testid selector
+                  try {
+                    await page.waitForSelector('button[data-testid="appConsentPrimaryButton"]', { 
+                      visible: true, 
+                      timeout: 3000 
+                    });
+                    await page.click('button[data-testid="appConsentPrimaryButton"]');
+                    await addDebugStep('Kie.ai Login', 'success', 'Accept button clicked using data-testid');
+                  } catch (e) {
+                    await addDebugStep('Kie.ai Login', 'info', `data-testid selector failed: ${e.message}`);
+                  }
+                  
+                  // Approach 2: Try text-based selectors
+                  try {
+                    const textSelectors = [
+                      'button:contains("Accept")',
+                      'button:contains("Yes")', 
+                      'button:contains("Continue")',
+                      'button:contains("Allow")'
+                    ];
+                    
+                    for (const selector of textSelectors) {
+                      try {
+                        await page.waitForSelector(selector, { visible: true, timeout: 2000 });
+                        await page.click(selector);
+                        await addDebugStep('Kie.ai Login', 'success', `Accept button clicked using: ${selector}`);
+                        break;
+                      } catch (selectorError) {
+                        await addDebugStep('Kie.ai Login', 'info', `Selector ${selector} failed: ${selectorError.message}`);
+                      }
+                    }
+                  } catch (e) {
+                    await addDebugStep('Kie.ai Login', 'info', `Text-based selectors failed: ${e.message}`);
+                  }
+                  
+                  // Approach 3: Use page.evaluate for more reliable clicking
+                  try {
+                    await addDebugStep('Kie.ai Login', 'info', 'Trying evaluate method for Accept button...');
+                    const clicked = await page.evaluate(() => {
+                      const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                      const acceptButton = buttons.find(btn => {
+                        const text = btn.textContent?.toLowerCase() || '';
+                        const value = btn.value?.toLowerCase() || '';
+                        return text.includes('accept') || text.includes('yes') || 
+                               text.includes('continue') || text.includes('allow') ||
+                               value.includes('accept') || value.includes('yes');
+                      });
+                      
+                      if (acceptButton && acceptButton.offsetParent !== null) {
+                        acceptButton.click();
+                        return true;
+                      }
+                      return false;
+                    });
+                    
+                    if (clicked) {
+                      await addDebugStep('Kie.ai Login', 'success', 'Accept button clicked using evaluate method');
+                    }
+                  } catch (e) {
+                    await addDebugStep('Kie.ai Login', 'info', `Evaluate method failed: ${e.message}`);
+                  }
+                  
+                  await randomHumanDelay(page, 2000, 3000);
+                  microsoftPageHandled = true;
+                  break;
+                } catch (buttonError) {
+                  await addDebugStep('Kie.ai Login', 'warning', `Accept button click failed: ${buttonError.message}`);
+                  microsoftPageHandled = true;
+                  break;
+                }
               } else if (pageInfo.isStaySignedInPage) {
                 await addDebugStep('Kie.ai Login', 'info', `Stay signed in page detected: ${pageInfo.url}`);
                 microsoftPageHandled = true;
@@ -1420,11 +1494,49 @@ async function loginToOutlook(email, password, io) {
           // Wait for login to complete
           await randomHumanDelay(page, 3000, 5000);
           
-          // Navigate to dashboard
+          // Navigate to dashboard with better error handling
           await addDebugStep('Kie.ai Login', 'info', 'Navigating to Kie.ai dashboard...');
-          await page.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2', timeout: 30000 });
-          await takeScreenshot('Kie-ai-Dashboard', page);
-          await addDebugStep('Kie.ai Login', 'success', 'Successfully navigated to Kie.ai dashboard', null, null, page);
+          try {
+            await page.goto('https://kie.ai/dashboard', { waitUntil: 'networkidle2', timeout: 30000 });
+            await takeScreenshot('Kie-ai-Dashboard', page);
+            await addDebugStep('Kie.ai Login', 'success', 'Successfully navigated to Kie.ai dashboard', null, null, page);
+          } catch (navError) {
+            await addDebugStep('Kie.ai Login', 'warning', `Dashboard navigation failed: ${navError.message}`);
+            
+            // Try alternative navigation methods
+            try {
+              await addDebugStep('Kie.ai Login', 'info', 'Trying alternative navigation to dashboard...');
+              await page.goto('https://kie.ai/dashboard', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await takeScreenshot('Kie-ai-Dashboard-Fallback', page);
+              await addDebugStep('Kie.ai Login', 'success', 'Successfully navigated to dashboard with fallback method', null, null, page);
+            } catch (fallbackError) {
+              await addDebugStep('Kie.ai Login', 'warning', `Fallback navigation also failed: ${fallbackError.message}`);
+              
+              // Try to navigate to the current page's dashboard link
+              try {
+                await addDebugStep('Kie.ai Login', 'info', 'Trying to find and click dashboard link...');
+                const dashboardClicked = await page.evaluate(() => {
+                  const links = Array.from(document.querySelectorAll('a[href*="dashboard"], a[href="/dashboard"]'));
+                  const dashboardLink = links.find(link => link.offsetParent !== null);
+                  if (dashboardLink) {
+                    dashboardLink.click();
+                    return true;
+                  }
+                  return false;
+                });
+                
+                if (dashboardClicked) {
+                  await randomHumanDelay(page, 3000, 5000);
+                  await takeScreenshot('Kie-ai-Dashboard-Link', page);
+                  await addDebugStep('Kie.ai Login', 'success', 'Successfully clicked dashboard link', null, null, page);
+                } else {
+                  await addDebugStep('Kie.ai Login', 'warning', 'No dashboard link found, staying on current page');
+                }
+              } catch (linkError) {
+                await addDebugStep('Kie.ai Login', 'warning', `Dashboard link click failed: ${linkError.message}`);
+              }
+            }
+          }
           
           // Step 12: Click API Key button
           await addDebugStep('Kie.ai API Key', 'info', 'Clicking API Key button...');
