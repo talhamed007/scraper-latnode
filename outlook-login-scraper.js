@@ -186,6 +186,82 @@ async function loginToOutlook(email, password, io) {
       }
     }
     
+    // Check for "Let's protect your account" page and handle "Skip for now"
+    try {
+      await addDebugStep('Account Protection', 'info', 'Checking for account protection page...');
+      
+      const pageInfo = await page.evaluate(() => {
+        const url = window.location.href;
+        const title = document.title;
+        const bodyText = document.body.innerText.toLowerCase();
+        
+        const isProtectAccountPage = title.toLowerCase().includes("let's protect your account") ||
+                                   bodyText.includes("let's protect your account") ||
+                                   bodyText.includes('add another way to verify') ||
+                                   bodyText.includes('security info') ||
+                                   url.includes('proofs/Add');
+        
+        // Find "Skip for now" links
+        const skipLinks = Array.from(document.querySelectorAll('a, button'));
+        const hasSkipLink = skipLinks.some(link => {
+          const text = link.textContent?.toLowerCase() || '';
+          return text.includes('skip for now') || text.includes('skip') || text.includes('later');
+        });
+        
+        return {
+          isProtectAccountPage: isProtectAccountPage,
+          hasSkipLink: hasSkipLink,
+          url: url,
+          title: title
+        };
+      });
+      
+      if (pageInfo.isProtectAccountPage) {
+        await addDebugStep('Account Protection', 'success', `Protect account page detected: ${pageInfo.url}`);
+        
+        if (pageInfo.hasSkipLink) {
+          await addDebugStep('Account Protection', 'info', 'Looking for Skip for now link...');
+          
+          // Try to find and click "Skip for now" link
+          const skipClicked = await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a, button'));
+            const skipLink = links.find(link => {
+              const text = link.textContent?.toLowerCase() || '';
+              return text.includes('skip for now') || text.includes('skip') || text.includes('later');
+            });
+            
+            if (skipLink && skipLink.offsetParent !== null) {
+              skipLink.click();
+              return { success: true, text: skipLink.textContent };
+            }
+            return { success: false };
+          });
+          
+          if (skipClicked.success) {
+            await addDebugStep('Account Protection', 'success', `Skip link clicked: ${skipClicked.text}`);
+            await randomHumanDelay(page, 2000, 3000);
+            
+            // Wait for navigation after skip
+            try {
+              await page.waitForNavigation({ timeout: 10000 });
+              await takeScreenshot('Account-Protection-Skipped', page);
+              await addDebugStep('Account Protection', 'success', 'Successfully skipped account protection', null, null, page);
+            } catch (navError) {
+              await addDebugStep('Account Protection', 'warning', `Navigation after skip timeout: ${navError.message}`);
+            }
+          } else {
+            await addDebugStep('Account Protection', 'warning', 'Skip link not found or not clickable');
+          }
+        } else {
+          await addDebugStep('Account Protection', 'warning', 'No skip link found on protect account page');
+        }
+      } else {
+        await addDebugStep('Account Protection', 'info', 'No account protection page detected');
+      }
+    } catch (e) {
+      await addDebugStep('Account Protection', 'warning', `Account protection check failed: ${e.message}`);
+    }
+    
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);
     
