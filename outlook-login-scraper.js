@@ -761,6 +761,12 @@ async function loginToOutlook(email, password, io) {
                                     title.toLowerCase().includes('let this app') ||
                                     bodyText.includes('let this app');
                 
+                const isProtectAccountPage = title.toLowerCase().includes("let's protect your account") ||
+                                           bodyText.includes("let's protect your account") ||
+                                           bodyText.includes('add another way to verify') ||
+                                           bodyText.includes('security info') ||
+                                           url.includes('proofs/Add');
+                
                 const isStaySignedInPage = title.toLowerCase().includes('stay signed in') ||
                                          bodyText.includes('stay signed in') ||
                                          bodyText.includes('do you want to stay signed in');
@@ -769,15 +775,23 @@ async function loginToOutlook(email, password, io) {
                                    title.toLowerCase().includes('sign in') ||
                                    bodyText.includes('sign in to your account');
                 
-                // Find available buttons
+                // Find available buttons and links
                 const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
                 const buttonTexts = buttons.map(btn => btn.textContent?.toLowerCase().trim() || btn.value?.toLowerCase().trim() || '');
+                
+                // Find "Skip for now" links
+                const skipLinks = Array.from(document.querySelectorAll('a, button'));
+                const hasSkipLink = skipLinks.some(link => {
+                  const text = link.textContent?.toLowerCase() || '';
+                  return text.includes('skip for now') || text.includes('skip') || text.includes('later');
+                });
                 
                 return {
                   url: url,
                   title: title,
                   bodyText: bodyText,
                   isConsentPage: isConsentPage,
+                  isProtectAccountPage: isProtectAccountPage,
                   isStaySignedInPage: isStaySignedInPage,
                   isSignInPage: isSignInPage,
                   hasConsentButton: !!document.querySelector('button[data-testid="appConsentPrimaryButton"]'),
@@ -785,16 +799,64 @@ async function loginToOutlook(email, password, io) {
                   hasYesButton: buttonTexts.includes('yes'),
                   hasNextButton: buttonTexts.includes('next'),
                   hasSignInButton: buttonTexts.includes('sign in'),
+                  hasSkipLink: hasSkipLink,
                   availableButtons: buttonTexts.filter(text => text.length > 0)
                 };
               });
               
               await addDebugStep('Kie.ai Login', 'info', `Page check ${i+1}/30: URL=${pageInfo.url}, Title=${pageInfo.title}`);
-              await addDebugStep('Kie.ai Login', 'info', `Page type: Consent=${pageInfo.isConsentPage}, StaySignedIn=${pageInfo.isStaySignedInPage}, SignIn=${pageInfo.isSignInPage}`);
-              await addDebugStep('Kie.ai Login', 'info', `Available buttons: ${pageInfo.availableButtons.join(', ')}`);
+              await addDebugStep('Kie.ai Login', 'info', `Page type: Consent=${pageInfo.isConsentPage}, ProtectAccount=${pageInfo.isProtectAccountPage}, StaySignedIn=${pageInfo.isStaySignedInPage}, SignIn=${pageInfo.isSignInPage}`);
+              await addDebugStep('Kie.ai Login', 'info', `Available buttons: ${pageInfo.availableButtons.join(', ')}, HasSkipLink: ${pageInfo.hasSkipLink}`);
               
               // Handle different page types
-              if (pageInfo.isConsentPage || pageInfo.hasConsentButton) {
+              if (pageInfo.isProtectAccountPage) {
+                await addDebugStep('Kie.ai Login', 'success', `Protect account page detected: ${pageInfo.url}`);
+                
+                // Try to find and click "Skip for now" link
+                try {
+                  await addDebugStep('Kie.ai Login', 'info', 'Looking for Skip for now link...');
+                  
+                  // Approach 1: Try to find "Skip for now" link directly
+                  const skipClicked = await page.evaluate(() => {
+                    const links = Array.from(document.querySelectorAll('a, button'));
+                    const skipLink = links.find(link => {
+                      const text = link.textContent?.toLowerCase() || '';
+                      return text.includes('skip for now') || text.includes('skip') || text.includes('later');
+                    });
+                    
+                    if (skipLink && skipLink.offsetParent !== null) {
+                      skipLink.click();
+                      return { success: true, text: skipLink.textContent };
+                    }
+                    return { success: false };
+                  });
+                  
+                  if (skipClicked.success) {
+                    await addDebugStep('Kie.ai Login', 'success', `Skip link clicked: ${skipClicked.text}`);
+                    await randomHumanDelay(page, 2000, 3000);
+                    microsoftPageHandled = true;
+                    break;
+                  } else {
+                    await addDebugStep('Kie.ai Login', 'info', 'No skip link found, trying Next button...');
+                    
+                    // Approach 2: Try Next button if no skip link
+                    try {
+                      await page.waitForSelector('button:contains("Next"), input[type="submit"]', { visible: true, timeout: 3000 });
+                      await page.click('button:contains("Next"), input[type="submit"]');
+                      await addDebugStep('Kie.ai Login', 'success', 'Next button clicked on protect account page');
+                      await randomHumanDelay(page, 2000, 3000);
+                      microsoftPageHandled = true;
+                      break;
+                    } catch (nextError) {
+                      await addDebugStep('Kie.ai Login', 'warning', `Next button not found: ${nextError.message}`);
+                    }
+                  }
+                } catch (skipError) {
+                  await addDebugStep('Kie.ai Login', 'warning', `Skip link handling failed: ${skipError.message}`);
+                  microsoftPageHandled = true;
+                  break;
+                }
+              } else if (pageInfo.isConsentPage || pageInfo.hasConsentButton) {
                 await addDebugStep('Kie.ai Login', 'success', `Consent page detected: ${pageInfo.url}`);
                 
                 // Try to click Accept button
@@ -964,6 +1026,7 @@ async function loginToOutlook(email, password, io) {
           await addDebugStep('Kie.ai Login', 'info', 'Looking for appropriate button...');
           
           let buttonClicked = false;
+          let acceptClicked = false;
           
           // Method 1: Try specific data-testid selector for consent page
           try {
