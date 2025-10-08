@@ -139,30 +139,143 @@ async function loginToOutlook(email, password, io) {
     await takeScreenshot('Microsoft-Login-Initial', page);
     await addDebugStep('Navigation', 'success', 'Successfully navigated to Microsoft login', null, null, page);
     
-    // Wait for page to load
+    // Wait for page to load and check if it's still accessible
     await randomHumanDelay(page, 2000, 3000);
+    
+    // Check if page is still accessible
+    try {
+      const pageTitle = await page.title();
+      const pageUrl = await page.url();
+      addDebugStep('Page Check', 'info', `Page loaded - Title: ${pageTitle}, URL: ${pageUrl}`);
+    } catch (e) {
+      addDebugStep('Page Check', 'error', `Page not accessible: ${e.message}`);
+      throw new Error(`Page became inaccessible: ${e.message}`);
+    }
     
     // Step 4: Enter email
     addDebugStep('Email Entry', 'info', 'Entering email...');
-    await page.click('input[name="loginfmt"]');
-    await page.type('input[name="loginfmt"]', email, { delay: 100 });
+    
+    // Wait for email input field to be available
+    try {
+      await page.waitForSelector('input[name="loginfmt"]', { visible: true, timeout: 10000 });
+      await page.click('input[name="loginfmt"]');
+      await page.type('input[name="loginfmt"]', email, { delay: 100 });
+    } catch (e) {
+      addDebugStep('Email Entry', 'warning', `Primary email selector failed: ${e.message}`);
+      
+      // Try alternative selectors
+      const alternativeSelectors = [
+        'input[type="email"]',
+        'input[name="username"]', 
+        'input[id="i0116"]',
+        'input[placeholder*="email" i]',
+        'input[placeholder*="phone" i]'
+      ];
+      
+      let emailEntered = false;
+      for (const selector of alternativeSelectors) {
+        try {
+          await addDebugStep('Email Entry', 'info', `Trying alternative selector: ${selector}`);
+          await page.waitForSelector(selector, { visible: true, timeout: 3000 });
+          await page.click(selector);
+          await page.type(selector, email, { delay: 100 });
+          emailEntered = true;
+          addDebugStep('Email Entry', 'success', `Email entered using selector: ${selector}`);
+          break;
+        } catch (selectorError) {
+          addDebugStep('Email Entry', 'info', `Selector ${selector} failed: ${selectorError.message}`);
+        }
+      }
+      
+      if (!emailEntered) {
+        throw new Error('No email input field found with any selector');
+      }
+    }
     
     await takeScreenshot('Email-Entered', page);
     await addDebugStep('Email Entry', 'success', 'Email entered successfully', null, null, page);
     
     // Step 5: Click Next button
     addDebugStep('Email Entry', 'info', 'Clicking Next button...');
-    await page.click('input[type="submit"][id="idSIButton9"]');
-    await takeScreenshot('Email-Next-Clicked', page);
-    await addDebugStep('Email Entry', 'success', 'Next button clicked', null, null, page);
+    
+    try {
+      await page.waitForSelector('input[type="submit"][id="idSIButton9"]', { visible: true, timeout: 5000 });
+      await page.click('input[type="submit"][id="idSIButton9"]');
+      await takeScreenshot('Email-Next-Clicked', page);
+      await addDebugStep('Email Entry', 'success', 'Next button clicked', null, null, page);
+    } catch (e) {
+      addDebugStep('Email Entry', 'warning', `Primary Next button selector failed: ${e.message}`);
+      
+      // Try alternative Next button selectors
+      const nextButtonSelectors = [
+        'input[type="submit"]',
+        'button[type="submit"]',
+        'button:contains("Next")',
+        'input[value="Next"]',
+        'button:contains("Sign in")',
+        'input[value="Sign in"]'
+      ];
+      
+      let nextClicked = false;
+      for (const selector of nextButtonSelectors) {
+        try {
+          await addDebugStep('Email Entry', 'info', `Trying Next button selector: ${selector}`);
+          await page.waitForSelector(selector, { visible: true, timeout: 3000 });
+          await page.click(selector);
+          nextClicked = true;
+          await takeScreenshot('Email-Next-Clicked', page);
+          await addDebugStep('Email Entry', 'success', `Next button clicked using selector: ${selector}`, null, null, page);
+          break;
+        } catch (selectorError) {
+          await addDebugStep('Email Entry', 'info', `Next button selector ${selector} failed: ${selectorError.message}`);
+        }
+      }
+      
+      if (!nextClicked) {
+        throw new Error('No Next button found with any selector');
+      }
+    }
     
     // Wait for page transition
     await randomHumanDelay(page, 3000, 5000);
     
     // Step 6: Enter password
     addDebugStep('Password Entry', 'info', 'Entering password...');
-    await page.click('input[name="passwd"]');
-    await page.type('input[name="passwd"]', password, { delay: 100 });
+    
+    try {
+      await page.waitForSelector('input[name="passwd"]', { visible: true, timeout: 10000 });
+      await page.click('input[name="passwd"]');
+      await page.type('input[name="passwd"]', password, { delay: 100 });
+    } catch (e) {
+      addDebugStep('Password Entry', 'warning', `Primary password selector failed: ${e.message}`);
+      
+      // Try alternative password selectors
+      const passwordSelectors = [
+        'input[type="password"]',
+        'input[name="password"]',
+        'input[id="passwordEntry"]',
+        'input[placeholder*="password" i]'
+      ];
+      
+      let passwordEntered = false;
+      for (const selector of passwordSelectors) {
+        try {
+          await addDebugStep('Password Entry', 'info', `Trying password selector: ${selector}`);
+          await page.waitForSelector(selector, { visible: true, timeout: 3000 });
+          await page.click(selector);
+          await page.type(selector, password, { delay: 100 });
+          passwordEntered = true;
+          addDebugStep('Password Entry', 'success', `Password entered using selector: ${selector}`);
+          break;
+        } catch (selectorError) {
+          addDebugStep('Password Entry', 'info', `Password selector ${selector} failed: ${selectorError.message}`);
+        }
+      }
+      
+      if (!passwordEntered) {
+        throw new Error('No password input field found with any selector');
+      }
+    }
     
     await takeScreenshot('Password-Entered', page);
     await addDebugStep('Password Entry', 'success', 'Password entered successfully', null, null, page);
