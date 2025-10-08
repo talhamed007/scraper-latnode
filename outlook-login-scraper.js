@@ -193,7 +193,7 @@ async function loginToOutlook(email, password, io) {
       const pageInfo = await page.evaluate(() => {
         const url = window.location.href;
         const title = document.title;
-        const bodyText = document.body.innerText.toLowerCase();
+        const bodyText = document.body ? document.body.innerText.toLowerCase() : '';
         
         const isProtectAccountPage = title.toLowerCase().includes("let's protect your account") ||
                                    bodyText.includes("let's protect your account") ||
@@ -1021,6 +1021,16 @@ async function loginToOutlook(email, password, io) {
               if (e.message.includes('Requesting main frame too early')) {
                 await addDebugStep('Kie.ai Login', 'info', 'Page not ready yet, waiting longer...');
                 await randomHumanDelay(page, 2000, 3000);
+              } else if (e.message.includes('Session closed')) {
+                await addDebugStep('Kie.ai Login', 'warning', 'Session closed, page may have navigated away');
+                // Try to get current page info
+                try {
+                  const currentUrl = await page.url();
+                  await addDebugStep('Kie.ai Login', 'info', `Current URL after session close: ${currentUrl}`);
+                } catch (urlError) {
+                  await addDebugStep('Kie.ai Login', 'warning', `Could not get current URL: ${urlError.message}`);
+                }
+                break; // Exit the loop since session is closed
               } else {
                 await addDebugStep('Kie.ai Login', 'warning', `Page evaluation error: ${e.message}`);
               }
@@ -1460,7 +1470,7 @@ async function loginToOutlook(email, password, io) {
               }
             }
             
-            // Approach 4: Wait for hCaptcha iframe to load
+            // Approach 4: Wait for hCaptcha iframe to load and check for visible elements
             if (!checkboxFound) {
               try {
                 await addDebugStep('Kie.ai Login', 'info', 'Waiting for hCaptcha iframe to load...');
@@ -1468,21 +1478,53 @@ async function loginToOutlook(email, password, io) {
                 await addDebugStep('Kie.ai Login', 'success', 'hCaptcha iframe found, waiting for checkbox to appear...');
                 await randomHumanDelay(page, 3000, 5000);
                 
-                // Try to find checkbox again after iframe loads
-                const iframeCheckbox = await page.evaluate(() => {
-                  const selectors = ['div#checkbox[role="checkbox"]', '[role="checkbox"]', 'input[type="checkbox"]'];
-                  for (const selector of selectors) {
-                    const element = document.querySelector(selector);
-                    if (element && element.offsetParent !== null) {
-                      return true;
-                    }
+                // Check if hCaptcha is actually visible and interactive
+                const hcaptchaStatus = await page.evaluate(() => {
+                  // Look for hCaptcha container
+                  const hcaptchaContainer = document.querySelector('.h-captcha, [data-sitekey], [data-hcaptcha-widget-id]');
+                  const iframe = document.querySelector('iframe[src*="hcaptcha"]');
+                  
+                  if (hcaptchaContainer && iframe) {
+                    // Check if iframe is visible
+                    const iframeRect = iframe.getBoundingClientRect();
+                    const isVisible = iframeRect.width > 0 && iframeRect.height > 0 && 
+                                    iframe.offsetParent !== null;
+                    
+                    return {
+                      hasContainer: !!hcaptchaContainer,
+                      hasIframe: !!iframe,
+                      isVisible: isVisible,
+                      iframeWidth: iframeRect.width,
+                      iframeHeight: iframeRect.height
+                    };
                   }
-                  return false;
+                  
+                  return { hasContainer: false, hasIframe: false, isVisible: false };
                 });
                 
-                if (iframeCheckbox) {
-                  checkboxFound = true;
-                  await addDebugStep('Kie.ai Login', 'success', 'Checkbox found after iframe loaded');
+                await addDebugStep('Kie.ai Login', 'info', `hCaptcha status: Container=${hcaptchaStatus.hasContainer}, Iframe=${hcaptchaStatus.hasIframe}, Visible=${hcaptchaStatus.isVisible}, Size=${hcaptchaStatus.iframeWidth}x${hcaptchaStatus.iframeHeight}`);
+                
+                if (hcaptchaStatus.isVisible) {
+                  // Try to find checkbox again after iframe loads
+                  const iframeCheckbox = await page.evaluate(() => {
+                    const selectors = ['div#checkbox[role="checkbox"]', '[role="checkbox"]', 'input[type="checkbox"]'];
+                    for (const selector of selectors) {
+                      const element = document.querySelector(selector);
+                      if (element && element.offsetParent !== null) {
+                        return true;
+                      }
+                    }
+                    return false;
+                  });
+                  
+                  if (iframeCheckbox) {
+                    checkboxFound = true;
+                    await addDebugStep('Kie.ai Login', 'success', 'Checkbox found after iframe loaded');
+                  } else {
+                    await addDebugStep('Kie.ai Login', 'info', 'hCaptcha iframe is visible but checkbox not found');
+                  }
+                } else {
+                  await addDebugStep('Kie.ai Login', 'info', 'hCaptcha iframe found but not visible or interactive');
                 }
               } catch (e) {
                 await addDebugStep('Kie.ai Login', 'info', `hCaptcha iframe search failed: ${e.message}`);
