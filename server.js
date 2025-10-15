@@ -53,8 +53,17 @@ app.get('/test-screenshots', (req, res) => {
   });
 });
 
-// Serve the main page
+// Simple root endpoint for healthcheck
 app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Scraper API is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Serve the main page at /app
+app.get('/app', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
@@ -100,11 +109,22 @@ app.get('/api/debug-recraft', (req, res) => {
 
 // Health check endpoint for Railway
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+  try {
+    res.status(200).json({ 
+      status: 'healthy', 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      pid: process.pid
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({ 
+      status: 'unhealthy', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Real scraping endpoint
@@ -3478,7 +3498,7 @@ io.on('connection', (socket) => {
 });
 
 // Add error handling for server startup
-server.listen(PORT, (err) => {
+server.listen(PORT, '0.0.0.0', (err) => {
   if (err) {
     console.error('❌ Failed to start server:', err);
     process.exit(1);
@@ -3488,6 +3508,8 @@ server.listen(PORT, (err) => {
   console.log(`📊 Available scrapers:`);
   console.log(`   - Latenode: /`);
   console.log(`   - Make.com: /make`);
+  console.log(`✅ Server is ready and listening for connections`);
+  console.log(`🔍 Health check available at: http://localhost:${PORT}/health`);
   console.log(`   - KIE.ai: /kie`);
   console.log(`   - Recraft.ai: /recraft`);
 });
