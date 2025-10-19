@@ -1056,7 +1056,7 @@ app.post('/api/scrape-recraft', async (req, res) => {
   const discordCredentials = {
     email: discordEmail,
     password: discordPassword,
-    token: discordToken || 'MTI3NDQxNTQwMTAyMzA0OTc5MA.GFu9Qi.RHy74T54y1ZvBbaJO1rNtl-uR2GbjegAVt5qVI'
+    token: discordToken || process.env.DISCORD_BOT_TOKEN || 'your-discord-token-here'
   };
 
   // Initialize debug data
