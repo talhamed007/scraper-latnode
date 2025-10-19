@@ -1,9 +1,9 @@
 const OpenAI = require('openai');
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key-here'
-});
+// Initialize OpenAI client (disabled - no API key needed)
+// const openai = new OpenAI({
+//   apiKey: process.env.OPENAI_API_KEY
+// });
 
 /**
  * Analyze a screenshot and get AI guidance on what to do next
@@ -13,6 +13,15 @@ const openai = new OpenAI({
  * @returns {Object} AI response with action and details
  */
 async function getAIGuidance(screenshot, pageInfo, currentStep) {
+  // AI guidance disabled - no API key needed
+  return {
+    success: false,
+    message: 'AI guidance disabled - no API key configured',
+    suggestedAction: 'Continue with manual scraping',
+    confidence: 0
+  };
+  
+  /* DISABLED - No API key needed
   try {
     console.log('🤖 Getting AI guidance for step:', currentStep);
     
@@ -92,6 +101,7 @@ IMPORTANT:
       nextStep: "Fallback to manual detection"
     };
   }
+  */ // END DISABLED SECTION
 }
 
 /**
