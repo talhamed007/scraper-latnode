@@ -482,12 +482,28 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function createLatenodeAccount(ioInstance = null, password = null) {
+async function createLatenodeAccount(ioInstance = null, emailOrPassword = null, password = null) {
   let browser = null;
   let page = null;
   let tempEmail = null;
   let confirmationCode = null;
-  let generatedPassword = password || `TempPass${Math.random().toString(36).substring(2, 8)}!123`;
+  
+  // Handle different parameter patterns:
+  // Pattern 1: createLatenodeAccount(io, password) - old pattern
+  // Pattern 2: createLatenodeAccount(io, email, password) - new pattern with email
+  let providedEmail = null;
+  let generatedPassword = null;
+  
+  if (password !== null && password !== undefined) {
+    // Pattern 2: emailOrPassword is email, password is password
+    providedEmail = emailOrPassword;
+    generatedPassword = password;
+  } else {
+    // Pattern 1: emailOrPassword is actually password
+    generatedPassword = emailOrPassword;
+  }
+  
+  generatedPassword = generatedPassword || `TempPass${Math.random().toString(36).substring(2, 8)}!123`;
   
   // Initialize global variables
   global.credits = null;
@@ -530,104 +546,112 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     
     addDebugStep('Browser Launch', 'success', 'Browser launched successfully');
     
-    // Step 1: Navigate to TempMail100
-    addDebugStep('Temp Email', 'info', 'Navigating to TempMail100...');
-    await page.goto('https://tempmail100.com/', { 
-      waitUntil: 'networkidle2', 
-      timeout: 30000 
-    });
-    
-    await takeScreenshot('TempMail100-Loaded', page);
-    addDebugStep('Temp Email', 'success', 'Successfully navigated to TempMail100');
-    
-    // Wait for page to fully load
-    await sleep(2000);
-    
-    // Handle any ads that might appear
-    addDebugStep('Ad Handling', 'info', 'Checking for ads and clicking in empty space...');
-    try {
-      // Click in empty space to dismiss any ads
-      await page.mouse.click(100, 100);
-      await sleep(1000);
-      addDebugStep('Ad Handling', 'success', 'Clicked in empty space to dismiss ads');
-    } catch (error) {
-      addDebugStep('Ad Handling', 'warning', 'No ads detected or ad handling failed', null, error.message);
-    }
-    
-    // Step 2: Copy the temporary email
-    addDebugStep('Email Copy', 'info', 'Looking for copy button to copy temporary email...');
-    
-    try {
-      // Wait for the copy button to be available
-      await page.waitForSelector('svg[onclick="copyAddress()"]', { timeout: 10000 });
-      
-      // Click the copy button
-      await page.click('svg[onclick="copyAddress()"]');
-      addDebugStep('Email Copy', 'success', 'Clicked copy button');
-      
-      await sleep(1000);
-    } catch (error) {
-      addDebugStep('Email Copy', 'warning', 'Could not click copy button, proceeding with direct extraction', null, error.message);
-    }
-    
-    // Skip clipboard reading in headless mode and go directly to input field extraction
-    addDebugStep('Email Copy', 'info', 'Extracting temporary email from input field (headless mode)...');
-    
-    // Get email directly from the input field since clipboard doesn't work in headless mode
-    tempEmail = await page.evaluate(() => {
-      // Try multiple selectors for the email input
-      const selectors = [
-        'input[type="text"]',
-        'input[type="email"]',
-        'input[placeholder*="email" i]',
-        'input[placeholder*="mail" i]',
-        '.email-input input',
-        'input[name*="email" i]',
-        'input[class*="email"]',
-        'input[class*="mail"]'
-      ];
-      
-      for (const selector of selectors) {
-        const input = document.querySelector(selector);
-        if (input && input.value && input.value.includes('@')) {
-          console.log('Found email in input:', input.value);
-          return input.value;
-        }
-      }
-      
-      // Look for any input with email-like content
-      const allInputs = document.querySelectorAll('input');
-      for (const input of allInputs) {
-        if (input.value && input.value.includes('@') && input.value.includes('.')) {
-          console.log('Found email-like text:', input.value);
-          return input.value;
-        }
-      }
-      
-      // Look for email in any text content or data attributes
-      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-      const bodyText = document.body.innerText;
-      const emailMatch = bodyText.match(emailRegex);
-      if (emailMatch) {
-        console.log('Found email in page text:', emailMatch[0]);
-        return emailMatch[0];
-      }
-      
-      return null;
-    });
-    
-    if (tempEmail && tempEmail.trim()) {
-      addDebugStep('Email Copy', 'success', `Temporary email extracted: ${tempEmail}`);
+    // Step 1: Get email (either provided or from TempMail100)
+    if (providedEmail && providedEmail.trim()) {
+      // Use provided email, skip TempMail100
+      tempEmail = providedEmail.trim();
+      addDebugStep('Email Input', 'info', `Using provided email: ${tempEmail}`);
+      addDebugStep('Email Input', 'success', 'Skipping TempMail100, using provided email');
     } else {
-      // Fallback: generate a temporary email
-      addDebugStep('Email Copy', 'warning', 'Could not extract email from page, generating fallback email...');
-      const timestamp = Date.now();
-      const randomId = Math.random().toString(36).substring(2, 8);
-      tempEmail = `temp${randomId}${timestamp}@tempmail100.com`;
-      addDebugStep('Email Copy', 'success', `Generated fallback email: ${tempEmail}`);
+      // Step 1: Navigate to TempMail100
+      addDebugStep('Temp Email', 'info', 'Navigating to TempMail100...');
+      await page.goto('https://tempmail100.com/', { 
+        waitUntil: 'networkidle2', 
+        timeout: 30000 
+      });
+      
+      await takeScreenshot('TempMail100-Loaded', page);
+      addDebugStep('Temp Email', 'success', 'Successfully navigated to TempMail100');
+      
+      // Wait for page to fully load
+      await sleep(2000);
+      
+      // Handle any ads that might appear
+      addDebugStep('Ad Handling', 'info', 'Checking for ads and clicking in empty space...');
+      try {
+        // Click in empty space to dismiss any ads
+        await page.mouse.click(100, 100);
+        await sleep(1000);
+        addDebugStep('Ad Handling', 'success', 'Clicked in empty space to dismiss ads');
+      } catch (error) {
+        addDebugStep('Ad Handling', 'warning', 'No ads detected or ad handling failed', null, error.message);
+      }
+      
+      // Step 2: Copy the temporary email
+      addDebugStep('Email Copy', 'info', 'Looking for copy button to copy temporary email...');
+      
+      try {
+        // Wait for the copy button to be available
+        await page.waitForSelector('svg[onclick="copyAddress()"]', { timeout: 10000 });
+        
+        // Click the copy button
+        await page.click('svg[onclick="copyAddress()"]');
+        addDebugStep('Email Copy', 'success', 'Clicked copy button');
+        
+        await sleep(1000);
+      } catch (error) {
+        addDebugStep('Email Copy', 'warning', 'Could not click copy button, proceeding with direct extraction', null, error.message);
+      }
+      
+      // Skip clipboard reading in headless mode and go directly to input field extraction
+      addDebugStep('Email Copy', 'info', 'Extracting temporary email from input field (headless mode)...');
+      
+      // Get email directly from the input field since clipboard doesn't work in headless mode
+      tempEmail = await page.evaluate(() => {
+        // Try multiple selectors for the email input
+        const selectors = [
+          'input[type="text"]',
+          'input[type="email"]',
+          'input[placeholder*="email" i]',
+          'input[placeholder*="mail" i]',
+          '.email-input input',
+          'input[name*="email" i]',
+          'input[class*="email"]',
+          'input[class*="mail"]'
+        ];
+        
+        for (const selector of selectors) {
+          const input = document.querySelector(selector);
+          if (input && input.value && input.value.includes('@')) {
+            console.log('Found email in input:', input.value);
+            return input.value;
+          }
+        }
+        
+        // Look for any input with email-like content
+        const allInputs = document.querySelectorAll('input');
+        for (const input of allInputs) {
+          if (input.value && input.value.includes('@') && input.value.includes('.')) {
+            console.log('Found email-like text:', input.value);
+            return input.value;
+          }
+        }
+        
+        // Look for email in any text content or data attributes
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+        const bodyText = document.body.innerText;
+        const emailMatch = bodyText.match(emailRegex);
+        if (emailMatch) {
+          console.log('Found email in page text:', emailMatch[0]);
+          return emailMatch[0];
+        }
+        
+        return null;
+      });
+      
+      if (tempEmail && tempEmail.trim()) {
+        addDebugStep('Email Copy', 'success', `Temporary email extracted: ${tempEmail}`);
+      } else {
+        // Fallback: generate a temporary email
+        addDebugStep('Email Copy', 'warning', 'Could not extract email from page, generating fallback email...');
+        const timestamp = Date.now();
+        const randomId = Math.random().toString(36).substring(2, 8);
+        tempEmail = `temp${randomId}${timestamp}@tempmail100.com`;
+        addDebugStep('Email Copy', 'success', `Generated fallback email: ${tempEmail}`);
+      }
+      
+      await takeScreenshot('Email-Copied', page);
     }
-    
-    await takeScreenshot('Email-Copied', page);
     
     // Step 3: Navigate to Latenode
     addDebugStep('Latenode Navigation', 'info', 'Navigating to Latenode account creation page...');
@@ -1840,52 +1864,56 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         // Look for the import button using proper Puppeteer selectors
         let importButton = null;
         
-        // Try multiple selectors for the import button
-        const importSelectors = [
-          'button[data-test-id="importFolderOrScenarioButton"]', // Most reliable selector
-          'button[title*="Importer"]',
-          'button[title*="importer"]',
-          'button:has-text("Importer")',
-          'button:has-text("importer")',
-          'button:has-text("Import")',
-          'button:has-text("import")',
-          'button:has-text("Importer un dossier")',
-          'button:has-text("Importer un scénario")',
-          '[class*="import"] button',
-          '[class*="upload"] button',
-          'button[class*="import"]',
-          'button[class*="upload"]',
-          'button.ant-btn', // Ant Design button class
-          'button[class*="ant-btn"]'
-        ];
+        // Try multiple methods to find "Import a folder or scenario" button
+        // Method 1: Use data-test-id (most reliable)
+        try {
+          await page.waitForSelector('button[data-test-id="importFolderOrScenarioButton"]', { timeout: 5000, visible: true });
+          importButton = await page.$('button[data-test-id="importFolderOrScenarioButton"]');
+          if (importButton) {
+            addDebugStep('File Upload', 'info', 'Found "Import a folder or scenario" button using data-test-id');
+          }
+        } catch (e) {
+          addDebugStep('File Upload', 'info', 'data-test-id selector not found, trying other methods...');
+        }
         
-        for (const selector of importSelectors) {
-          try {
-            importButton = await page.$(selector);
-            if (importButton) {
-              addDebugStep('File Upload', 'info', `Found import button with selector: ${selector}`);
-              break;
+        // Method 2: Try text-based search using page.evaluate
+        if (!importButton) {
+          const buttonFound = await page.evaluate(() => {
+            const buttons = document.querySelectorAll('button, [role="button"]');
+            for (const button of buttons) {
+              const text = (button.innerText || button.textContent || '').trim();
+              const dataTestId = button.getAttribute('data-test-id') || '';
+              
+              // Look for "Import a folder or scenario" text or data-test-id
+              if (dataTestId === 'importFolderOrScenarioButton' || 
+                  text.toLowerCase().includes('import a folder') ||
+                  text.toLowerCase().includes('import') && text.toLowerCase().includes('scenario')) {
+                return button;
+              }
             }
-          } catch (e) {
-            // Try next selector
-            continue;
+            return null;
+          });
+          
+          if (buttonFound) {
+            importButton = await page.$('button[data-test-id="importFolderOrScenarioButton"]');
+            if (!importButton) {
+              // Fallback: use XPath to find by text
+              const elements = await page.$x('//button[contains(., "Import a folder or scenario")]');
+              if (elements.length > 0) {
+                importButton = elements[0];
+                addDebugStep('File Upload', 'info', 'Found "Import a folder or scenario" button using XPath text search');
+              }
+            }
           }
         }
         
-        // If no button found with selectors, try XPath
+        // Method 3: Try XPath selectors
         if (!importButton) {
           try {
             const xpathSelectors = [
-              '//button[@data-test-id="importFolderOrScenarioButton"]', // Most reliable XPath
-              '//button[contains(text(), "Importer")]',
-              '//button[contains(text(), "importer")]',
-              '//button[contains(text(), "Import")]',
-              '//button[contains(text(), "import")]',
-              '//button[contains(text(), "Importer un dossier")]',
-              '//button[contains(text(), "Importer un scénario")]',
-              '//*[contains(@class, "import")]//button',
-              '//*[contains(@class, "upload")]//button',
-              '//button[contains(@class, "ant-btn")]' // Ant Design button
+              '//button[@data-test-id="importFolderOrScenarioButton"]',
+              '//button[contains(., "Import a folder or scenario")]',
+              '//button[contains(., "Import") and contains(., "scenario")]'
             ];
             
             for (const xpath of xpathSelectors) {
@@ -1904,54 +1932,181 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
         if (importButton) {
           addDebugStep('File Upload', 'info', 'Found import button, clicking...');
           await importButton.click();
-          await sleep(2000);
+          await sleep(3000);
           
-          // Wait for file input to appear
-          await page.waitForSelector('input[type="file"]', { timeout: 10000 });
+          // Take screenshot after clicking to see what appeared
+          await takeScreenshot('After-Import-Click', page);
+          
+          // Wait for modal/dialog to appear (if any)
+          try {
+            await page.waitForSelector('div[role="dialog"], div.ant-modal, div[class*="modal"], div[class*="Modal"]', { timeout: 5000 });
+            addDebugStep('File Upload', 'info', 'Modal/dialog detected after clicking import');
+            await sleep(2000);
+          } catch (e) {
+            addDebugStep('File Upload', 'info', 'No modal detected, checking for file input directly');
+          }
+          
+          // Try multiple selectors and wait strategies for file input
+          let fileInput = null;
+          const fileInputSelectors = [
+            'input[type="file"]',
+            'input[accept*="json"]',
+            'input[accept*=".json"]',
+            'input[type="file"][accept*="json"]',
+            'div[role="dialog"] input[type="file"]',
+            'div.ant-modal input[type="file"]',
+            'div[class*="modal"] input[type="file"]',
+            'div[class*="Modal"] input[type="file"]'
+          ];
+          
+          for (const selector of fileInputSelectors) {
+            try {
+              await page.waitForSelector(selector, { timeout: 3000, visible: true });
+              fileInput = await page.$(selector);
+              if (fileInput) {
+                addDebugStep('File Upload', 'info', `File input found with selector: ${selector}`);
+                break;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          
+          // If still no file input, try to find it in the page using evaluate
+          if (!fileInput) {
+            addDebugStep('File Upload', 'info', 'File input not found with selectors, trying evaluate method...');
+            const inputFound = await page.evaluate(() => {
+              const inputs = document.querySelectorAll('input');
+              for (const input of inputs) {
+                if (input.type === 'file') {
+                  return true;
+                }
+              }
+              return false;
+            });
+            
+            if (inputFound) {
+              fileInput = await page.$('input[type="file"]');
+              addDebugStep('File Upload', 'info', 'File input found using evaluate method');
+            }
+          }
+          
+          if (!fileInput) {
+            addDebugStep('File Upload', 'warning', 'File input not found after clicking import button');
+            throw new Error('File input not found - modal may not have appeared or selector changed');
+          }
+          
           addDebugStep('File Upload', 'info', 'File input found, preparing to upload JSON...');
           
-          // Upload the JSON file from the hosted URL
-          const jsonFileUrl = 'https://scraper-latnode-production.up.railway.app/files/latenode-scenario.json';
+          // Read JSON file from filesystem
+          const jsonFilePath = path.join(__dirname, 'public', 'latenode-scenario.json');
           
-          await page.evaluate(async (url) => {
-            try {
-              // Fetch the JSON file
-              const response = await fetch(url);
-              if (!response.ok) {
-                throw new Error(`Failed to fetch JSON file: ${response.status}`);
-              }
-              
-              const jsonContent = await response.text();
-              const blob = new Blob([jsonContent], { type: 'application/json' });
-              const file = new File([blob], 'latenode-scenario.json', { type: 'application/json' });
-              
-              // Find the file input
+          let jsonContent;
+          try {
+            jsonContent = fs.readFileSync(jsonFilePath, 'utf8');
+            addDebugStep('File Upload', 'info', 'JSON file read from filesystem successfully');
+          } catch (error) {
+            addDebugStep('File Upload', 'error', `Failed to read JSON file: ${error.message}`);
+            throw new Error(`Failed to read JSON file: ${error.message}`);
+          }
+          
+          // Upload the JSON file using file input directly
+          try {
+            await fileInput.uploadFile(jsonFilePath);
+            addDebugStep('File Upload', 'info', 'JSON file uploaded using uploadFile method');
+            await sleep(1000);
+            
+            // Trigger change event multiple ways to ensure it's detected
+            await page.evaluate(() => {
               const fileInput = document.querySelector('input[type="file"]');
               if (fileInput) {
-                // Create a DataTransfer object
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                fileInput.files = dataTransfer.files;
-                
-                // Trigger the change event
                 fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                
-                console.log('JSON file uploaded successfully');
-                return true;
-              } else {
-                throw new Error('File input not found');
+                fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                // Also try to trigger any attached handlers
+                if (fileInput.onchange) {
+                  fileInput.onchange();
+                }
               }
-            } catch (error) {
-              console.error('Error uploading JSON file:', error);
-              return false;
+            });
+            await sleep(2000);
+          } catch (uploadError) {
+            addDebugStep('File Upload', 'warning', `uploadFile method failed: ${uploadError.message}, trying alternative method...`);
+            
+            // Fallback: use evaluate method with file content
+            const uploadSuccess = await page.evaluate(async (content) => {
+              try {
+                const blob = new Blob([content], { type: 'application/json' });
+                const file = new File([blob], 'latenode-scenario.json', { type: 'application/json' });
+                
+                const fileInput = document.querySelector('input[type="file"]');
+                if (fileInput) {
+                  const dataTransfer = new DataTransfer();
+                  dataTransfer.items.add(file);
+                  fileInput.files = dataTransfer.files;
+                  
+                  // Trigger multiple events
+                  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                  fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                  
+                  if (fileInput.onchange) {
+                    fileInput.onchange();
+                  }
+                  
+                  console.log('JSON file uploaded successfully');
+                  return true;
+                } else {
+                  throw new Error('File input not found');
+                }
+              } catch (error) {
+                console.error('Error uploading JSON file:', error);
+                return false;
+              }
+            }, jsonContent);
+            
+            if (!uploadSuccess) {
+              throw new Error('Failed to upload JSON file using both methods');
             }
-          }, jsonFileUrl);
+            addDebugStep('File Upload', 'info', 'JSON file uploaded using alternative method');
+          }
           
           addDebugStep('File Upload', 'success', 'JSON scenario file uploaded successfully!');
           await takeScreenshot('JSON-File-Uploaded', page);
           
           // Wait a bit for the upload to process
           await sleep(3000);
+          
+          // Step 8b: Click "Ready" button in the import modal
+          addDebugStep('Import Ready', 'info', 'Looking for "Ready" button in import modal...');
+          
+          try {
+            // Wait for the import modal to appear with the "Ready" button
+            await page.waitForSelector('div[role="dialog"], div.ant-modal', { timeout: 10000 });
+            await sleep(2000);
+            
+            // Look for "Ready" button
+            const readyButtonClicked = await page.evaluate(() => {
+              const buttons = document.querySelectorAll('button, [role="button"]');
+              for (const button of buttons) {
+                const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+                if (text === 'ready' || text.includes('ready')) {
+                  button.click();
+                  return true;
+                }
+              }
+              return false;
+            });
+            
+            if (readyButtonClicked) {
+              addDebugStep('Import Ready', 'success', 'Clicked "Ready" button successfully');
+              await sleep(3000); // Wait for modal to close and page to update
+            } else {
+              addDebugStep('Import Ready', 'warning', 'Could not find or click "Ready" button');
+            }
+          } catch (error) {
+            addDebugStep('Import Ready', 'warning', 'Import modal or Ready button not found', null, error.message);
+          }
+          
+          await takeScreenshot('After-Ready-Click', page);
           
         } else {
           // Last resort: try to find import button using page.evaluate()
@@ -1990,48 +2145,121 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
             
             if (buttonFound) {
               addDebugStep('File Upload', 'success', 'Found and clicked import button using page.evaluate()');
-              await sleep(2000);
+              await sleep(3000);
               
-              // Wait for file input to appear
-              await page.waitForSelector('input[type="file"]', { timeout: 10000 });
+              // Take screenshot after clicking
+              await takeScreenshot('After-Import-Click-Evaluate', page);
+              
+              // Wait for modal/dialog to appear (if any)
+              try {
+                await page.waitForSelector('div[role="dialog"], div.ant-modal, div[class*="modal"], div[class*="Modal"]', { timeout: 5000 });
+                addDebugStep('File Upload', 'info', 'Modal/dialog detected after clicking import');
+                await sleep(2000);
+              } catch (e) {
+                addDebugStep('File Upload', 'info', 'No modal detected, checking for file input directly');
+              }
+              
+              // Try multiple selectors for file input
+              let fileInput = null;
+              const fileInputSelectors = [
+                'input[type="file"]',
+                'input[accept*="json"]',
+                'input[accept*=".json"]',
+                'input[type="file"][accept*="json"]',
+                'div[role="dialog"] input[type="file"]',
+                'div.ant-modal input[type="file"]',
+                'div[class*="modal"] input[type="file"]',
+                'div[class*="Modal"] input[type="file"]'
+              ];
+              
+              for (const selector of fileInputSelectors) {
+                try {
+                  await page.waitForSelector(selector, { timeout: 3000, visible: true });
+                  fileInput = await page.$(selector);
+                  if (fileInput) {
+                    addDebugStep('File Upload', 'info', `File input found with selector: ${selector}`);
+                    break;
+                  }
+                } catch (e) {
+                  continue;
+                }
+              }
+              
+              if (!fileInput) {
+                addDebugStep('File Upload', 'warning', 'File input not found after clicking import button');
+                throw new Error('File input not found - modal may not have appeared or selector changed');
+              }
+              
               addDebugStep('File Upload', 'info', 'File input found, preparing to upload JSON...');
               
-              // Upload the JSON file from the hosted URL
-              const jsonFileUrl = 'https://scraper-latnode-production.up.railway.app/files/latenode-scenario.json';
+              // Read JSON file from filesystem
+              const jsonFilePath = path.join(__dirname, 'public', 'latenode-scenario.json');
               
-              await page.evaluate(async (url) => {
-                try {
-                  // Fetch the JSON file
-                  const response = await fetch(url);
-                  if (!response.ok) {
-                    throw new Error(`Failed to fetch JSON file: ${response.status}`);
-                  }
-                  
-                  const jsonContent = await response.text();
-                  const blob = new Blob([jsonContent], { type: 'application/json' });
-                  const file = new File([blob], 'latenode-scenario.json', { type: 'application/json' });
-                  
-                  // Find the file input
+              let jsonContent;
+              try {
+                jsonContent = fs.readFileSync(jsonFilePath, 'utf8');
+                addDebugStep('File Upload', 'info', 'JSON file read from filesystem successfully');
+              } catch (error) {
+                addDebugStep('File Upload', 'error', `Failed to read JSON file: ${error.message}`);
+                throw new Error(`Failed to read JSON file: ${error.message}`);
+              }
+              
+              // Upload the JSON file using file input directly
+              try {
+                await fileInput.uploadFile(jsonFilePath);
+                addDebugStep('File Upload', 'info', 'JSON file uploaded using uploadFile method');
+                await sleep(1000);
+                
+                // Trigger change event multiple ways
+                await page.evaluate(() => {
                   const fileInput = document.querySelector('input[type="file"]');
                   if (fileInput) {
-                    // Create a DataTransfer object
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(file);
-                    fileInput.files = dataTransfer.files;
-                    
-                    // Trigger the change event
                     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    
-                    console.log('JSON file uploaded successfully');
-                    return true;
-                  } else {
-                    throw new Error('File input not found');
+                    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    if (fileInput.onchange) {
+                      fileInput.onchange();
+                    }
                   }
-                } catch (error) {
-                  console.error('Error uploading JSON file:', error);
-                  return false;
+                });
+                await sleep(2000);
+              } catch (uploadError) {
+                addDebugStep('File Upload', 'warning', `uploadFile method failed: ${uploadError.message}, trying alternative method...`);
+                
+                // Fallback: use evaluate method with file content
+                const uploadSuccess = await page.evaluate(async (content) => {
+                  try {
+                    const blob = new Blob([content], { type: 'application/json' });
+                    const file = new File([blob], 'latenode-scenario.json', { type: 'application/json' });
+                    
+                    const fileInput = document.querySelector('input[type="file"]');
+                    if (fileInput) {
+                      const dataTransfer = new DataTransfer();
+                      dataTransfer.items.add(file);
+                      fileInput.files = dataTransfer.files;
+                      
+                      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                      fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      
+                      if (fileInput.onchange) {
+                        fileInput.onchange();
+                      }
+                      
+                      console.log('JSON file uploaded successfully');
+                      return true;
+                    } else {
+                      throw new Error('File input not found');
+                    }
+                  } catch (error) {
+                    console.error('Error uploading JSON file:', error);
+                    return false;
+                  }
+                }, jsonContent);
+                
+                if (!uploadSuccess) {
+                  throw new Error('Failed to upload JSON file using both methods');
                 }
-              }, jsonFileUrl);
+                addDebugStep('File Upload', 'info', 'JSON file uploaded using alternative method');
+              }
               
               addDebugStep('File Upload', 'success', 'JSON scenario file uploaded successfully!');
               await takeScreenshot('JSON-File-Uploaded', page);
@@ -2188,54 +2416,37 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
     addDebugStep('Account Creation', 'info', `🔢 Confirmation Code: ${confirmationCode}`);
     addDebugStep('Account Creation', 'info', `💰 Credits: ${global.credits || 'Not found'}`);
     
-    // Step 10: Click "Ready" button in import popup
-    addDebugStep('Import Popup', 'info', 'Looking for "Ready" button in import popup...');
-    
-    try {
-      // Wait for the import popup to appear
-      await page.waitForSelector('button.ant-btn.ant-btn-primary', { timeout: 10000 });
-      
-      // Click the Ready button
-      const readyButtonClicked = await page.evaluate(() => {
-        const buttons = document.querySelectorAll('button.ant-btn.ant-btn-primary');
-        for (const button of buttons) {
-          const text = (button.innerText || button.textContent || '').trim();
-          if (text.toLowerCase().includes('ready') || text.toLowerCase().includes('prêt')) {
-            button.click();
-            return true;
-          }
-        }
-        return false;
-      });
-      
-      if (readyButtonClicked) {
-        addDebugStep('Import Popup', 'success', 'Clicked "Ready" button successfully');
-        await sleep(2000); // Wait for popup to close
-      } else {
-        addDebugStep('Import Popup', 'warning', 'Could not find or click "Ready" button');
-      }
-    } catch (error) {
-      addDebugStep('Import Popup', 'warning', 'Import popup not found or already closed', null, error.message);
-    }
-    
-    // Step 11: Click on "Untitled" scenario to enter it
+    // Step 10: Click on "Untitled" scenario to enter it
     addDebugStep('Scenario Entry', 'info', 'Looking for "Untitled" scenario to click...');
     
     try {
+      await sleep(2000);
+      
       // Wait for the scenario list to be visible
-      await page.waitForSelector('div.nameCellWrapper_JCLK1', { timeout: 10000 });
+      await page.waitForSelector('div.nameCellWrapper_JCLK1, [class*="nameCell"], [class*="scenario"]', { timeout: 10000 }).catch(() => {});
       
       // Click on the Untitled scenario
       const untitledClicked = await page.evaluate(() => {
-        // Look for the specific wrapper div containing "Untitled"
-        const wrapperDivs = document.querySelectorAll('div.nameCellWrapper_JCLK1');
+        // Method 1: Look for div with nameCellWrapper class
+        const wrapperDivs = document.querySelectorAll('div.nameCellWrapper_JCLK1, div[class*="nameCell"], div[class*="scenario"]');
         for (const wrapper of wrapperDivs) {
-          const text = wrapper.innerText || wrapper.textContent || '';
-          if (text.includes('Untitled')) {
+          const text = (wrapper.innerText || wrapper.textContent || '').trim();
+          if (text.toLowerCase().includes('untitled')) {
             wrapper.click();
             return true;
           }
         }
+        
+        // Method 2: Look for any clickable element containing "Untitled"
+        const allElements = document.querySelectorAll('*');
+        for (const element of allElements) {
+          const text = (element.innerText || element.textContent || '').trim();
+          if (text.toLowerCase() === 'untitled' && element.offsetParent !== null) {
+            element.click();
+            return true;
+          }
+        }
+        
         return false;
       });
       
@@ -2249,7 +2460,7 @@ async function createLatenodeAccount(ioInstance = null, password = null) {
       addDebugStep('Scenario Entry', 'warning', 'Could not find "Untitled" scenario', null, error.message);
     }
     
-    // Step 12: Take final screenshot to show where we are
+    // Step 11: Take final screenshot to show where we are
     addDebugStep('Final Screenshot', 'info', 'Taking final screenshot to show current location...');
     await takeScreenshot('Final-Scenario-View', page);
     

@@ -3790,7 +3790,73 @@ app.get('/recraft-session', (req, res) => {
   res.sendFile(path.join(__dirname, 'recraft-session-test.html'));
 });
 
-// HTTP-based Latenode account creation endpoint (fix for typo in URL)
+// HTTP-based Latenode account creation endpoint (email optional - uses TempMail if not provided)
+app.post('/api/latenode-account-create', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { email, password } = req.body;
+
+  // Only password is required, email is optional (will use TempMail if not provided)
+  if (!password) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Password is required. Email is optional (will use TempMail if not provided).'
+    });
+  }
+
+  try {
+    if (email) {
+      console.log('🌐 HTTP Latenode account creation with provided email:', email);
+    } else {
+      console.log('🌐 HTTP Latenode account creation - will use TempMail for email');
+    }
+    
+    // Set global io instance for the scraper
+    global.io = io;
+    
+    // Reset global control flags
+    globalScraperPaused = false;
+    globalScraperStopped = false;
+    global.globalScraperPaused = false;
+    global.globalScraperStopped = false;
+    
+    // Call the Latenode account creation function
+    // If email provided: createLatenodeAccount(io, email, password)
+    // If no email: createLatenodeAccount(io, password) - will use TempMail
+    const result = email 
+      ? await createLatenodeAccount(io, email, password)
+      : await createLatenodeAccount(io, password);
+    
+    res.json({
+      ok: true,
+      success: result.success,
+      email: result.tempEmail || result.email || email || 'Generated from TempMail',
+      password: result.password || password,
+      tempEmail: result.tempEmail,
+      confirmationCode: result.confirmationCode,
+      credits: result.credits,
+      webhookUrl: result.webhookUrl,
+      message: result.message,
+      debugSteps: result.debugSteps,
+      screenshots: result.screenshots,
+      error: result.error
+    });
+  } catch (error) {
+    console.error('❌ HTTP Latenode account creation error:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Legacy endpoint with typo (kept for backward compatibility)
 app.post('/api/http/latenode-acount', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -3802,24 +3868,46 @@ app.post('/api/http/latenode-acount', async (req, res) => {
 
   const { email, password } = req.body;
 
-  if (!email || !password) {
+  // Only password is required, email is optional (will use TempMail if not provided)
+  if (!password) {
     return res.status(400).json({
       ok: false,
-      error: 'Email and password are required'
+      error: 'Password is required. Email is optional (will use TempMail if not provided).'
     });
   }
 
   try {
-    console.log('🌐 HTTP Latenode account creation for:', email);
+    if (email) {
+      console.log('🌐 HTTP Latenode account creation with provided email:', email);
+    } else {
+      console.log('🌐 HTTP Latenode account creation - will use TempMail for email');
+    }
+    
+    // Set global io instance for the scraper
+    global.io = io;
+    
+    // Reset global control flags
+    globalScraperPaused = false;
+    globalScraperStopped = false;
+    global.globalScraperPaused = false;
+    global.globalScraperStopped = false;
     
     // Call the Latenode account creation function
-    const result = await createLatenodeAccount(io, email, password);
+    // If email provided: createLatenodeAccount(io, email, password)
+    // If no email: createLatenodeAccount(io, password) - will use TempMail
+    const result = email 
+      ? await createLatenodeAccount(io, email, password)
+      : await createLatenodeAccount(io, password);
     
     res.json({
       ok: true,
       success: result.success,
-      email: result.email,
-      password: result.password,
+      email: result.tempEmail || result.email || email || 'Generated from TempMail',
+      password: result.password || password,
+      tempEmail: result.tempEmail,
+      confirmationCode: result.confirmationCode,
+      credits: result.credits,
+      webhookUrl: result.webhookUrl,
       message: result.message,
       debugSteps: result.debugSteps,
       screenshots: result.screenshots,
