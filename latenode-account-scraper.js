@@ -1859,7 +1859,22 @@ async function createLatenodeAccount(ioInstance = null, emailOrPassword = null, 
       
       try {
         // Wait for page to fully load
-        await sleep(3000);
+        await sleep(5000);
+        
+        // Take a screenshot to see the current state of the page
+        await takeScreenshot('Before-Import-Button-Search', page);
+        
+        // Wait for the dashboard to be fully loaded - check for common elements
+        try {
+          await page.waitForFunction(() => {
+            return document.querySelector('button') !== null || 
+                   document.body.innerText.includes('scenario') ||
+                   document.body.innerText.includes('Import');
+          }, { timeout: 10000 });
+          addDebugStep('File Upload', 'info', 'Page appears to be loaded');
+        } catch (e) {
+          addDebugStep('File Upload', 'warning', 'Could not confirm page load, proceeding anyway');
+        }
         
         // Look for the import button using proper Puppeteer selectors
         let importButton = null;
@@ -1878,7 +1893,7 @@ async function createLatenodeAccount(ioInstance = null, emailOrPassword = null, 
         
         // Method 2: Try text-based search using page.evaluate
         if (!importButton) {
-          const buttonFound = await page.evaluate(() => {
+          const buttonInfo = await page.evaluate(() => {
             const buttons = document.querySelectorAll('button, [role="button"]');
             for (const button of buttons) {
               const text = (button.innerText || button.textContent || '').trim();
@@ -1887,18 +1902,33 @@ async function createLatenodeAccount(ioInstance = null, emailOrPassword = null, 
               // Look for "Import a folder or scenario" text or data-test-id
               if (dataTestId === 'importFolderOrScenarioButton' || 
                   text.toLowerCase().includes('import a folder') ||
-                  text.toLowerCase().includes('import') && text.toLowerCase().includes('scenario')) {
-                return button;
+                  (text.toLowerCase().includes('import') && text.toLowerCase().includes('scenario'))) {
+                // Return button information so we can find it with selectors
+                return {
+                  found: true,
+                  dataTestId: dataTestId,
+                  text: text,
+                  hasDataTestId: dataTestId === 'importFolderOrScenarioButton'
+                };
               }
             }
-            return null;
+            return { found: false };
           });
           
-          if (buttonFound) {
-            importButton = await page.$('button[data-test-id="importFolderOrScenarioButton"]');
+          if (buttonInfo && buttonInfo.found) {
+            addDebugStep('File Upload', 'info', `Button found via evaluate: "${buttonInfo.text}"`);
+            
+            // Try to get the button using data-test-id first
+            if (buttonInfo.hasDataTestId) {
+              importButton = await page.$('button[data-test-id="importFolderOrScenarioButton"]');
+              if (importButton) {
+                addDebugStep('File Upload', 'info', 'Found button using data-test-id after evaluate');
+              }
+            }
+            
+            // If not found, try XPath by text
             if (!importButton) {
-              // Fallback: use XPath to find by text
-              const elements = await page.$x('//button[contains(., "Import a folder or scenario")]');
+              const elements = await page.$x('//button[contains(., "Import a folder or scenario")] | //button[contains(., "Import") and contains(., "scenario")]');
               if (elements.length > 0) {
                 importButton = elements[0];
                 addDebugStep('File Upload', 'info', 'Found "Import a folder or scenario" button using XPath text search');
@@ -2109,42 +2139,47 @@ async function createLatenodeAccount(ioInstance = null, emailOrPassword = null, 
           await takeScreenshot('After-Ready-Click', page);
           
         } else {
-          // Last resort: try to find import button using page.evaluate()
-          addDebugStep('File Upload', 'info', 'Trying to find import button using page.evaluate()...');
+          // Last resort: try to find and click import button directly using page.evaluate()
+          addDebugStep('File Upload', 'info', 'Trying to find and click import button directly using page.evaluate()...');
           
           try {
-            const buttonFound = await page.evaluate(() => {
+            // First take a screenshot to see what's on the page
+            await takeScreenshot('Before-Import-Button-Search', page);
+            
+            const buttonInfo = await page.evaluate(() => {
               // First try the specific data-test-id selector
               const specificButton = document.querySelector('button[data-test-id="importFolderOrScenarioButton"]');
-              if (specificButton) {
+              if (specificButton && specificButton.offsetParent !== null) {
                 specificButton.click();
-                return true;
+                return { clicked: true, method: 'data-test-id', text: specificButton.innerText || specificButton.textContent || '' };
               }
               
-              // Look for buttons with import-related text
-              const buttons = document.querySelectorAll('button, [role="button"], a[role="button"]');
+              // Look for buttons with import-related text - be more specific
+              const buttons = document.querySelectorAll('button, [role="button"]');
               
               for (const button of buttons) {
-                const text = (button.innerText || button.textContent || '').toLowerCase();
+                if (button.offsetParent === null) continue; // Skip hidden buttons
+                
+                const text = (button.innerText || button.textContent || '').trim().toLowerCase();
                 const title = (button.title || '').toLowerCase();
                 const className = (button.className || '').toLowerCase();
                 const dataTestId = button.getAttribute('data-test-id') || '';
                 
-                if (dataTestId.includes('import') || dataTestId.includes('upload') ||
-                    text.includes('importer') || text.includes('import') || 
-                    title.includes('importer') || title.includes('import') ||
-                    className.includes('import') || className.includes('upload') ||
-                    className.includes('ant-btn')) {
+                // More specific matching
+                if (dataTestId === 'importFolderOrScenarioButton' ||
+                    text.includes('import a folder') ||
+                    (text.includes('import') && text.includes('scenario')) ||
+                    (text.includes('import') && text.includes('folder'))) {
                   button.click();
-                  return true;
+                  return { clicked: true, method: 'text-match', text: button.innerText || button.textContent || '' };
                 }
               }
               
-              return false;
+              return { clicked: false, error: 'No matching button found' };
             });
             
-            if (buttonFound) {
-              addDebugStep('File Upload', 'success', 'Found and clicked import button using page.evaluate()');
+            if (buttonInfo && buttonInfo.clicked) {
+              addDebugStep('File Upload', 'success', `Found and clicked import button using ${buttonInfo.method}: "${buttonInfo.text}"`);
               await sleep(3000);
               
               // Take screenshot after clicking
@@ -2266,8 +2301,53 @@ async function createLatenodeAccount(ioInstance = null, emailOrPassword = null, 
               
               // Wait a bit for the upload to process
               await sleep(3000);
+              
+              // Step 8b: Click "Ready" button in the import modal
+              addDebugStep('Import Ready', 'info', 'Looking for "Ready" button in import modal...');
+              
+              try {
+                // Wait for the import modal to appear with the "Ready" button
+                await page.waitForSelector('div[role="dialog"], div.ant-modal', { timeout: 10000 });
+                await sleep(2000);
+                
+                // Look for "Ready" button
+                const readyButtonClicked = await page.evaluate(() => {
+                  const buttons = document.querySelectorAll('button, [role="button"]');
+                  for (const button of buttons) {
+                    const text = (button.innerText || button.textContent || '').trim().toLowerCase();
+                    if (text === 'ready' || text.includes('ready')) {
+                      button.click();
+                      return true;
+                    }
+                  }
+                  return false;
+                });
+                
+                if (readyButtonClicked) {
+                  addDebugStep('Import Ready', 'success', 'Clicked "Ready" button successfully');
+                  await sleep(3000); // Wait for modal to close and page to update
+                } else {
+                  addDebugStep('Import Ready', 'warning', 'Could not find or click "Ready" button');
+                }
+              } catch (error) {
+                addDebugStep('Import Ready', 'warning', 'Import modal or Ready button not found', null, error.message);
+              }
+              
+              await takeScreenshot('After-Ready-Click', page);
             } else {
-              addDebugStep('File Upload', 'warning', 'Import button not found, skipping file upload');
+              // Debug: log what buttons were found
+              const buttonList = await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+                return buttons.map(btn => ({
+                  text: (btn.innerText || btn.textContent || '').trim(),
+                  dataTestId: btn.getAttribute('data-test-id') || '',
+                  visible: btn.offsetParent !== null,
+                  className: btn.className || ''
+                })).filter(btn => btn.visible);
+              });
+              
+              addDebugStep('File Upload', 'warning', `Import button not found. Found ${buttonList.length} visible buttons:`, null, JSON.stringify(buttonList.slice(0, 10), null, 2));
+              addDebugStep('File Upload', 'warning', 'Skipping file upload - import button could not be located');
             }
           } catch (evaluateError) {
             addDebugStep('File Upload', 'warning', 'page.evaluate() method also failed', null, evaluateError.message);
